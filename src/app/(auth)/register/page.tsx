@@ -12,7 +12,9 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { useFirestore, errorEmitter, FirestorePermissionError } from "@/firebase";
+import { useFirestore } from "@/firebase";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +79,16 @@ export default function RegisterPage() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
+    if (!firestore) {
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "Firestore ist nicht initialisiert.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -133,7 +145,8 @@ export default function RegisterPage() {
         title: "Registrierung fehlgeschlagen",
         description,
       });
-      setIsLoading(false);
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -258,3 +271,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+    

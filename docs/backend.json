@@ -15,10 +15,6 @@
           "description": "Email address of the user.",
           "format": "email"
         },
-        "passwordHash": {
-          "type": "string",
-          "description": "Hashed password of the user. This should be stored securely."
-        },
         "firstName": {
           "type": "string",
           "description": "First name of the user."
@@ -39,7 +35,6 @@
       "required": [
         "id",
         "email",
-        "passwordHash",
         "firstName",
         "lastName",
         "registrationCode",
@@ -291,3 +286,4 @@
     "reasoning": "The Firestore structure is designed to ensure security, scalability, and debuggability, adhering to the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs.  \n\nAuthorization Independence is achieved by denormalizing authorization data where necessary. For example, team membership is maintained within the `teams` collection.  This avoids the need for complex `get()` calls in security rules, which could hinder atomic operations.\n\nStructural Segregation is enforced by placing user profiles under `/users/{userId}/profile` to ensure private user data is isolated and easily secured using path-based rules.\n\nAccess Modeling follows a consistent pattern. User-owned data (e.g., user profiles) are stored under `/users/{userId}` paths.  Collaborative data (teams and calendar events) leverages the membership map approach.  News articles, being globally accessible but author-dependent, reside in a flat `/news_articles` collection.\n\nQAPs are supported through structural segregation. Listing news articles is secure because they are stored in a dedicated collection with rules that allow public read access but restrict write access to authorized users.\n\nFinally, explicit state modeling is encouraged within each entity, using dedicated fields like `status` (though not explicitly present in the provided schemas), and predictable schemas are maintained by avoiding dynamic keys and adhering to consistent naming conventions."
   }
 }
+    
