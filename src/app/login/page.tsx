@@ -48,12 +48,9 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormValues) => {
     if (!auth) {
-        toast({
-            variant: 'destructive',
-            title: 'Authentifizierung nicht bereit',
-            description: 'Bitte warten Sie einen Moment und versuchen Sie es erneut.',
-        });
-        return;
+      // Services are not ready yet, just return.
+      // The provider will handle showing a loading state.
+      return;
     }
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);

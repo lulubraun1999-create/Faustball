@@ -58,11 +58,8 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     if (!auth || !firestore) {
-      toast({
-          variant: 'destructive',
-          title: 'Dienste nicht bereit',
-          description: 'Bitte warten Sie einen Moment und versuchen Sie es erneut.',
-      });
+      // Services are not ready yet, just return.
+      // The provider will handle showing a loading state.
       return;
     }
     try {
@@ -86,7 +83,7 @@ export default function RegisterPage() {
         errorMessage = 'Diese E-Mail-Adresse wird bereits verwendet.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Das Passwort ist zu schwach.';
-      } else if (error.code) {
+      } else if (error.message) { // Use error.message for other Firebase errors
         errorMessage = error.message;
       }
       toast({
