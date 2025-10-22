@@ -1,12 +1,11 @@
-export interface User {
+export interface UserProfile {
   id: string;
   name: string;
   firstName: string;
   lastName: string;
   email: string;
   avatar?: string;
-  role: 'user' | 'admin';
-  isFirstLogin?: boolean;
+  role?: 'user' | 'admin';
   phone?: string;
   location?: string;
   position?: 'Abwehr' | 'Zuspiel' | 'Angriff';

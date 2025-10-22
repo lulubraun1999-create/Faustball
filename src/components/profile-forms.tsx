@@ -6,7 +6,15 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import type { User } from "@/lib/types";
+import { useFirestore, useUser } from "@/firebase";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  updatePassword,
+  updateEmail,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
+import type { UserProfile } from "@/lib/types";
 
 // Schema for ProfileForm
 const profileFormSchema = z.object({
@@ -52,64 +61,66 @@ const profileFormSchema = z.object({
 
 export function ProfileForm() {
   const { toast } = useToast();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem("faustapp_user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
 
   const form = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
-    values: {
-      phone: user?.phone || "",
-      location: user?.location || "",
-      position: user?.position,
-      birthday: user?.birthday || "",
-      gender: user?.gender,
-    },
-    resetOptions: {
-      keepDirtyValues: true,
-    },
   });
-  
+
   useEffect(() => {
-    if(user) {
-      form.reset({
-        phone: user.phone || "",
-        location: user.location || "",
-        position: user.position,
-        birthday: user.birthday || "",
-        gender: user.gender,
-      });
+    async function fetchUserProfile() {
+      if (user && firestore) {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
+        const profileDocSnap = await getDoc(profileDocRef);
+
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          const profileData = profileDocSnap.exists() ? profileDocSnap.data() : {};
+          const fullProfile = {
+            id: user.uid,
+            name: `${userData.firstName} ${userData.lastName}`,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            email: user.email || '',
+            ...profileData,
+          };
+          setUserProfile(fullProfile);
+          form.reset(fullProfile);
+        }
+      }
     }
-  }, [user, form]);
+    fetchUserProfile();
+  }, [user, firestore, form]);
 
 
-  const onSubmit = (values: z.infer<typeof profileFormSchema>) => {
-    if (!user) return;
+  const onSubmit = async (values: z.infer<typeof profileFormSchema>) => {
+    if (!user || !firestore) return;
     setIsLoading(true);
-    setTimeout(() => {
-      const updatedUser = { ...user, ...values };
-      let users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
-      const updatedUsers = users.map((u: User) =>
-        u.id === user.id ? updatedUser : u
-      );
-      localStorage.setItem("faustapp_users", JSON.stringify(updatedUsers));
-      localStorage.setItem("faustapp_user", JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      setIsLoading(false);
+    try {
+      const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
+      await updateDoc(profileDocRef, values);
+      
       toast({
         title: "Profil aktualisiert",
         description: "Ihre Daten wurden erfolgreich gespeichert.",
       });
-    }, 1000);
+    } catch (error) {
+       toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "Profil konnte nicht aktualisiert werden.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  if (!user) {
+  if (isUserLoading || !userProfile) {
     return <Loader2 className="h-8 w-8 animate-spin text-primary" />;
   }
 
@@ -119,11 +130,11 @@ export function ProfileForm() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormItem>
                 <FormLabel>Vorname</FormLabel>
-                <Input value={user.firstName} disabled />
+                <Input value={userProfile.firstName} disabled />
             </FormItem>
             <FormItem>
                 <FormLabel>Nachname</FormLabel>
-                <Input value={user.lastName} disabled />
+                <Input value={userProfile.lastName} disabled />
             </FormItem>
         </div>
         <FormField
@@ -212,7 +223,7 @@ export function ProfileForm() {
         />
         <FormItem>
             <FormLabel>E-Mail</FormLabel>
-            <Input value={user.email} disabled />
+            <Input value={userProfile.email} disabled />
             <FormDescription>Um Ihre E-Mail zu ändern, gehen Sie zum entsprechenden Menüpunkt.</FormDescription>
         </FormItem>
         <Button type="submit" disabled={isLoading}>
@@ -239,6 +250,7 @@ const passwordFormSchema = z
 export function PasswordForm() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof passwordFormSchema>>({
@@ -246,35 +258,23 @@ export function PasswordForm() {
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   });
 
-  const onSubmit = (values: z.infer<typeof passwordFormSchema>) => {
+  const onSubmit = async (values: z.infer<typeof passwordFormSchema>) => {
+    if (!user || !user.email) return;
+
     setIsLoading(true);
-    setTimeout(() => {
-        const storedUser = localStorage.getItem("faustapp_user");
-        if (!storedUser) {
-            router.push("/login");
-            return;
-        }
-        const user = JSON.parse(storedUser);
-        let users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
+    try {
+      const credential = EmailAuthProvider.credential(user.email, values.currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, values.newPassword);
+      
+      toast({ title: "Passwort geändert", description: "Bitte melden Sie sich mit Ihrem neuen Passwort an." });
+      router.push("/login");
 
-        const userFromDb = users.find((u: User) => u.id === user.id);
-        
-        if(userFromDb.password !== values.currentPassword) {
-            toast({ variant: "destructive", title: "Fehler", description: "Das aktuelle Passwort ist nicht korrekt." });
-            setIsLoading(false);
-            return;
-        }
-
-        const updatedUser = { ...user, password: values.newPassword };
-        const updatedUsers = users.map((u: User) => u.id === user.id ? updatedUser : u);
-        localStorage.setItem("faustapp_users", JSON.stringify(updatedUsers));
-        localStorage.removeItem("faustapp_user");
-        
+    } catch (error) {
+       toast({ variant: "destructive", title: "Fehler", description: "Das aktuelle Passwort ist nicht korrekt oder es ist ein Fehler aufgetreten." });
+    } finally {
         setIsLoading(false);
-        toast({ title: "Passwort geändert", description: "Bitte melden Sie sich mit Ihrem neuen Passwort an." });
-        router.push("/login");
-
-    }, 1000);
+    }
   };
 
   return (
@@ -337,6 +337,7 @@ const emailFormSchema = z.object({
 export function EmailForm() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof emailFormSchema>>({
@@ -344,42 +345,23 @@ export function EmailForm() {
     defaultValues: { newEmail: "", password: "" },
   });
 
-  const onSubmit = (values: z.infer<typeof emailFormSchema>) => {
+  const onSubmit = async (values: z.infer<typeof emailFormSchema>) => {
+    if (!user || !user.email) return;
+
     setIsLoading(true);
-    setTimeout(() => {
-       const storedUser = localStorage.getItem("faustapp_user");
-        if (!storedUser) {
-            router.push("/login");
-            return;
-        }
-        const user = JSON.parse(storedUser);
-        let users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
+    try {
+        const credential = EmailAuthProvider.credential(user.email, values.password);
+        await reauthenticateWithCredential(user, credential);
+        await updateEmail(user, values.newEmail);
 
-        const userFromDb = users.find((u: User) => u.id === user.id);
-        
-        if(userFromDb.password !== values.password) {
-            toast({ variant: "destructive", title: "Fehler", description: "Das Passwort ist nicht korrekt." });
-            setIsLoading(false);
-            return;
-        }
-        
-        const emailExists = users.some((u: User) => u.email === values.newEmail);
-        if (emailExists) {
-            toast({ variant: "destructive", title: "Fehler", description: "Diese E-Mail-Adresse wird bereits verwendet." });
-            setIsLoading(false);
-            return;
-        }
-
-        const updatedUser = { ...user, email: values.newEmail };
-        const updatedUsers = users.map((u: User) => u.id === user.id ? updatedUser : u);
-        localStorage.setItem("faustapp_users", JSON.stringify(updatedUsers));
-        localStorage.removeItem("faustapp_user");
-
-        setIsLoading(false);
         toast({ title: "E-Mail geändert", description: "Eine Bestätigungs-E-Mail wurde gesendet. Bitte melden Sie sich erneut an." });
         router.push("/login");
 
-    }, 1000);
+    } catch (error) {
+        toast({ variant: "destructive", title: "Fehler", description: "Das Passwort ist nicht korrekt oder die E-Mail wird bereits verwendet." });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -426,24 +408,24 @@ export function EmailForm() {
 export function DeleteAccountSection() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useUser();
 
-  const handleDelete = () => {
-    const storedUser = localStorage.getItem("faustapp_user");
-    if (!storedUser) {
+  const handleDelete = async () => {
+    if (!user) return;
+    try {
+      await deleteUser(user);
+      toast({
+        title: "Konto gelöscht",
+        description: "Ihr Konto wurde dauerhaft entfernt.",
+      });
       router.push("/login");
-      return;
+    } catch (error) {
+       toast({
+        variant: "destructive",
+        title: "Fehler beim Löschen des Kontos",
+        description: "Bitte melden Sie sich erneut an und versuchen Sie es erneut.",
+      });
     }
-    const user = JSON.parse(storedUser);
-    let users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
-    const updatedUsers = users.filter((u: User) => u.id !== user.id);
-    localStorage.setItem("faustapp_users", JSON.stringify(updatedUsers));
-    localStorage.removeItem("faustapp_user");
-
-    toast({
-      title: "Konto gelöscht",
-      description: "Ihr Konto wurde dauerhaft entfernt.",
-    });
-    router.push("/login");
   };
 
   return (

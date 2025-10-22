@@ -12,18 +12,47 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
+import { useUser } from "@/firebase";
 import { useEffect, useState } from "react";
-import type { User } from "@/lib/types";
+import { doc, getDoc } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import type { UserProfile } from "@/lib/types";
 
 export function MainHeader() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("faustapp_user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    async function fetchUserProfile() {
+      if (user && firestore) {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
+          const profileDocSnap = await getDoc(profileDocRef);
+          
+          let profileData = {};
+          if (profileDocSnap.exists()) {
+            profileData = profileDocSnap.data();
+          }
+
+          setUserProfile({
+            id: user.uid,
+            name: `${userData.firstName} ${userData.lastName}`,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            email: user.email || '',
+            avatar: user.photoURL,
+            role: 'user', // Replace with actual role from DB if available
+            ...profileData
+          });
+        }
+      }
     }
-  }, []);
+    fetchUserProfile();
+  }, [user, firestore]);
 
   const adminPages = [
     { href: "/verwaltung/termine-bearbeiten", label: "Termine bearbeiten" },
@@ -81,7 +110,7 @@ export function MainHeader() {
                 <DropdownMenuItem asChild>
                   <Link href="/verwaltung/mannschaftskasse">Mannschaftskasse</Link>
                 </DropdownMenuItem>
-                {user?.role === "admin" && (
+                {userProfile?.role === "admin" && (
                   <>
                     <DropdownMenuSeparator />
                     {adminPages.map((page) => (
@@ -107,7 +136,7 @@ export function MainHeader() {
             </Button>
           </a>
           <ThemeToggle />
-          {user && <UserNav user={user} />}
+          {userProfile && <UserNav user={userProfile} />}
         </div>
       </div>
     </header>

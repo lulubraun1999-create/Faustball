@@ -7,6 +7,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +56,8 @@ export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const auth = getAuth();
+  const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,45 +71,47 @@ export default function RegisterPage() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
-    // Simulate API call and email verification
-    setTimeout(() => {
-      let users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
-      const userExists = users.some(
-        (u: any) => u.email === values.email
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        values.email,
+        values.password
       );
+      const user = userCredential.user;
 
-      if (userExists) {
-        toast({
-          variant: "destructive",
-          title: "Registrierung fehlgeschlagen",
-          description: "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.",
-        });
-        setIsLoading(false);
-        return;
-      }
-      
-      const newUser = {
-        id: Date.now().toString(),
+      await setDoc(doc(firestore, "users", user.uid), {
+        id: user.uid,
         firstName: values.firstName,
         lastName: values.lastName,
-        name: `${values.firstName} ${values.lastName}`,
         email: values.email,
-        password: values.password, // In a real app, hash this!
-        role: "user", // Default role
-        isFirstLogin: true,
-      };
-
-      users.push(newUser);
-      localStorage.setItem("faustapp_users", JSON.stringify(users));
+        registrationCode: values.registrationCode,
+        emailVerified: user.emailVerified,
+      });
+      
+      await setDoc(doc(firestore, "users", user.uid, "profile", user.uid), {
+        id: user.uid,
+        userId: user.uid,
+      });
 
       toast({
         title: "Registrierung erfolgreich",
-        description: "Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.",
+        description: "Ihr Konto wurde erstellt. Sie können sich jetzt anmelden.",
       });
       router.push("/login");
-    }, 1500);
+    } catch (error: any) {
+      let description = "Ein unerwarteter Fehler ist aufgetreten.";
+      if (error.code === "auth/email-already-in-use") {
+        description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Registrierung fehlgeschlagen",
+        description,
+      });
+      setIsLoading(false);
+    }
   };
 
   return (

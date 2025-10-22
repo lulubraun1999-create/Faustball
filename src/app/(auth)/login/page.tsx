@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
+import { useUser } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +44,14 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const { user, isUserLoading } = useUser();
+  const auth = getAuth();
+
+  useEffect(() => {
+    if (!isUserLoading && user) {
+      router.push("/dashboard");
+    }
+  }, [user, isUserLoading, router]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -46,40 +61,33 @@ export default function LoginPage() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      const users = JSON.parse(localStorage.getItem("faustapp_users") || "[]");
-      const user = users.find(
-        (u: any) => u.email === values.email && u.password === values.password
-      );
-
-      if (user) {
-        localStorage.setItem("faustapp_user", JSON.stringify(user));
-        toast({
-          title: "Anmeldung erfolgreich",
-          description: "Willkommen zurück!",
-        });
-        if (user.isFirstLogin) {
-          const updatedUser = { ...user, isFirstLogin: false };
-          const updatedUsers = users.map((u: any) => u.id === user.id ? updatedUser : u);
-          localStorage.setItem("faustapp_users", JSON.stringify(updatedUsers));
-          localStorage.setItem("faustapp_user", JSON.stringify(updatedUser));
-          router.push("/profile");
-        } else {
-          router.push("/dashboard");
-        }
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Anmeldung fehlgeschlagen",
-          description: "Ungültige E-Mail-Adresse oder falsches Passwort.",
-        });
-        setIsLoading(false);
-      }
-    }, 1000);
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithEmailAndPassword(auth, values.email, values.password);
+      toast({
+        title: "Anmeldung erfolgreich",
+        description: "Willkommen zurück!",
+      });
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Anmeldung fehlgeschlagen",
+        description: "Ungültige E-Mail-Adresse oder falsches Passwort.",
+      });
+      setIsLoading(false);
+    }
   };
+
+  if (isUserLoading || user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">

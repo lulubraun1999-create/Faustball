@@ -17,17 +17,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { User } from "@/lib/types";
+import type { UserProfile } from "@/lib/types";
+import { getAuth, signOut } from "firebase/auth";
 
 interface UserNavProps {
-  user: User;
+  user: UserProfile;
 }
 
 export function UserNav({ user }: UserNavProps) {
   const router = useRouter();
+  const auth = getAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem("faustapp_user");
+  const handleLogout = async () => {
+    await signOut(auth);
     router.push("/login");
   };
 

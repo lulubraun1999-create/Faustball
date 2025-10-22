@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MainHeader } from "@/components/main-header";
 import { Loader2 } from "lucide-react";
+import { useUser } from "@/firebase";
 
 export default function MainAppLayout({
   children,
@@ -11,18 +12,15 @@ export default function MainAppLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { user, isUserLoading } = useUser();
 
   useEffect(() => {
-    const user = localStorage.getItem("faustapp_user");
-    if (!user) {
+    if (!isUserLoading && !user) {
       router.replace("/login");
-    } else {
-      setIsAuthenticated(true);
     }
-  }, [router]);
+  }, [user, isUserLoading, router]);
 
-  if (!isAuthenticated) {
+  if (isUserLoading || !user) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

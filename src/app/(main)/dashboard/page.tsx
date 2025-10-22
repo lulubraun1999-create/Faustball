@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Calendar, MessageSquare, Shield } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
+import { useFirestore, useUser } from "@/firebase";
 
 import {
   Card,
@@ -13,17 +15,30 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
-import type { User } from "@/lib/types";
+import type { UserProfile } from "@/lib/types";
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("faustapp_user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    async function fetchUserProfile() {
+      if (user && firestore) {
+        const docRef = doc(firestore, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+           setUserProfile({
+            id: docSnap.id,
+            ...docSnap.data()
+          } as UserProfile);
+        }
+      }
     }
-  }, []);
+
+    fetchUserProfile();
+  }, [user, firestore]);
 
   const heroImage = PlaceHolderImages.find((img) => img.id === "dashboard-hero");
 
@@ -46,7 +61,7 @@ export default function DashboardPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
               <div className="absolute bottom-0 left-0 p-6">
                 <h1 className="font-headline text-3xl font-bold text-white md:text-4xl">
-                  Willkommen zurück, {user?.firstName || "Spieler"}!
+                  Willkommen zurück, {userProfile?.firstName || "Spieler"}!
                 </h1>
                 <p className="mt-2 text-lg text-gray-200">
                   Dein zentraler Hub für alles rund um Faustball.
