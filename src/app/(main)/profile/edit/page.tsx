@@ -132,7 +132,7 @@ export default function ProfileEditPage() {
       gender: undefined,
     },
   });
-
+  
   const passwordForm = useForm<PasswordFormValues>({
     resolver: zodResolver(passwordFormSchema),
     defaultValues: {
@@ -148,18 +148,16 @@ export default function ProfileEditPage() {
   });
 
   useEffect(() => {
-    if (user) {
-      profileForm.setValue('firstName', user.firstName || '');
-      profileForm.setValue('lastName', user.lastName || '');
-    }
-    if (member) {
-      profileForm.setValue('phone', member.phone || '');
-      profileForm.setValue('location', member.location || '');
-      profileForm.setValue('birthday', member.birthday || '');
-      profileForm.setValue('position', member.position || []);
-      if (member.gender) {
-        profileForm.setValue('gender', member.gender);
-      }
+    if (user || member) {
+      profileForm.reset({
+        firstName: user?.firstName || '',
+        lastName: user?.lastName || '',
+        phone: member?.phone || '',
+        location: member?.location || '',
+        birthday: member?.birthday || '',
+        position: member?.position || [],
+        gender: member?.gender,
+      });
     }
   }, [user, member, profileForm]);
 
@@ -527,7 +525,7 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value || ''}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
