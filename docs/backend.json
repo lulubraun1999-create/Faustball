@@ -83,8 +83,8 @@
           "enum": [
             "männlich",
             "weiblich",
-            "divers (damenteam)",
-            "divers (herrenteam)"
+            "divers (Damenteam)",
+            "divers (Herrenteam)"
           ]
         }
       },

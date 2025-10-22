@@ -77,7 +77,7 @@ const profileFormSchema = z.object({
   birthday: z.string().optional(),
   position: z.array(z.string()).optional().default([]),
   gender: z
-    .enum(['männlich', 'weiblich', 'divers (damenteam)', 'divers (herrenteam)'])
+    .enum(['männlich', 'weiblich', 'divers (Damenteam)', 'divers (Herrenteam)'])
     .optional(),
 });
 
@@ -535,10 +535,10 @@ export default function ProfileEditPage() {
                         <SelectContent>
                           <SelectItem value="weiblich">weiblich</SelectItem>
                           <SelectItem value="männlich">männlich</SelectItem>
-                          <SelectItem value="divers (damenteam)">
+                          <SelectItem value="divers (Damenteam)">
                             divers (Damenteam)
                           </SelectItem>
-                          <SelectItem value="divers (herrenteam)">
+                          <SelectItem value="divers (Herrenteam)">
                             divers (Herrenteam)
                           </SelectItem>
                         </SelectContent>

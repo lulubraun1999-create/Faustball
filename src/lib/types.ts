@@ -14,5 +14,5 @@ export interface MemberProfile {
   location?: string;
   position?: string[];
   birthday?: string;
-  gender?: 'männlich' | 'weiblich' | 'divers (damenteam)' | 'divers (herrenteam)';
+  gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
 }
