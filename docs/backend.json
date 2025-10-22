@@ -1,10 +1,9 @@
 {
   "entities": {
     "User": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account and their profile within the FaustApp application.",
+      "description": "Represents a user account within the FaustApp application, primarily for authentication purposes.",
       "properties": {
         "id": {
           "type": "string",
@@ -30,6 +29,23 @@
             "admin",
             "user"
           ]
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "Member": {
+      "title": "Member",
+      "type": "object",
+      "description": "Represents detailed profile information for a team member.",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Foreign key linking to the User entity."
         },
         "phone": {
           "type": "string",
@@ -40,13 +56,16 @@
           "description": "Location or address of the member."
         },
         "position": {
-          "type": "string",
-          "description": "Playing position of the member.",
-          "enum": [
-            "Abwehr",
-            "Zuspiel",
-            "Angriff"
-          ]
+          "type": "array",
+          "description": "Playing position(s) of the member.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Abwehr",
+              "Zuspiel",
+              "Angriff"
+            ]
+          }
         },
         "birthday": {
           "type": "string",
@@ -64,12 +83,7 @@
           ]
         }
       },
-      "required": [
-        "id",
-        "email",
-        "firstName",
-        "lastName"
-      ]
+      "required": ["userId"]
     }
   },
   "auth": {
@@ -83,8 +97,15 @@
       "schema": {
         "$ref": "#/backend/entities/User"
       },
-      "description": "Stores user authentication and profile data. Accessible only by the authenticated user (path-based ownership).",
-      "rules": "allow read, write: if request.auth.uid == userId;"
+      "description": "Stores user authentication data. Accessible only by admins or the authenticated user.",
+      "rules": "allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow write: if request.auth.uid == userId;"
+    },
+    "/members/{memberId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Member"
+      },
+      "description": "Stores user profile data. Accessible by admins or the owning user.",
+      "rules": "allow read: if request.auth.uid == memberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow write: if request.auth.uid == memberId;"
     }
   }
 }

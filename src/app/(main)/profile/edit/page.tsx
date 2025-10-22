@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -29,11 +29,10 @@ import {
   useMemoFirebase,
 } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import type { UserProfile } from '@/lib/types';
+import type { UserProfile, MemberProfile } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import Link from 'next/link';
 
 const profileFormSchema = z.object({
   firstName: z.string().min(1, 'Vorname ist erforderlich.'),
@@ -60,7 +59,13 @@ export default function ProfileEditPage() {
     return doc(firestore, 'users', authUser.uid);
   }, [firestore, authUser]);
 
+  const memberDocRef = useMemoFirebase(() => {
+    if (!firestore || !authUser) return null;
+    return doc(firestore, 'members', authUser.uid);
+  }, [firestore, authUser]);
+
   const { data: user, isLoading: isUserDocLoading } = useDoc<UserProfile>(userDocRef);
+  const { data: member, isLoading: isMemberDocLoading } = useDoc<MemberProfile>(memberDocRef);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -75,33 +80,49 @@ export default function ProfileEditPage() {
   });
 
   useEffect(() => {
-    if (user) {
-      // Ensure positions are an array
-      const userPosition = user.position ? (Array.isArray(user.position) ? user.position : [user.position]) : [];
-
+    if (user && member) {
       form.reset({
         firstName: user.firstName,
         lastName: user.lastName,
-        phone: user.phone || '',
-        location: user.location || '',
-        birthday: user.birthday || '',
-        position: userPosition,
-        gender: user.gender,
+        phone: member.phone || '',
+        location: member.location || '',
+        birthday: member.birthday || '',
+        position: member.position || [],
+        gender: member.gender,
       });
+    } else if (user) {
+        form.reset({
+            firstName: user.firstName,
+            lastName: user.lastName,
+        });
     }
-  }, [user, form]);
+  }, [user, member, form]);
 
   const onSubmit = async (data: ProfileFormValues) => {
-    if (!userDocRef) return;
+    if (!userDocRef || !memberDocRef || !authUser) return;
 
     try {
-      await setDoc(userDocRef, data, { merge: true });
+      // Separate data for user and member collections
+      const userData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+      };
+      const memberData = {
+        userId: authUser.uid,
+        phone: data.phone,
+        location: data.location,
+        birthday: data.birthday,
+        position: data.position,
+        gender: data.gender,
+      };
+
+      await setDoc(userDocRef, userData, { merge: true });
+      await setDoc(memberDocRef, memberData, { merge: true });
+
       toast({
         title: 'Profil aktualisiert',
         description: 'Ihre Informationen wurden erfolgreich gespeichert.',
       });
-      // Optionally, you could redirect or just show the toast
-      // router.push('/profile');
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -111,7 +132,7 @@ export default function ProfileEditPage() {
     }
   };
 
-  const isLoading = isAuthLoading || isUserDocLoading;
+  const isLoading = isAuthLoading || isUserDocLoading || isMemberDocLoading;
 
   if (isLoading) {
     return (
