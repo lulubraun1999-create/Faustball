@@ -1,29 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { Instagram, Shield } from "lucide-react";
+import Image from "next/image";
+import { Instagram, LogOut, User as UserIcon } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 import type { UserProfile } from "@/lib/types";
 
 export function MainHeader() {
-  const adminPages = [
-    { href: "/verwaltung/termine-bearbeiten", label: "Termine bearbeiten" },
-    { href: "/verwaltung/gruppen-bearbeiten", label: "Gruppe bearbeiten" },
-    { href: "/verwaltung/mitglieder-bearbeiten", label: "Mitglieder bearbeiten" },
-    { href: "/verwaltung/umfragen-bearbeiten", label: "Umfrage bearbeiten" },
-    { href: "/verwaltung/news-bearbeiten", label: "News bearbeiten" },
-    { href: "/verwaltung/mannschaftskasse-bearbeiten", label: "Mannschaftskasse bearbeiten" },
-  ];
-
-  const userProfile: UserProfile | null = null; // No user logged in
+  const profileAvatar = PlaceHolderImages.find(
+    (img) => img.id === "profile-avatar-1"
+  );
+  
+  // Mock user for display purposes as there is no auth
+  const user: UserProfile = {
+    id: "1",
+    name: "Max Mustermann",
+    firstName: "Max",
+    lastName: "Mustermann",
+    email: "max.mustermann@example.com",
+    role: "user",
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -49,7 +56,10 @@ export function MainHeader() {
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="px-2 lg:px-3 text-foreground/60 hover:text-foreground/80">
+                <Button
+                  variant="ghost"
+                  className="px-2 lg:px-3 text-foreground/60 hover:text-foreground/80"
+                >
                   Verwaltung
                 </Button>
               </DropdownMenuTrigger>
@@ -70,18 +80,10 @@ export function MainHeader() {
                   <Link href="/verwaltung/news">News</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/verwaltung/mannschaftskasse">Mannschaftskasse</Link>
+                  <Link href="/verwaltung/mannschaftskasse">
+                    Mannschaftskasse
+                  </Link>
                 </DropdownMenuItem>
-                {userProfile?.role === "admin" && (
-                  <>
-                    <DropdownMenuSeparator />
-                    {adminPages.map((page) => (
-                      <DropdownMenuItem key={page.href} asChild>
-                        <Link href={page.href}>{page.label}</Link>
-                      </DropdownMenuItem>
-                    ))}
-                  </>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </nav>
@@ -98,6 +100,46 @@ export function MainHeader() {
             </Button>
           </a>
           <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="relative h-8 w-8 rounded-full"
+              >
+                <Avatar className="h-8 w-8">
+                  {profileAvatar && (
+                    <AvatarImage
+                      src={profileAvatar.imageUrl}
+                      alt={user.name}
+                    />
+                  )}
+                  <AvatarFallback>
+                    {user.firstName?.charAt(0)}
+                    {user.lastName?.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">
+                    {user.name}
+                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {user.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  <span>Profileinstellungen</span>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>
