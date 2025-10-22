@@ -41,9 +41,7 @@ export function MainHeader() {
               TSV Bayer Leverkusen
             </span>
           </Link>
-        </div>
-
-        <nav className="flex items-center space-x-6 text-sm font-medium mx-auto">
+          <nav className="hidden items-center space-x-6 text-sm font-medium md:flex">
             <Link
               href="/kalender"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
@@ -89,8 +87,9 @@ export function MainHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           </nav>
+        </div>
         
-        <div className="flex items-center space-x-2 ml-auto">
+        <div className="flex flex-1 items-center justify-end space-x-2">
           <a
             href="https://www.instagram.com"
             target="_blank"
