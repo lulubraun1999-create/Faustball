@@ -12,7 +12,7 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { useFirestore } from "@/firebase";
+import { useFirestore, errorEmitter, FirestorePermissionError } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -85,18 +85,37 @@ export default function RegisterPage() {
       );
       const user = userCredential.user;
 
-      await setDoc(doc(firestore, "users", user.uid), {
+      const userDocData = {
         id: user.uid,
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
         registrationCode: values.registrationCode,
         emailVerified: user.emailVerified,
-      });
-      
-      await setDoc(doc(firestore, "users", user.uid, "profile", user.uid), {
+      };
+
+      const userProfileData = {
         id: user.uid,
         userId: user.uid,
+      };
+
+      const userDocRef = doc(firestore, "users", user.uid);
+      const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
+
+      setDoc(userDocRef, userDocData).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: userDocRef.path,
+          operation: 'create',
+          requestResourceData: userDocData
+        }));
+      });
+
+      setDoc(profileDocRef, userProfileData).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: profileDocRef.path,
+          operation: 'create',
+          requestResourceData: userProfileData
+        }));
       });
 
       toast({
