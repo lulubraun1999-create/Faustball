@@ -95,7 +95,7 @@ export function MainHeader() {
             rel="noopener noreferrer"
           >
             <Button variant="ghost" size="icon">
-              <Instagram className="h-5 w-5" />
+              <Instagram className="h-5 w-5 text-foreground/60 hover:text-foreground/80" />
               <span className="sr-only">Instagram</span>
             </Button>
           </a>

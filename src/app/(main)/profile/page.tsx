@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { User, Mail, Phone, Birthday, MapPin, Shield } from "lucide-react";
+import { User, Mail, Phone, Cake, MapPin, Shield } from "lucide-react";
 import type { UserProfile } from "@/lib/types";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 
@@ -69,7 +69,7 @@ export default function ProfilePage() {
                   <span>{user.phone}</span>
                 </li>
                 <li className="flex items-center">
-                  <Birthday className="w-5 h-5 mr-3 text-primary" />
+                  <Cake className="w-5 h-5 mr-3 text-primary" />
                   <span>{user.birthday}</span>
                 </li>
                 <li className="flex items-center">
