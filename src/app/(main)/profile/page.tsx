@@ -1,32 +1,57 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { User, Mail, Phone, Cake, MapPin, Shield } from "lucide-react";
-import type { UserProfile } from "@/lib/types";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+} from '@/components/ui/card';
+import { User, Mail, Phone, Cake, MapPin, Shield, Loader2 } from 'lucide-react';
+import type { UserProfile } from '@/lib/types';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 export default function ProfilePage() {
-  // Mock user for display purposes
-  const user: UserProfile = {
-    id: "1",
-    name: "Max Mustermann",
-    firstName: "Max",
-    lastName: "Mustermann",
-    email: "max.mustermann@example.com",
-    role: "user",
-    phone: "0123 4567890",
-    birthday: "15. August 1995",
-    location: "Leverkusen",
-    position: "Angriff",
-  };
+  const { user: authUser, isUserLoading: isAuthLoading } = useUser();
+  const firestore = useFirestore();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !authUser) return null;
+    return doc(firestore, 'users', authUser.uid);
+  }, [firestore, authUser]);
+
+  const { data: user, isLoading: isUserDocLoading } = useDoc<UserProfile>(userDocRef);
+
+  const isLoading = isAuthLoading || isUserDocLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <Card className="max-w-4xl mx-auto">
+          <CardHeader>
+            <CardTitle>Profil nicht gefunden</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Die Benutzerdaten konnten nicht geladen werden.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const name = user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -39,10 +64,12 @@ export default function ProfilePage() {
             </AvatarFallback>
           </Avatar>
           <div className="space-y-1">
-            <CardTitle className="text-3xl font-headline">{user.name}</CardTitle>
-            <CardDescription className="text-lg text-muted-foreground">
-              {user.position}
-            </CardDescription>
+            <CardTitle className="text-3xl font-headline">{name}</CardTitle>
+            {user.position && (
+              <CardDescription className="text-lg text-muted-foreground">
+                {user.position}
+              </CardDescription>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
@@ -54,18 +81,24 @@ export default function ProfilePage() {
                   <Mail className="w-5 h-5 mr-3 text-primary" />
                   <span>{user.email}</span>
                 </li>
-                <li className="flex items-center">
-                  <Phone className="w-5 h-5 mr-3 text-primary" />
-                  <span>{user.phone}</span>
-                </li>
-                <li className="flex items-center">
-                  <Cake className="w-5 h-5 mr-3 text-primary" />
-                  <span>{user.birthday}</span>
-                </li>
-                <li className="flex items-center">
-                  <MapPin className="w-5 h-5 mr-3 text-primary" />
-                  <span>{user.location}</span>
-                </li>
+                {user.phone && (
+                  <li className="flex items-center">
+                    <Phone className="w-5 h-5 mr-3 text-primary" />
+                    <span>{user.phone}</span>
+                  </li>
+                )}
+                {user.birthday && (
+                  <li className="flex items-center">
+                    <Cake className="w-5 h-5 mr-3 text-primary" />
+                    <span>{user.birthday}</span>
+                  </li>
+                )}
+                {user.location && (
+                  <li className="flex items-center">
+                    <MapPin className="w-5 h-5 mr-3 text-primary" />
+                    <span>{user.location}</span>
+                  </li>
+                )}
               </ul>
             </div>
             <div className="space-y-4">
