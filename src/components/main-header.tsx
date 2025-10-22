@@ -35,7 +35,7 @@ export function MainHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
-        <div className="mr-auto flex items-center">
+        <div className="flex items-center">
           <Link href="/dashboard" className="mr-6 flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -43,7 +43,7 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <nav className="hidden md:flex items-center space-x-6 text-sm font-medium mx-auto">
+        <nav className="flex items-center space-x-6 text-sm font-medium mx-auto">
             <Link
               href="/kalender"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
