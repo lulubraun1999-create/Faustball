@@ -17,6 +17,7 @@ import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
+import { useEffect, useState } from "react";
 
 const VerwaltungDropdown = dynamic(() => import('./verwaltung-dropdown').then(mod => mod.VerwaltungDropdown), { ssr: false });
 
@@ -25,6 +26,12 @@ export function MainHeader() {
   const { user } = useUser();
   const auth = useAuth();
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -34,7 +41,7 @@ export function MainHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
-        <div className="flex flex-1 items-center justify-start">
+        <div className="mr-4 flex">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -42,8 +49,8 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <nav className="flex flex-1 items-center justify-center">
-           <div className="flex items-center space-x-6 text-sm font-medium">
+        <div className="flex flex-1 items-center justify-center">
+          {isClient &&<nav className="flex items-center space-x-6 text-sm font-medium">
             <Link
               href="/kalender"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
@@ -57,10 +64,10 @@ export function MainHeader() {
               Chat
             </Link>
             <VerwaltungDropdown />
-          </div>
-        </nav>
+          </nav>}
+        </div>
         
-        <div className="flex flex-1 items-center justify-end space-x-2">
+        <div className="flex items-center justify-end space-x-2">
           <a
             href="https://www.instagram.com"
             target="_blank"
