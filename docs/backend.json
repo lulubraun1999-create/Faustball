@@ -1,9 +1,10 @@
+
 {
   "entities": {
     "User": {
       "title": "User",
       "type": "object",
-      "description": "Represents a user account within the FaustApp application, primarily for authentication purposes.",
+      "description": "Represents a user account within the FaustApp application, primarily for authentication purposes. Core data is written once on registration and is mostly read-only afterwards.",
       "properties": {
         "id": {
           "type": "string",
@@ -16,11 +17,11 @@
         },
         "firstName": {
           "type": "string",
-          "description": "First name of the user."
+          "description": "First name of the user. Should not be editable after registration."
         },
         "lastName": {
           "type": "string",
-          "description": "Last name of the user."
+          "description": "Last name of the user. Should not be editable after registration."
         },
         "role": {
           "type": "string",
@@ -41,7 +42,7 @@
     "Member": {
       "title": "Member",
       "type": "object",
-      "description": "Represents detailed profile information for a team member.",
+      "description": "Represents editable, detailed profile information for a team member.",
       "properties": {
         "userId": {
           "type": "string",
@@ -97,15 +98,15 @@
       "schema": {
         "$ref": "#/backend/entities/User"
       },
-      "description": "Stores user authentication data. Accessible only by admins or the authenticated user.",
-      "rules": "allow read, write: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';"
+      "description": "Stores core user authentication data. Name is read-only after creation. Accessible only by admins or the authenticated user.",
+      "rules": "allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow create: if request.auth.uid == userId; allow update: if request.auth.uid == userId && resource.data.diff(request.resource.data).affectedKeys().hasOnly(['email', 'role']);"
     },
     "/members/{memberId}": {
       "schema": {
         "$ref": "#/backend/entities/Member"
       },
-      "description": "Stores user profile data. Accessible by admins or the owning user.",
-      "rules": "allow read, write: if request.auth.uid == memberId;"
+      "description": "Stores editable user profile data. Accessible by admins or the owning user.",
+      "rules": "allow read, write: if request.auth.uid == memberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';"
     }
   }
 }

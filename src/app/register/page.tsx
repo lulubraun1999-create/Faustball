@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -71,9 +72,11 @@ export default function RegisterPage() {
 
       const userDocRef = doc(firestore, 'users', user.uid);
       const userData = {
+        id: user.uid,
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
+        role: 'user' as const,
       };
 
       setDoc(userDocRef, userData)
@@ -98,7 +101,15 @@ export default function RegisterPage() {
         toast({
           variant: 'destructive',
           title: 'Fehler bei der Registrierung',
-          description: 'Diese E-Mail-Adresse wird bereits verwendet. Bitte melden Sie sich an.',
+          description: (
+            <>
+              Diese E-Mail-Adresse wird bereits verwendet. Bitte{' '}
+              <Link href="/login" className="underline">
+                melden Sie sich an
+              </Link>
+              .
+            </>
+          ),
         });
       } else {
         toast({

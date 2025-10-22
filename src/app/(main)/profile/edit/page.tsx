@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -27,6 +28,8 @@ import {
   useDoc,
   useUser,
   useMemoFirebase,
+  errorEmitter,
+  FirestorePermissionError,
 } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import type { UserProfile, MemberProfile } from '@/lib/types';
@@ -35,8 +38,8 @@ import { useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const profileFormSchema = z.object({
-  firstName: z.string().min(1, 'Vorname ist erforderlich.'),
-  lastName: z.string().min(1, 'Nachname ist erforderlich.'),
+  firstName: z.string(), // Readonly, so no validation needed
+  lastName: z.string(), // Readonly
   phone: z.string().optional(),
   location: z.string().optional(),
   birthday: z.string().optional(),
@@ -80,56 +83,49 @@ export default function ProfileEditPage() {
   });
 
   useEffect(() => {
-    if (user && member) {
+    if (user) {
+      form.setValue('firstName', user.firstName);
+      form.setValue('lastName', user.lastName);
+    }
+    if (member) {
       form.reset({
-        firstName: user.firstName,
-        lastName: user.lastName,
+        ...form.getValues(),
         phone: member.phone || '',
         location: member.location || '',
         birthday: member.birthday || '',
         position: member.position || [],
         gender: member.gender,
       });
-    } else if (user) {
-        form.reset({
-            firstName: user.firstName,
-            lastName: user.lastName,
-        });
     }
   }, [user, member, form]);
 
   const onSubmit = async (data: ProfileFormValues) => {
-    if (!userDocRef || !memberDocRef || !authUser) return;
+    if (!memberDocRef || !authUser) return;
 
-    try {
-      // Separate data for user and member collections
-      const userData = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-      };
-      const memberData = {
-        userId: authUser.uid,
-        phone: data.phone,
-        location: data.location,
-        birthday: data.birthday,
-        position: data.position,
-        gender: data.gender,
-      };
+    const memberData: MemberProfile = {
+      userId: authUser.uid,
+      phone: data.phone,
+      location: data.location,
+      birthday: data.birthday,
+      position: data.position,
+      gender: data.gender,
+    };
 
-      await setDoc(userDocRef, userData, { merge: true });
-      await setDoc(memberDocRef, memberData, { merge: true });
-
-      toast({
-        title: 'Profil aktualisiert',
-        description: 'Ihre Informationen wurden erfolgreich gespeichert.',
+    setDoc(memberDocRef, memberData, { merge: true })
+      .then(() => {
+        toast({
+          title: 'Profil aktualisiert',
+          description: 'Ihre Informationen wurden erfolgreich gespeichert.',
+        });
+      })
+      .catch((error) => {
+        const permissionError = new FirestorePermissionError({
+          path: memberDocRef.path,
+          operation: 'write',
+          requestResourceData: memberData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
       });
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler beim Speichern',
-        description: 'Ihre Informationen konnten nicht gespeichert werden. ' + error.message,
-      });
-    }
   };
 
   const isLoading = isAuthLoading || isUserDocLoading || isMemberDocLoading;
@@ -177,7 +173,7 @@ export default function ProfileEditPage() {
                     <FormItem>
                       <FormLabel>Vorname</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} readOnly className="bg-muted/50" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -190,7 +186,7 @@ export default function ProfileEditPage() {
                     <FormItem>
                       <FormLabel>Nachname</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} readOnly className="bg-muted/50"/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -310,7 +306,7 @@ export default function ProfileEditPage() {
                 <FormItem>
                     <FormLabel>Rolle</FormLabel>
                     <FormControl>
-                        <Input readOnly value={user?.role || 'Spieler'} className="bg-muted/50" />
+                        <Input readOnly value={user?.role || 'user'} className="bg-muted/50" />
                     </FormControl>
                 </FormItem>
                 
