@@ -10,9 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getAuth,
   createUserWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
-import { doc } from "firebase/firestore";
-import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +60,6 @@ export default function RegisterPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const auth = getAuth();
-  const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -77,15 +75,6 @@ export default function RegisterPage() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
-    if (!firestore) {
-      toast({
-        variant: "destructive",
-        title: "Fehler",
-        description: "Firestore ist nicht initialisiert.",
-      });
-      setIsLoading(false);
-      return;
-    }
 
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -94,16 +83,12 @@ export default function RegisterPage() {
         values.password
       );
       const user = userCredential.user;
-
-      const userDocData = {
-        userId: user.uid,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-      };
-
-      const userDocRef = doc(firestore, "users", user.uid);
-      setDocumentNonBlocking(userDocRef, userDocData, { merge: true });
+      
+      // We are creating the user document on the backend via a Cloud Function
+      // that is triggered on user creation. We only need to update the profile here.
+      await updateProfile(user, {
+        displayName: `${values.firstName} ${values.lastName}`
+      });
 
       toast({
         title: "Registrierung erfolgreich",
@@ -115,9 +100,7 @@ export default function RegisterPage() {
       let description = "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.";
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
-      } else if (error.name === 'FirebaseError' && error.message.includes('permission-denied')) {
-        description = "Fehler beim Erstellen des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
-      } else if (error.name === 'FirebaseError') {
+      } else {
         description = "Berechtigungsfehler: Sie haben keine Erlaubnis, diese Aktion auszuführen.";
       }
       
