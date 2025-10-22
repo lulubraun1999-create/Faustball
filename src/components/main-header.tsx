@@ -13,23 +13,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth, useUser } from "@/firebase";
+import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
+import type { UserProfile } from "@/lib/types";
+import { doc } from "firebase/firestore";
 
 const VerwaltungDropdown = dynamic(() => import('./verwaltung-dropdown').then(mod => mod.VerwaltungDropdown), { ssr: false });
 
 
 export function MainHeader() {
-  const { user } = useUser();
+  const { user: authUser } = useUser();
   const auth = useAuth();
   const router = useRouter();
+  const firestore = useFirestore();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !authUser) return null;
+    return doc(firestore, 'users', authUser.uid);
+  }, [firestore, authUser]);
+
+  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+
 
   const handleLogout = async () => {
     await signOut(auth);
     router.push("/login");
   };
+
+  const name = userProfile?.firstName && userProfile?.lastName ? `${userProfile.firstName} ${userProfile.lastName}` : authUser?.email;
+  const initials = userProfile?.firstName?.charAt(0) + (userProfile?.lastName?.charAt(0) || '');
+
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -72,7 +87,7 @@ export function MainHeader() {
             </Button>
           </a>
           <ThemeToggle />
-          {user && (
+          {authUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -81,7 +96,7 @@ export function MainHeader() {
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarFallback>
-                      {user.email?.charAt(0).toUpperCase()}
+                      {initials || authUser.email?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -90,16 +105,16 @@ export function MainHeader() {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      {user.displayName || user.email}
+                      {name}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {user.email}
+                      {authUser.email}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile">
+                  <Link href="/profile/edit">
                     <UserIcon className="mr-2 h-4 w-4" />
                     <span>Profileinstellungen</span>
                   </Link>

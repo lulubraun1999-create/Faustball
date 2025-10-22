@@ -8,7 +8,7 @@ export interface UserProfile {
   role?: 'user' | 'admin';
   phone?: string;
   location?: string;
-  position?: 'Abwehr' | 'Zuspiel' | 'Angriff';
+  position?: string[] | 'Abwehr' | 'Zuspiel' | 'Angriff';
   birthday?: string;
   gender?: 'männlich' | 'weiblich' | 'divers (damenteam)' | 'divers (herrenteam)';
 }

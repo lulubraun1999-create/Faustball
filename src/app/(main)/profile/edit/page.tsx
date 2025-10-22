@@ -6,16 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,7 +23,6 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import {
-  useAuth,
   useFirestore,
   useDoc,
   useUser,
@@ -39,8 +30,10 @@ import {
 } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/lib/types';
-import { Loader2, Edit } from 'lucide-react';
-import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Checkbox } from '@/components/ui/checkbox';
+import Link from 'next/link';
 
 const profileFormSchema = z.object({
   firstName: z.string().min(1, 'Vorname ist erforderlich.'),
@@ -48,7 +41,7 @@ const profileFormSchema = z.object({
   phone: z.string().optional(),
   location: z.string().optional(),
   birthday: z.string().optional(),
-  position: z.enum(['Abwehr', 'Zuspiel', 'Angriff']).optional(),
+  position: z.array(z.string()).optional().default([]),
   gender: z
     .enum(['männlich', 'weiblich', 'divers (damenteam)', 'divers (herrenteam)'])
     .optional(),
@@ -77,18 +70,22 @@ export default function ProfileEditPage() {
       phone: '',
       location: '',
       birthday: '',
+      position: [],
     },
   });
 
   useEffect(() => {
     if (user) {
+      // Ensure positions are an array
+      const userPosition = user.position ? (Array.isArray(user.position) ? user.position : [user.position]) : [];
+
       form.reset({
         firstName: user.firstName,
         lastName: user.lastName,
         phone: user.phone || '',
         location: user.location || '',
         birthday: user.birthday || '',
-        position: user.position,
+        position: userPosition,
         gender: user.gender,
       });
     }
@@ -103,7 +100,8 @@ export default function ProfileEditPage() {
         title: 'Profil aktualisiert',
         description: 'Ihre Informationen wurden erfolgreich gespeichert.',
       });
-      router.push('/profile');
+      // Optionally, you could redirect or just show the toast
+      // router.push('/profile');
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -117,25 +115,37 @@ export default function ProfileEditPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-8">
+      <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <Edit className="h-6 w-6 text-primary" />
-            <span className="text-2xl font-headline">Profil bearbeiten</span>
-          </CardTitle>
-          <CardDescription>
-            Aktualisieren Sie hier Ihre Profilinformationen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="grid grid-cols-1 gap-12 md:grid-cols-4">
+        {/* Left-hand Menu */}
+        <aside className="md:col-span-1">
+          <h2 className="mb-4 text-xl font-semibold">Menü</h2>
+          <nav className="flex flex-col space-y-2">
+            <Button variant="ghost" className="justify-start text-left">Daten ändern</Button>
+            <Button variant="ghost" className="justify-start text-left text-muted-foreground" disabled>Passwort ändern</Button>
+            <Button variant="ghost" className="justify-start text-left text-muted-foreground" disabled>Logout</Button>
+          </nav>
+          <div className="mt-8 rounded-lg border border-destructive/50 p-4">
+            <h3 className="font-semibold">Konto löschen</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Achtung: Diese Aktion ist dauerhaft und kann nicht rückgängig gemacht werden.
+            </p>
+            <Button variant="destructive" className="mt-4 w-full" disabled>
+              Konto dauerhaft löschen
+            </Button>
+          </div>
+        </aside>
+
+        {/* Right-hand Form */}
+        <main className="md:col-span-3">
+          <h1 className="mb-6 text-2xl font-bold">Daten ändern</h1>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -170,7 +180,7 @@ export default function ProfileEditPage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Telefonnummer</FormLabel>
+                      <FormLabel>Telefon</FormLabel>
                       <FormControl>
                         <Input placeholder="+49 123 4567890" {...field} />
                       </FormControl>
@@ -191,53 +201,56 @@ export default function ProfileEditPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="birthday"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Geburtstag</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="position"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Position</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Position auswählen" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Abwehr">Abwehr</SelectItem>
-                          <SelectItem value="Zuspiel">Zuspiel</SelectItem>
-                          <SelectItem value="Angriff">Angriff</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                
+                <FormItem>
+                  <FormLabel>Position</FormLabel>
+                  <div className="flex space-x-4">
+                    {['Abwehr', 'Zuspiel', 'Angriff'].map((position) => (
+                      <FormField
+                        key={position}
+                        control={form.control}
+                        name="position"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              key={position}
+                              className="flex flex-row items-start space-x-2 space-y-0"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(position)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...(field.value || []), position])
+                                      : field.onChange(
+                                          field.value?.filter(
+                                            (value) => value !== position
+                                          )
+                                        )
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                {position}
+                              </FormLabel>
+                            </FormItem>
+                          )
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+
                 <FormField
                   control={form.control}
                   name="gender"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Geschlecht / Teamzugehörigkeit</FormLabel>
+                      <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -259,16 +272,37 @@ export default function ProfileEditPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="birthday"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Geburtstag</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormItem>
+                    <FormLabel>Rolle</FormLabel>
+                    <FormControl>
+                        <Input readOnly value={user?.role || 'Spieler'} className="bg-muted/50" />
+                    </FormControl>
+                </FormItem>
+                
+                <FormItem>
+                    <FormLabel>E-Mail</FormLabel>
+                    <FormControl>
+                        <Input readOnly value={user?.email || ''} className="bg-muted/50" />
+                    </FormControl>
+                </FormItem>
+
               </div>
 
-              <div className="flex justify-end space-x-4">
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={() => router.back()}
-                >
-                  Abbrechen
-                </Button>
+              <div className="flex justify-end">
                 <Button type="submit" disabled={form.formState.isSubmitting}>
                   {form.formState.isSubmitting && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -278,8 +312,8 @@ export default function ProfileEditPage() {
               </div>
             </form>
           </Form>
-        </CardContent>
-      </Card>
+        </main>
+      </div>
     </div>
   );
 }
