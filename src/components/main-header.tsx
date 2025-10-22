@@ -51,7 +51,7 @@ export function MainHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container grid h-16 grid-cols-4 items-center gap-4">
-        <div className="col-span-1 flex items-center justify-start">
+        <div className="col-span-1 flex items-center">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
