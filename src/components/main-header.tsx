@@ -44,7 +44,7 @@ export function MainHeader() {
             firstName: userData.firstName,
             lastName: userData.lastName,
             email: user.email || '',
-            avatar: user.photoURL,
+            avatar: user.photoURL || undefined,
             role: 'user', // Replace with actual role from DB if available
             ...profileData
           });

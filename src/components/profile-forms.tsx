@@ -6,8 +6,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useUser } from "@/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useFirestore, useUser, updateDocumentNonBlocking } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import {
   updatePassword,
   updateEmail,
@@ -50,7 +50,7 @@ import type { UserProfile } from "@/lib/types";
 
 // Schema for ProfileForm
 const profileFormSchema = z.object({
-  phone: z.string().optional(),
+  phoneNumber: z.string().optional(),
   location: z.string().optional(),
   position: z.enum(["Abwehr", "Zuspiel", "Angriff"]).optional(),
   birthday: z.string().optional(),
@@ -90,7 +90,10 @@ export function ProfileForm() {
             ...profileData,
           };
           setUserProfile(fullProfile);
-          form.reset(fullProfile);
+          form.reset({
+            phoneNumber: fullProfile.phone,
+            ...fullProfile,
+          });
         }
       }
     }
@@ -103,7 +106,14 @@ export function ProfileForm() {
     setIsLoading(true);
     try {
       const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
-      await updateDoc(profileDocRef, values);
+      const dataToUpdate = {
+        phone: values.phoneNumber,
+        location: values.location,
+        position: values.position,
+        birthday: values.birthday,
+        gender: values.gender,
+      }
+      await updateDocumentNonBlocking(profileDocRef, dataToUpdate);
       
       toast({
         title: "Profil aktualisiert",
@@ -139,7 +149,7 @@ export function ProfileForm() {
         </div>
         <FormField
           control={form.control}
-          name="phone"
+          name="phoneNumber"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Telefonnummer</FormLabel>

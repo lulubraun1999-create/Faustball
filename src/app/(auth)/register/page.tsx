@@ -11,10 +11,8 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { useFirestore } from "@/firebase";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { doc } from "firebase/firestore";
+import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -110,30 +108,8 @@ export default function RegisterPage() {
       const userDocRef = doc(firestore, "users", user.uid);
       const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
 
-      await Promise.all([
-        setDoc(userDocRef, userDocData).catch((error) => {
-          errorEmitter.emit(
-            "permission-error",
-            new FirestorePermissionError({
-              path: userDocRef.path,
-              operation: "create",
-              requestResourceData: userDocData,
-            })
-          );
-          throw error; // Re-throw to be caught by the outer catch block
-        }),
-        setDoc(profileDocRef, userProfileData).catch((error) => {
-          errorEmitter.emit(
-            "permission-error",
-            new FirestorePermissionError({
-              path: profileDocRef.path,
-              operation: "create",
-              requestResourceData: userProfileData,
-            })
-          );
-          throw error; // Re-throw to be caught by the outer catch block
-        }),
-      ]);
+      setDocumentNonBlocking(userDocRef, userDocData, { merge: true });
+      setDocumentNonBlocking(profileDocRef, userProfileData, { merge: true });
 
       toast({
         title: "Registrierung erfolgreich",
