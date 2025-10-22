@@ -17,7 +17,6 @@ import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
-import { useEffect, useState } from "react";
 
 const VerwaltungDropdown = dynamic(() => import('./verwaltung-dropdown').then(mod => mod.VerwaltungDropdown), { ssr: false });
 
@@ -26,12 +25,6 @@ export function MainHeader() {
   const { user } = useUser();
   const auth = useAuth();
   const router = useRouter();
-  const [isClient, setIsClient] = useState(false)
-
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
-
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -50,7 +43,7 @@ export function MainHeader() {
         </div>
 
         <div className="flex flex-1 items-center justify-center">
-          {isClient &&<nav className="flex items-center space-x-6 text-sm font-medium">
+          <nav className="flex items-center space-x-6 text-sm font-medium">
             <Link
               href="/kalender"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
@@ -64,7 +57,7 @@ export function MainHeader() {
               Chat
             </Link>
             <VerwaltungDropdown />
-          </nav>}
+          </nav>
         </div>
         
         <div className="flex items-center justify-end space-x-2">
