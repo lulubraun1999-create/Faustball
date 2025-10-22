@@ -50,8 +50,8 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container grid h-16 grid-cols-4 items-center gap-4">
-        <div className="col-span-1 flex items-center">
+      <div className="container flex h-16 items-center">
+        <div className="flex-1 justify-start">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -59,25 +59,25 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <div className="col-span-2 flex items-center justify-center">
-          <nav className="flex items-center space-x-6 text-sm font-medium">
-            <Link
-              href="/kalender"
-              className="transition-colors hover:text-foreground/80 text-foreground/60"
-            >
-              Kalender
-            </Link>
-            <Link
-              href="/chat"
-              className="transition-colors hover:text-foreground/80 text-foreground/60"
-            >
-              Chat
-            </Link>
-            <VerwaltungDropdown />
-          </nav>
-        </div>
+        <nav className="flex flex-1 items-center justify-center">
+            <div className="flex items-center space-x-6 text-sm font-medium">
+                <Link
+                href="/dashboard"
+                className="transition-colors hover:text-foreground/80 text-foreground"
+                >
+                Aktuelles
+                </Link>
+                <Link
+                href="/chat"
+                className="transition-colors hover:text-foreground/80 text-foreground/60"
+                >
+                Chat
+                </Link>
+                <VerwaltungDropdown />
+            </div>
+        </nav>
         
-        <div className="col-span-1 flex items-center justify-end space-x-2">
+        <div className="flex flex-1 items-center justify-end space-x-2">
           <a
             href="https://www.instagram.com"
             target="_blank"
