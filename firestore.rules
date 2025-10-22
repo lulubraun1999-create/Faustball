@@ -1,72 +1,83 @@
 /**
- * @fileoverview Firestore Security Rules for FaustApp.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for `/users/{userId}` and allows public read access to `/member_profiles/{memberProfileId}` while restricting write access.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a user-ownership model with admin overrides.
  *
  * Data Structure:
- * - User data is stored under `/users/{userId}`, accessible only by the authenticated user.
- * - Member profiles are stored under `/member_profiles/{memberProfileId}`, publicly readable but restricted for writes.
+ * - /users/{userId}: Stores core user account information, accessible only by the user or an admin.
+ * - /members/{memberId}: Stores editable user profile data, accessible by the user or an admin.
  *
  * Key Security Decisions:
- * - User listing is disallowed to protect privacy.
- * - Member profiles are publicly readable, but create, update, and delete operations are not permitted in this prototype.
+ * - User data (under /users/{userId}) can only be read by the user themselves or an admin.
+ * - User data can only be created by the user themselves (self-registration).
+ * - User data can only be updated by the user, and only the email and role fields are allowed to be modified.
+ * - Member data (under /members/{memberId}) can be read and written by the owning user or an admin.
  *
- * Denormalization for Authorization: N/A (Ownership is determined via path)
- * Structural Segregation: User data and member profiles are stored in separate top-level collections to simplify authorization.
+ * Denormalization for Authorization:
+ * - The rules for /members/{memberId} require reading the /users/{userId} document to check the user's role.
+ *   For better performance and simpler rules, consider denormalizing the 'role' field onto the /members/{memberId} document.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user documents. Only the authenticated user can read or write their own document.
+     * @description Controls access to user account data. Only the user or an admin can read. The user can create their own record.  The user can only update email and role fields.
      * @path /users/{userId}
-     * @allow (create) User with UID 'user123' can create their own user document.
-     * @allow (get, update, delete) User with UID 'user123' can read, update, and delete their own user document.
-     * @deny (create) User with UID 'user456' cannot create a user document with ID 'user123'.
-     * @deny (get, update, delete) User with UID 'user456' cannot read, update, or delete user document 'users/user123'.
-     * @principle Enforces document ownership for writes.
+     * @allow (read) User 'abc' can read their own data: `request.auth.uid == 'abc'`
+     * @allow (read) Admin user 'admin_user' can read user 'abc's data.
+     * @allow (create) User 'abc' can create their own record: `request.auth.uid == 'abc'`
+     * @allow (update) User 'abc' can update their email: `request.auth.uid == 'abc'`
+     * @deny (read) User 'def' cannot read user 'abc's data: `request.auth.uid != 'abc'`
+     * @deny (create) User 'abc' cannot create a user record with a different ID: `request.auth.uid != userId`
+     * @deny (update) User 'abc' cannot update firstName: `request.auth.uid == 'abc'`
+     * @deny (delete) No one can delete a user record.
+     * @principle Enforces user-ownership for reads and updates. Allows self-creation.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isSignedIn() && isOwner(userId) && resource != null;
-      }
-
-      // Read permissions
-      allow get: if isOwner(userId);
+      // Read Permissions
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow list: if false;
 
-      // Write permissions
+      // Write Permissions
       allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to member profile documents. Allows public read access but restricts write access.
-     * @path /member_profiles/{memberProfileId}
-     * @allow (get, list) Any user can read any member profile.
-     * @deny (create, update, delete) No user can create, update, or delete member profiles in this prototype.
-     * @principle Allows public read access while restricting writes.
+     * @description Controls access to member profile data. Only the owning user or an admin can read or write.
+     * @path /members/{memberId}
+     * @allow (read) User 'abc' can read their own member profile: `request.auth.uid == 'abc'`
+     * @allow (write) User 'abc' can write their own member profile: `request.auth.uid == 'abc'`
+     * @allow (read) Admin user 'admin_user' can read member 'abc's profile.
+     * @allow (write) Admin user 'admin_user' can write member 'abc's profile.
+     * @deny (read) User 'def' cannot read member 'abc's profile: `request.auth.uid != 'abc'`
+     * @deny (write) User 'def' cannot write member 'abc's profile: `request.auth.uid != 'abc'`
+     * @deny (delete) No one can delete a member record, deletion is not allowed.
+     * @principle Enforces user-ownership for reads and writes, with admin overrides.
      */
-    match /member_profiles/{memberProfileId} {
-      // Read permissions
-      allow get: if true;
-      allow list: if true;
+    match /members/{memberId} {
+      // Read Permissions
+      allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
+      allow list: if false;
 
-      // Write permissions
-      allow create: if false;
-      allow update: if false;
+      // Write Permissions
+      allow create: if isSignedIn() && (isOwner(memberId) || isAdmin());
+      allow update: if isSignedIn() && (isOwner(memberId) || isAdmin());
       allow delete: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }

@@ -98,16 +98,13 @@
       "schema": {
         "$ref": "#/backend/entities/User"
       },
-      "description": "Stores core user authentication data. Name is read-only after creation. Accessible only by admins or the authenticated user.",
-      "rules": "allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow create: if request.auth.uid == userId; allow update: if request.auth.uid == userId && resource.data.diff(request.resource.data).affectedKeys().hasOnly(['email', 'role']);"
+      "description": "Stores core user authentication data. Name is read-only after creation. Accessible only by admins or the authenticated user."
     },
     "/members/{memberId}": {
       "schema": {
         "$ref": "#/backend/entities/Member"
       },
-      "description": "Stores editable user profile data. Accessible by admins or the owning user.",
-      "rules": "allow read, write: if request.auth.uid == memberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';"
+      "description": "Stores editable user profile data. Accessible by admins or the owning user."
     }
   }
 }
-
