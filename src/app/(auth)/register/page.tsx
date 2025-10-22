@@ -114,20 +114,26 @@ export default function RegisterPage() {
       const userDocRef = doc(firestore, "users", user.uid);
       const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
 
-      setDoc(userDocRef, userDocData).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: userDocRef.path,
-          operation: 'create',
-          requestResourceData: userDocData
-        }));
+      await setDoc(userDocRef, userDocData)
+        .catch(error => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'create',
+            requestResourceData: userDocData
+          }));
+          // Throw it again so we can catch it in the outer block
+          throw error;
       });
 
-      setDoc(profileDocRef, userProfileData).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: profileDocRef.path,
-          operation: 'create',
-          requestResourceData: userProfileData
-        }));
+      await setDoc(profileDocRef, userProfileData)
+        .catch(error => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: profileDocRef.path,
+            operation: 'create',
+            requestResourceData: userProfileData
+          }));
+           // Throw it again so we can catch it in the outer block
+          throw error;
       });
 
       toast({
@@ -135,10 +141,13 @@ export default function RegisterPage() {
         description: "Ihr Konto wurde erstellt. Sie können sich jetzt anmelden.",
       });
       router.push("/login");
+
     } catch (error: any) {
-      let description = "Ein unerwarteter Fehler ist aufgetreten.";
+      let description = "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.";
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
+      } else if (error.name === 'FirebaseError' && error.message.includes('permission-denied')) {
+        description = "Fehler beim Einrichten des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
       }
       toast({
         variant: "destructive",
