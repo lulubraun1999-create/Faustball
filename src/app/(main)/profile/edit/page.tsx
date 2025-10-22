@@ -497,7 +497,7 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
+                        value={field.value || ''}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -571,5 +571,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
