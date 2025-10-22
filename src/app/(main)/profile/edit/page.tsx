@@ -132,30 +132,19 @@ export default function ProfileEditPage() {
     },
   });
 
-  const passwordForm = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordFormSchema),
-    defaultValues: { newPassword: '' },
-  });
-
-  const emailForm = useForm<EmailFormValues>({
-    resolver: zodResolver(emailFormSchema),
-    defaultValues: { newEmail: '' },
-  });
-
   useEffect(() => {
     if (user) {
-      profileForm.setValue('firstName', user.firstName);
-      profileForm.setValue('lastName', user.lastName);
+      profileForm.setValue('firstName', user.firstName || '');
+      profileForm.setValue('lastName', user.lastName || '');
     }
     if (member) {
-      profileForm.reset({
-        ...profileForm.getValues(),
-        phone: member.phone || '',
-        location: member.location || '',
-        birthday: member.birthday || '',
-        position: member.position || [],
-        gender: member.gender,
-      });
+      profileForm.setValue('phone', member.phone || '');
+      profileForm.setValue('location', member.location || '');
+      profileForm.setValue('birthday', member.birthday || '');
+      profileForm.setValue('position', member.position || []);
+      if (member.gender) {
+        profileForm.setValue('gender', member.gender);
+      }
     }
   }, [user, member, profileForm]);
 
@@ -214,7 +203,17 @@ export default function ProfileEditPage() {
     if (!authUser || !userDocRef) return;
     try {
       await verifyBeforeUpdateEmail(authUser, data.newEmail);
-      await setDoc(userDocRef, { email: data.newEmail }, { merge: true });
+      
+      const userUpdateData = { email: data.newEmail };
+      setDoc(userDocRef, userUpdateData, { merge: true }).catch(() => {
+         const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'update',
+            requestResourceData: userUpdateData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
+
       toast({
         title: 'Bestätigungs-E-Mail gesendet',
         description: `Eine E-Mail wurde an ${data.newEmail} gesendet. Bitte klicken Sie auf den Link, um die Änderung abzuschließen.`,
@@ -243,8 +242,24 @@ export default function ProfileEditPage() {
     if (!authUser || !firestore) return;
     try {
       // Delete Firestore documents first
-      if (memberDocRef) await deleteDoc(memberDocRef);
-      if (userDocRef) await deleteDoc(userDocRef);
+      if (memberDocRef) {
+        deleteDoc(memberDocRef).catch(() => {
+           const permissionError = new FirestorePermissionError({
+            path: memberDocRef.path,
+            operation: 'delete',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+      }
+      if (userDocRef) {
+        deleteDoc(userDocRef).catch(() => {
+          const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'delete',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+      }
 
       // Then delete the user from Auth
       await deleteUser(authUser);
@@ -497,7 +512,8 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value || ''}
+                        value={field.value}
+                        defaultValue={member?.gender}
                       >
                         <FormControl>
                           <SelectTrigger>
