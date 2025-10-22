@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,13 +11,9 @@ import {
 } from "@/components/ui/card";
 import { User, Mail, Phone, Cake, MapPin, Shield } from "lucide-react";
 import type { UserProfile } from "@/lib/types";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function ProfilePage() {
-  const profileAvatar = PlaceHolderImages.find(
-    (img) => img.id === "profile-avatar-1"
-  );
-  
   // Mock user for display purposes
   const user: UserProfile = {
     id: "1",
@@ -27,7 +22,6 @@ export default function ProfilePage() {
     lastName: "Mustermann",
     email: "max.mustermann@example.com",
     role: "user",
-    avatar: profileAvatar?.imageUrl,
     phone: "0123 4567890",
     birthday: "15. August 1995",
     location: "Leverkusen",
@@ -38,16 +32,12 @@ export default function ProfilePage() {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Card className="max-w-4xl mx-auto">
         <CardHeader className="flex flex-col items-center text-center space-y-4 p-6 bg-muted/30 sm:flex-row sm:text-left sm:space-y-0 sm:space-x-6">
-          <div className="relative">
-            <Image
-              src={user.avatar || "https://picsum.photos/seed/avatar/128/128"}
-              alt={user.name}
-              width={128}
-              height={128}
-              className="rounded-full border-4 border-background"
-              data-ai-hint="person portrait"
-            />
-          </div>
+          <Avatar className="h-32 w-32 border-4 border-background text-4xl">
+            <AvatarFallback>
+              {user.firstName?.charAt(0)}
+              {user.lastName?.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
           <div className="space-y-1">
             <CardTitle className="text-3xl font-headline">{user.name}</CardTitle>
             <CardDescription className="text-lg text-muted-foreground">
