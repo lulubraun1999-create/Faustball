@@ -28,7 +28,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Ungültige E-Mail-Adresse.' }),
-  password: z.string().min(6, { message: 'Das Passwort muss mindestens 6 Zeichen lang sein.' }),
+  password: z.string().min(1, { message: 'Passwort ist erforderlich.' }),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -63,11 +63,16 @@ export default function LoginPage() {
       });
       router.push('/dashboard');
     } catch (error: any) {
-      console.error("Login Error:", error);
+      let description = 'Ein unbekannter Fehler ist aufgetreten.';
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        description = 'Die eingegebenen Anmeldedaten sind ungültig. Bitte überprüfen Sie Ihre E-Mail und Ihr Passwort.';
+      } else {
+        description = error.message;
+      }
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Anmeldung',
-        description: error.message || 'E-Mail oder Passwort ist falsch.',
+        description: description,
       });
     }
   };

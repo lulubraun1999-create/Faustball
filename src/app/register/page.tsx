@@ -94,11 +94,19 @@ export default function RegisterPage() {
         });
 
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler bei der Registrierung',
-        description: error.message,
-      });
+      if (error.code === 'auth/email-already-in-use') {
+        toast({
+          variant: 'destructive',
+          title: 'Fehler bei der Registrierung',
+          description: 'Diese E-Mail-Adresse wird bereits verwendet. Bitte melden Sie sich an.',
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Fehler bei der Registrierung',
+          description: error.message,
+        });
+      }
     }
   };
 
