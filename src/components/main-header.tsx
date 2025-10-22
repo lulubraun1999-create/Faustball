@@ -51,7 +51,7 @@ export function MainHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
-        <div className="flex-1 justify-start">
+        <div className="mr-4 flex">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -77,7 +77,7 @@ export function MainHeader() {
             </div>
         </nav>
         
-        <div className="flex flex-1 items-center justify-end space-x-2">
+        <div className="flex items-center justify-end space-x-2">
           <a
             href="https://www.instagram.com"
             target="_blank"
