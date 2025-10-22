@@ -4,16 +4,20 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account in the system.",
+      "description": "Represents a user account within the FaustApp application.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the user entity."
+          "description": "Unique identifier for the user account."
         },
         "email": {
           "type": "string",
           "description": "Email address of the user.",
           "format": "email"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Hashed password for authentication. (Note: actual password storage is handled externally)"
         },
         "firstName": {
           "type": "string",
@@ -25,34 +29,36 @@
         },
         "registrationCode": {
           "type": "string",
-          "description": "Registration code used during user registration."
+          "description": "Registration code used during account creation."
         },
         "emailVerified": {
           "type": "boolean",
-          "description": "Indicates whether the user's email has been verified."
+          "description": "Indicates whether the user's email address has been verified."
         }
       },
       "required": [
         "id",
         "email",
+        "passwordHash",
         "firstName",
         "lastName",
-        "registrationCode"
+        "registrationCode",
+        "emailVerified"
       ]
     },
-    "Member": {
+    "MemberProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Member",
+      "title": "MemberProfile",
       "type": "object",
-      "description": "Represents a member in the Faustball team, extending user information with team-specific details.",
+      "description": "Represents the profile information of a member, extending the base user information.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the member entity."
+          "description": "Unique identifier for the member profile."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to User. (Relationship: User 1:1 Member)"
+          "description": "Reference to User. (Relationship: User 1:1 MemberProfile)"
         },
         "phoneNumber": {
           "type": "string",
@@ -60,7 +66,7 @@
         },
         "location": {
           "type": "string",
-          "description": "Location/city of the member."
+          "description": "Location or address of the member."
         },
         "position": {
           "type": "string",
@@ -73,7 +79,7 @@
         },
         "gender": {
           "type": "string",
-          "description": "Gender of the member (e.g., male, female, diverse (damenteam), diverse (herrenteam))."
+          "description": "Gender of the member (e.g., male, female, diverse)."
         }
       },
       "required": [
@@ -97,32 +103,32 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user account information. Path-based ownership ensures only the user can access their own document.",
+          "description": "Stores user authentication and registration data. Accessible only by the authenticated user (path-based ownership).",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user, matching the Firebase Auth UID."
             }
           ]
         }
       },
       {
-        "path": "/members/{memberId}",
+        "path": "/member_profiles/{memberProfileId}",
         "definition": {
-          "entityName": "Member",
+          "entityName": "MemberProfile",
           "schema": {
-            "$ref": "#/backend/entities/Member"
+            "$ref": "#/backend/entities/MemberProfile"
           },
-          "description": "Stores member profile information. Includes a 'userId' field referencing the corresponding user document. Anyone who is logged in is able to query the members collection.",
+          "description": "Stores member profile data, separate from authentication information. All members can be listed, but editing is restricted.",
           "params": [
             {
-              "name": "memberId",
-              "description": "The unique identifier of the member."
+              "name": "memberProfileId",
+              "description": "The unique identifier for the member profile."
             }
           ]
         }
       }
     ],
-    "reasoning": "The Firestore structure is designed to store user and member data for the FaustApp. It uses a path-based ownership model for user data to ensure security and simplicity. The structure separates user accounts (`users`) from member profiles (`members`) to accommodate the different data requirements and access patterns. This design prioritizes Authorization Independence by avoiding `get()` calls in security rules, and supports QAPs by leveraging structural segregation and path-based ownership. Member documents contain a `userId` field which allows us to query members by `userId`."
+    "reasoning": "This Firestore structure prioritizes authorization independence and QAPs. The primary design decision is to segregate user data and member profiles. User authentication details (`users/{userId}`) are separated from member profile data (`member_profiles/{memberProfileId}`). This structure ensures clarity, simplifies security rules, and avoids hierarchical dependencies.\n\n*   **Authorization Independence:** No `get()` calls are needed in rules. User data and profile data can be secured based on the `request.auth.uid` without needing to read related documents.\n*   **QAPs:** Segregation allows secure `list` operations on each collection. For example, you can securely list all member profiles or only the current user's profile without exposing private user data.\n*   **Ownership**: `/users/{userId}` path-based ownership ensures that only the authenticated user has access to their own user document.\n*   **Predictable Schema:** Ensures a standard and consistent data structure for easier development and debugging."
   }
 }

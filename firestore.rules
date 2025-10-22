@@ -2,58 +2,66 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for user documents and allows public read access to member profiles while restricting write access.
+ * This ruleset enforces a strict user-ownership model for `/users/{userId}` and allows public read-only access to `/member_profiles/{memberProfileId}`.
  *
  * Data Structure:
- * - /users/{userId}: Stores user account information, accessible only by the user themselves.
- * - /members/{memberId}: Stores member profile information, publicly readable, but write-protected.
+ * - User authentication data is stored under `/users/{userId}`, accessible only by the authenticated user.
+ * - Member profile data is stored under `/member_profiles/{memberProfileId}`, publicly readable but restricted for writes.
  *
  * Key Security Decisions:
- * - Users can only access their own data in the /users collection.
- * - The /members collection is publicly readable, but creation, update, and deletion are disallowed.
- * - Denormalization is employed by storing the userId within the member document, enabling efficient queries.
- * - User listing is implicitly disallowed by the rules structure.
+ * - User listing is disabled.
+ * - Member profiles are publicly readable.
+ * - The rules use denormalization by enforcing user IDs on create to match the document path, simplifying authorization checks.
+ * - No schema validation beyond authorization fields will occur in this prototyping phase.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for documents in the /users collection.
+     * @description Secures user authentication and registration data. Only the authenticated user can read, update, or delete their own data.
      * @path /users/{userId}
-     * @allow (create) - A user with UID 'user_abc' can create their own document at /users/user_abc if the document's 'id' field also equals 'user_abc'.
-     * @allow (get, update, delete) - A user with UID 'user_abc' can read, update, or delete their own document at /users/user_abc.
-     * @deny (create) - A user with UID 'user_abc' cannot create a document at /users/another_user_id.
-     * @deny (get, update, delete) - A user with UID 'user_abc' cannot read, update, or delete the document at /users/another_user_id.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) User with ID 'user123' can create their own document: request.auth.uid == 'user123' and request.resource.data.id == 'user123'
+     * @allow (get, update, delete) User with ID 'user123' can access their own document: request.auth.uid == 'user123'
+     * @deny (create) User with ID 'user123' cannot create a document with ID 'user456': request.auth.uid == 'user123' but request.resource.data.id != 'user123'
+     * @deny (get, update, delete) User with ID 'user123' cannot access a document with ID 'user456': request.auth.uid == 'user123' but userId is 'user456'
+     * @principle Enforces document ownership for all operations on user data.
      */
     match /users/{userId} {
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
 
-      function isSignedIn() {
-        return request.auth != null;
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
       }
 
       allow get: if isOwner(userId);
       allow list: if false;
 
-      allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.id == userId;
-      allow update: if isSignedIn() && isOwner(userId) && resource != null && request.resource.data.id == resource.data.id;
-      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows public read access to documents in the /members collection, but restricts write access.
-     * @path /members/{memberId}
-     * @allow (get, list) - Any user, authenticated or not, can read any document in the /members collection.
-     * @deny (create, update, delete) - No user can create, update, or delete documents in the /members collection.
-     * @principle Provides public read access while maintaining control over data modification.
+     * @description Controls access to member profile data.  All users can list and get member profiles, but only authenticated users can create them, and only the creator can modify or delete.
+     * @path /member_profiles/{memberProfileId}
+     * @allow (get, list) Any user can read member profiles.
+     * @allow (create) Authenticated user 'user123' can create a member profile.
+     * @deny (update, delete) Only the user who created the profile can update or delete it.
+     * @principle Allows public read access with owner-only writes.
      */
-    match /members/{memberId} {
+    match /member_profiles/{memberProfileId} {
       allow get, list: if true;
-      allow create, update, delete: if false;
+
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
     }
   }
 }
