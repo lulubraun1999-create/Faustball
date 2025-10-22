@@ -47,6 +47,14 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
+    if (!auth) {
+        toast({
+            variant: 'destructive',
+            title: 'Authentifizierung nicht bereit',
+            description: 'Bitte warten Sie einen Moment und versuchen Sie es erneut.',
+        });
+        return;
+    }
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       toast({
@@ -58,7 +66,7 @@ export default function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Anmeldung',
-        description: error.message,
+        description: 'E-Mail oder Passwort ist falsch.',
       });
     }
   };

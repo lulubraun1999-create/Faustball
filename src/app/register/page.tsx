@@ -57,6 +57,14 @@ export default function RegisterPage() {
   });
 
   const onSubmit = async (data: RegisterFormValues) => {
+    if (!auth || !firestore) {
+      toast({
+          variant: 'destructive',
+          title: 'Dienste nicht bereit',
+          description: 'Bitte warten Sie einen Moment und versuchen Sie es erneut.',
+      });
+      return;
+    }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const user = userCredential.user;
@@ -73,10 +81,18 @@ export default function RegisterPage() {
       });
       router.push('/dashboard');
     } catch (error: any) {
+      let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Diese E-Mail-Adresse wird bereits verwendet.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Das Passwort ist zu schwach.';
+      } else if (error.code) {
+        errorMessage = error.message;
+      }
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Registrierung',
-        description: error.message,
+        description: errorMessage,
       });
     }
   };
