@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Instagram, User as UserIcon } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import {
@@ -35,13 +34,16 @@ export function MainHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
-        <div className="flex items-center">
+        <div className="mr-4 hidden md:flex">
           <Link href="/dashboard" className="mr-6 flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
             </span>
           </Link>
-          <nav className="hidden items-center space-x-6 text-sm font-medium md:flex">
+        </div>
+        
+        <div className="hidden md:flex flex-1 items-center justify-center">
+          <nav className="flex items-center space-x-6 text-sm font-medium">
             <Link
               href="/kalender"
               className="transition-colors hover:text-foreground/80 text-foreground/60"
