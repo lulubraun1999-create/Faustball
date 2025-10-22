@@ -58,8 +58,6 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     if (!auth || !firestore) {
-      // Services are not ready yet, just return.
-      // The provider will handle showing a loading state.
       return;
     }
     try {
@@ -79,12 +77,13 @@ export default function RegisterPage() {
       router.push('/dashboard');
     } catch (error: any) {
       let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
-      if (error.code === 'auth/email-already-in-use') {
+      // Use error.message first to get the descriptive error from Firebase
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.code === 'auth/email-already-in-use') {
         errorMessage = 'Diese E-Mail-Adresse wird bereits verwendet.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Das Passwort ist zu schwach.';
-      } else if (error.message) { // Use error.message for other Firebase errors
-        errorMessage = error.message;
       }
       toast({
         variant: 'destructive',
