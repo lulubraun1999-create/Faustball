@@ -5,6 +5,7 @@ export interface UserProfile {
   lastName: string;
   email: string;
   role?: 'user' | 'admin';
+  firstLoginComplete?: boolean;
 }
 
 export interface MemberProfile {

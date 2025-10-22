@@ -30,6 +30,10 @@
             "admin",
             "user"
           ]
+        },
+        "firstLoginComplete": {
+          "type": "boolean",
+          "description": "Flag to indicate if the user has completed the initial profile setup."
         }
       },
       "required": [
@@ -84,7 +88,9 @@
           ]
         }
       },
-      "required": ["userId"]
+      "required": [
+        "userId"
+      ]
     }
   },
   "auth": {

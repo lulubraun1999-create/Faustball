@@ -25,7 +25,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 
 const registerSchema = z.object({
@@ -70,6 +70,8 @@ export default function RegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const user = userCredential.user;
 
+      await sendEmailVerification(user);
+
       const userDocRef = doc(firestore, 'users', user.uid);
       const userData = {
         id: user.uid,
@@ -77,24 +79,16 @@ export default function RegisterPage() {
         lastName: data.lastName,
         email: data.email,
         role: 'user' as const,
+        firstLoginComplete: false,
       };
 
-      setDoc(userDocRef, userData)
-        .then(() => {
-            toast({
-              title: 'Registrierung erfolgreich',
-              description: 'Ihr Konto wurde erstellt.',
-            });
-            router.push('/dashboard');
-        })
-        .catch(error => {
-            const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'create',
-                requestResourceData: userData
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+      await setDoc(userDocRef, userData);
+
+      toast({
+        title: 'Registrierung fast abgeschlossen',
+        description: 'Wir haben Ihnen eine Bestätigungs-E-Mail gesendet. Bitte überprüfen Sie Ihr Postfach.',
+      });
+      router.push('/auth/verify-email');
 
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {

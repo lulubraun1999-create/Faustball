@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -56,12 +57,25 @@ export default function LoginPage() {
       return;
     }
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      
+      if (!userCredential.user.emailVerified) {
+        toast({
+          variant: 'destructive',
+          title: 'E-Mail nicht verifiziert',
+          description: 'Bitte bestätigen Sie Ihre E-Mail-Adresse, bevor Sie sich anmelden. Überprüfen Sie Ihr Postfach.',
+        });
+        // Optionally sign out the user if you don't want them to be in a semi-logged-in state
+        await auth.signOut();
+        return;
+      }
+      
       toast({
         title: 'Anmeldung erfolgreich',
         description: 'Willkommen zurück!',
       });
       router.push('/dashboard');
+
     } catch (error: any) {
       let description = 'Ein unbekannter Fehler ist aufgetreten.';
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
