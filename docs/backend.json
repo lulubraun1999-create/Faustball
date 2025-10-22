@@ -1,0 +1,293 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user account in the system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Hashed password of the user. This should be stored securely."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        },
+        "registrationCode": {
+          "type": "string",
+          "description": "Registration code used during account creation."
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Indicates if the user's email address has been verified."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "passwordHash",
+        "firstName",
+        "lastName",
+        "registrationCode",
+        "emailVerified"
+      ]
+    },
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents user profile information.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user profile entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:1 UserProfile)"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "User's phone number."
+        },
+        "location": {
+          "type": "string",
+          "description": "User's location or address."
+        },
+        "position": {
+          "type": "string",
+          "description": "User's playing position (e.g., defense, attack)."
+        },
+        "birthday": {
+          "type": "string",
+          "description": "User's birthday.",
+          "format": "date-time"
+        },
+        "gender": {
+          "type": "string",
+          "description": "User's gender (male, female, diverse)."
+        }
+      },
+      "required": [
+        "id",
+        "userId"
+      ]
+    },
+    "Team": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Team",
+      "type": "object",
+      "description": "Represents a Faustball team.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the team entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the team."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the team."
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "References to UserProfile. (Relationship: Team 1:N UserProfile)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "CalendarEvent": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CalendarEvent",
+      "type": "object",
+      "description": "Represents an event on the calendar.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the event."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the event."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the event."
+        },
+        "startTime": {
+          "type": "string",
+          "description": "Start time of the event.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "End time of the event.",
+          "format": "date-time"
+        },
+        "teamId": {
+          "type": "string",
+          "description": "Reference to Team. (Relationship: Team 1:N CalendarEvent)"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "startTime",
+        "endTime"
+      ]
+    },
+    "NewsArticle": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NewsArticle",
+      "type": "object",
+      "description": "Represents a news article.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the news article."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the news article."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the news article."
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N NewsArticle)"
+        },
+        "publishedDate": {
+          "type": "string",
+          "description": "Date the article was published.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "content",
+        "authorId",
+        "publishedDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user account information. This collection is path-based owned. `userId` corresponds to `request.auth.uid`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, matching the Firebase Authentication UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/profile",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. This is a subcollection under the user document to ensure only the user can access their profile.  `userId` corresponds to `request.auth.uid`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, matching the Firebase Authentication UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/teams/{teamId}",
+        "definition": {
+          "entityName": "Team",
+          "schema": {
+            "$ref": "#/backend/entities/Team"
+          },
+          "description": "Stores team information. The `memberIds` array contains the user IDs of team members.  Authorization rules should validate that `request.auth.uid` is present in this array for write operations. Includes denormalized 'memberIds' array for authorization independence.",
+          "params": [
+            {
+              "name": "teamId",
+              "description": "The unique identifier for the team."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/teams/{teamId}/calendar_events/{calendarEventId}",
+        "definition": {
+          "entityName": "CalendarEvent",
+          "schema": {
+            "$ref": "#/backend/entities/CalendarEvent"
+          },
+          "description": "Stores calendar events for teams. Access control is based on the team membership; only members of the team should be able to create and modify events.  Denormalizes the `teamId` for authorization independence.",
+          "params": [
+            {
+              "name": "teamId",
+              "description": "The unique identifier for the team."
+            },
+            {
+              "name": "calendarEventId",
+              "description": "The unique identifier for the calendar event."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/news_articles/{newsArticleId}",
+        "definition": {
+          "entityName": "NewsArticle",
+          "schema": {
+            "$ref": "#/backend/entities/NewsArticle"
+          },
+          "description": "Stores news articles. Access control allows read access for all users, but write access is restricted to admins or the article author. Includes denormalized `authorId` to simplify rules.",
+          "params": [
+            {
+              "name": "newsArticleId",
+              "description": "The unique identifier for the news article."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure security, scalability, and debuggability, adhering to the principles of Authorization Independence, Clarity of Intent, DBAC, and QAPs.  \n\nAuthorization Independence is achieved by denormalizing authorization data where necessary. For example, team membership is maintained within the `teams` collection.  This avoids the need for complex `get()` calls in security rules, which could hinder atomic operations.\n\nStructural Segregation is enforced by placing user profiles under `/users/{userId}/profile` to ensure private user data is isolated and easily secured using path-based rules.\n\nAccess Modeling follows a consistent pattern. User-owned data (e.g., user profiles) are stored under `/users/{userId}` paths.  Collaborative data (teams and calendar events) leverages the membership map approach.  News articles, being globally accessible but author-dependent, reside in a flat `/news_articles` collection.\n\nQAPs are supported through structural segregation. Listing news articles is secure because they are stored in a dedicated collection with rules that allow public read access but restrict write access to authorized users.\n\nFinally, explicit state modeling is encouraged within each entity, using dedicated fields like `status` (though not explicitly present in the provided schemas), and predictable schemas are maintained by avoiding dynamic keys and adhering to consistent naming conventions."
+  }
+}
