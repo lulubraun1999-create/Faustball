@@ -98,14 +98,14 @@
         "$ref": "#/backend/entities/User"
       },
       "description": "Stores user authentication data. Accessible only by admins or the authenticated user.",
-      "rules": "allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow write: if request.auth.uid == userId;"
+      "rules": "allow read, write: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';"
     },
     "/members/{memberId}": {
       "schema": {
         "$ref": "#/backend/entities/Member"
       },
       "description": "Stores user profile data. Accessible by admins or the owning user.",
-      "rules": "allow read: if request.auth.uid == memberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; allow write: if request.auth.uid == memberId;"
+      "rules": "allow read, write: if request.auth.uid == memberId;"
     }
   }
 }
