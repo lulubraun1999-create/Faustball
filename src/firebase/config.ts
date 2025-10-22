@@ -1,8 +1,8 @@
 export const firebaseConfig = {
-  "projectId": "studio-7290981178-5eeb4",
-  "appId": "1:967094846199:web:ecd52b0b7237b2e66589f2",
-  "apiKey": "AIzaSyClUx-ElLCSfzy5B8GOIff9uaRo_bdXIWo",
-  "authDomain": "studio-7290981178-5eeb4.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "967094846199"
+  "projectId": "faustballplaner-d3fd7",
+  "appId": "1:921272633006:web:10e5e5f72849c75b871911",
+  "apiKey": "AIzaSyAo_XGj4B_77b3J85-xxxxxxxxxxxxxxxxxxx",
+  "authDomain": "faustballplaner-d3fd7.firebaseapp.com",
+  "storageBucket": "faustballplaner-d3fd7.appspot.com",
+  "messagingSenderId": "921272633006"
 };
