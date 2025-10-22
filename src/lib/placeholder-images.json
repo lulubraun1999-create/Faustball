@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "dashboard-hero",
+      "description": "A dynamic shot of a Faustball match in progress.",
+      "imageUrl": "https://images.unsplash.com/photo-1755241113952-45f5d3eb8be3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxmYXVzdGJhbGwlMjBzcG9ydHxlbnwwfHx8fDE3NjExNDM3OTN8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "faustball sport"
+    },
+    {
+      "id": "profile-avatar-1",
+      "description": "Default user profile avatar.",
+      "imageUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxwZXJzb24lMjBwb3J0cmFpdHxlbnwwfHx8fDE3NjExMjcwNDB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "calendar-placeholder",
+      "description": "An image representing a schedule or calendar.",
+      "imageUrl": "https://images.unsplash.com/photo-1632200011588-7c252c8c8fbf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxjYWxlbmRhciUyMHNjaGVkdWxlfGVufDB8fHx8MTc2MTA4MTE5NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "calendar schedule"
+    },
+    {
+      "id": "chat-placeholder",
+      "description": "An image representing communication or chat.",
+      "imageUrl": "https://images.unsplash.com/photo-1623915695133-d624f7759fd0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxjb21tdW5pY2F0aW9uJTIwY2hhdHxlbnwwfHx8fDE3NjEwNDk2OTV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "communication chat"
+    },
+    {
+      "id": "admin-placeholder",
+      "description": "An image representing administration or management.",
+      "imageUrl": "https://images.unsplash.com/photo-1753874151124-5e5f7fe3d5d8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxtYW5hZ2VtZW50JTIwZ2VhcnxlbnwwfHx8fDE3NjExNDM3OTN8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "management gear"
+    }
+  ]
 }
