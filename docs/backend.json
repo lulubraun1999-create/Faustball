@@ -4,12 +4,20 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account in the system.",
+      "description": "Represents a user account in the FaustApp.",
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
         "email": {
           "type": "string",
           "description": "Email address of the user.",
           "format": "email"
+        },
+        "password": {
+          "type": "string",
+          "description": "Hashed password of the user.  Note:  This should be handled by an authentication service, and not stored directly."
         },
         "firstName": {
           "type": "string",
@@ -18,125 +26,72 @@
         "lastName": {
           "type": "string",
           "description": "Last name of the user."
+        },
+        "registrationCode": {
+          "type": "string",
+          "description": "Registration code used during account creation."
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Indicates whether the user's email address has been verified."
         }
       },
       "required": [
+        "id",
         "email",
+        "password",
         "firstName",
-        "lastName"
+        "lastName",
+        "registrationCode",
+        "emailVerified"
       ]
     },
-    "Team": {
+    "Member": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Team",
+      "title": "Member",
       "type": "object",
-      "description": "Represents a Faustball team.",
+      "description": "Represents a member in the FaustApp, extending user information with team-related details.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the team entity."
+          "description": "Unique identifier for the member entity."
         },
-        "name": {
+        "userId": {
           "type": "string",
-          "description": "Name of the team."
+          "description": "Reference to User. (Relationship: User 1:1 Member)"
         },
-        "description": {
+        "phoneNumber": {
           "type": "string",
-          "description": "Description of the team."
+          "description": "Phone number of the member."
         },
-        "memberIds": {
-          "type": "array",
-          "description": "References to UserProfile. (Relationship: Team 1:N UserProfile)",
-          "items": {
-            "type": "string"
-          }
+        "location": {
+          "type": "string",
+          "description": "Location of the member."
+        },
+        "position": {
+          "type": "string",
+          "description": "Playing position of the member (e.g., Abwehr, Spiel, Angriff)."
+        },
+        "birthday": {
+          "type": "string",
+          "description": "Birthday of the member.",
+          "format": "date-time"
+        },
+        "gender": {
+          "type": "string",
+          "description": "Gender of the member (männlich, weiblich, divers (damenteam), divers (herrenteam))."
         }
       },
       "required": [
         "id",
-        "name"
-      ]
-    },
-    "CalendarEvent": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CalendarEvent",
-      "type": "object",
-      "description": "Represents an event on the calendar.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the event."
-        },
-        "title": {
-          "type": "string",
-          "description": "Title of the event."
-        },
-        "description": {
-          "type": "string",
-          "description": "Description of the event."
-        },
-        "startTime": {
-          "type": "string",
-          "description": "Start time of the event.",
-          "format": "date-time"
-        },
-        "endTime": {
-          "type": "string",
-          "description": "End time of the event.",
-          "format": "date-time"
-        },
-        "teamId": {
-          "type": "string",
-          "description": "Reference to Team. (Relationship: Team 1:N CalendarEvent)"
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "startTime",
-        "endTime"
-      ]
-    },
-    "NewsArticle": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "NewsArticle",
-      "type": "object",
-      "description": "Represents a news article.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the news article."
-        },
-        "title": {
-          "type": "string",
-          "description": "Title of the news article."
-        },
-        "content": {
-          "type": "string",
-          "description": "Content of the news article."
-        },
-        "authorId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N NewsArticle)"
-        },
-        "publishedDate": {
-          "type": "string",
-          "description": "Date the article was published.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "content",
-        "authorId",
-        "publishedDate"
+        "userId"
       ]
     }
   },
   "auth": {
     "providers": [
-      "password"
+      "password",
+      "anonymous"
     ]
   },
   "firestore": {
@@ -148,39 +103,32 @@
           "schema": {
             "$ref": "#/backend/entities/User"
           },
-          "description": "Stores user account information. This collection is path-based owned. `userId` corresponds to `request.auth.uid`."
+          "description": "Stores user authentication and registration data. User data is stored in its own collection based on user ID for private data access.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user."
+            }
+          ]
         }
       },
       {
-        "path": "/teams/{teamId}",
+        "path": "/members/{memberId}",
         "definition": {
-          "entityName": "Team",
+          "entityName": "Member",
           "schema": {
-            "$ref": "#/backend/entities/Team"
+            "$ref": "#/backend/entities/Member"
           },
-          "description": "Stores team information. The `memberIds` array contains the user IDs of team members.  Authorization rules should validate that `request.auth.uid` is present in this array for write operations. Includes denormalized 'memberIds' array for authorization independence."
-        }
-      },
-      {
-        "path": "/teams/{teamId}/calendar_events/{calendarEventId}",
-        "definition": {
-          "entityName": "CalendarEvent",
-          "schema": {
-            "$ref": "#/backend/entities/CalendarEvent"
-          },
-          "description": "Stores calendar events for teams. Access control is based on the team membership; only members of the team should be able to create and modify events.  Denormalizes the `teamId` for authorization independence."
-        }
-      },
-      {
-        "path": "/news_articles/{newsArticleId}",
-        "definition": {
-          "entityName": "NewsArticle",
-          "schema": {
-            "$ref": "#/backend/entities/NewsArticle"
-          },
-          "description": "Stores news articles. Access control allows read access for all users, but write access is restricted to admins or the article author. Includes denormalized `authorId` to simplify rules."
+          "description": "Stores member profile data, including contact information, location, position, birthday, and gender.",
+          "params": [
+            {
+              "name": "memberId",
+              "description": "Unique identifier for the member."
+            }
+          ]
         }
       }
-    ]
+    ],
+    "reasoning": "The Firestore data structure is designed to support the FaustApp's user management and profile features while adhering to the principles of Authorization Independence, Clarity of Intent, DBAC (Database-Based Access Control), and QAPs (Rules are not Filters). It uses structural segregation and denormalization to ensure efficient and secure data access.\n\n**Authorization Independence:** User and member data are stored independently. The `members` collection does not rely on parent document attributes for authorization. Each member document contains all necessary information for access control, eliminating the need for `get()` calls in security rules.\n\n**Structural Segregation:**  User data is stored in `/users/{userId}`. Member data, including profile details, is stored in `/members/{memberId}`.\n\n**Access Modeling:**  Private user data is stored under the `/users/{userId}` path, enabling path-based ownership for simple and secure rules. Since the `Member` entity has a `1:1` relationship with `User`, the Member ID is stored independently of the User ID and is used for accessing the member's profile. Profile data modifications are stored in the `members` collection. The User entity contains only authentication and registration information.\n\n**QAPs (Rules are not Filters):** The structure allows efficient `list` operations. Listing users or members can be performed securely using rules based on path ownership or membership, without requiring filtering of document data within the rules themselves.\n\n**Invariants:**  The structure supports ownership and the integrity of user and member data, ensuring that each user and member has a clearly defined profile."
   }
 }
