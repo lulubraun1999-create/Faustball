@@ -525,7 +525,8 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
+                        defaultValue={member?.gender}
+                        key={member?.gender}
                       >
                         <FormControl>
                           <SelectTrigger>
