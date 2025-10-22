@@ -81,9 +81,9 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-headline">Registrieren</CardTitle>
+          <CardTitle className="text-2xl font-headline">REGISTRIEREN</CardTitle>
           <CardDescription>
-            Erstellen Sie ein Konto, um loszulegen.
+            Erstelle ein Konto, um loszulegen.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -95,7 +95,7 @@ export default function RegisterPage() {
                   name="firstName"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Vorname</FormLabel>
+                      <FormLabel>VORNAME</FormLabel>
                       <FormControl>
                         <Input placeholder="Max" {...field} />
                       </FormControl>
@@ -108,7 +108,7 @@ export default function RegisterPage() {
                   name="lastName"
                   render={({ field }) => (
                     <FormItem className="flex-1">
-                      <FormLabel>Nachname</FormLabel>
+                      <FormLabel>NACHNAME</FormLabel>
                       <FormControl>
                         <Input placeholder="Mustermann" {...field} />
                       </FormControl>
@@ -122,7 +122,7 @@ export default function RegisterPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>E-Mail</FormLabel>
+                    <FormLabel>E-MAIL</FormLabel>
                     <FormControl>
                       <Input placeholder="max.mustermann@mail.de" {...field} />
                     </FormControl>
@@ -135,7 +135,7 @@ export default function RegisterPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Passwort</FormLabel>
+                    <FormLabel>PASSWORT</FormLabel>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
@@ -144,12 +144,12 @@ export default function RegisterPage() {
                 )}
               />
               <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Registrieren...' : 'Registrieren'}
+                {form.formState.isSubmitting ? 'Registrieren...' : 'REGISTRIEREN'}
               </Button>
             </form>
           </Form>
           <div className="mt-4 text-center text-sm">
-            Sie haben bereits ein Konto?{' '}
+            Du hast bereits ein Konto?{' '}
             <Link href="/login" className="underline">
               Anmelden
             </Link>

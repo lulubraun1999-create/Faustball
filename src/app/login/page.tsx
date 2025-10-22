@@ -67,9 +67,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-headline">Anmelden</CardTitle>
+          <CardTitle className="text-2xl font-headline">ANMELDEN</CardTitle>
           <CardDescription>
-            Melden Sie sich bei Ihrem Konto an, um fortzufahren.
+            Melde dich bei deinem Konto an, um fortzufahren.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -80,7 +80,7 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>E-Mail</FormLabel>
+                    <FormLabel>E-MAIL</FormLabel>
                     <FormControl>
                       <Input placeholder="max.mustermann@mail.de" {...field} />
                     </FormControl>
@@ -93,7 +93,7 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Passwort</FormLabel>
+                    <FormLabel>PASSWORT</FormLabel>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
@@ -102,7 +102,7 @@ export default function LoginPage() {
                 )}
               />
               <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Anmelden...' : 'Anmelden'}
+                {form.formState.isSubmitting ? 'Anmelden...' : 'ANMELDEN'}
               </Button>
             </form>
           </Form>
