@@ -48,6 +48,11 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormValues) => {
     if (!auth) {
+      toast({
+        variant: 'destructive',
+        title: 'Authentifizierungs-Service nicht verfügbar',
+        description: 'Bitte versuchen Sie es später erneut.',
+      });
       return;
     }
     try {
@@ -69,7 +74,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-headline">ANMELDEN</CardTitle>
           <CardDescription>
