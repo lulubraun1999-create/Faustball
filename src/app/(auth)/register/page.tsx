@@ -110,29 +110,30 @@ export default function RegisterPage() {
       const userDocRef = doc(firestore, "users", user.uid);
       const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
 
-      // We are not awaiting these promises. Instead we chain a .catch to them
-      // to handle errors in a non-blocking way.
-      setDoc(userDocRef, userDocData)
-        .catch(error => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'create',
-            requestResourceData: userDocData
-          }));
-          // Throw it again so we can catch it in the outer block and show a toast
-          throw error;
-      });
-
-      setDoc(profileDocRef, userProfileData)
-        .catch(error => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: profileDocRef.path,
-            operation: 'create',
-            requestResourceData: userProfileData
-          }));
-           // Throw it again so we can catch it in the outer block and show a toast
-          throw error;
-      });
+      await Promise.all([
+        setDoc(userDocRef, userDocData).catch((error) => {
+          errorEmitter.emit(
+            "permission-error",
+            new FirestorePermissionError({
+              path: userDocRef.path,
+              operation: "create",
+              requestResourceData: userDocData,
+            })
+          );
+          throw error; // Re-throw to be caught by the outer catch block
+        }),
+        setDoc(profileDocRef, userProfileData).catch((error) => {
+          errorEmitter.emit(
+            "permission-error",
+            new FirestorePermissionError({
+              path: profileDocRef.path,
+              operation: "create",
+              requestResourceData: userProfileData,
+            })
+          );
+          throw error; // Re-throw to be caught by the outer catch block
+        }),
+      ]);
 
       toast({
         title: "Registrierung erfolgreich",
@@ -145,9 +146,11 @@ export default function RegisterPage() {
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
       } else if (error.name === 'FirebaseError' && error.message.includes('permission-denied')) {
-        // This is a generic message, the detailed error is in the dev console
         description = "Fehler beim Einrichten des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
+      } else if (error.name === 'FirebaseError') {
+        description = "Berechtigungsfehler: Sie haben keine Erlaubnis, diese Aktion auszuführen.";
       }
+      
       toast({
         variant: "destructive",
         title: "Registrierung fehlgeschlagen",
