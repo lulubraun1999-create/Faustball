@@ -50,6 +50,10 @@ const formSchema = z
   .refine((data) => data.password === data.confirmPassword, {
     message: "Die Passwörter stimmen nicht überein.",
     path: ["confirmPassword"],
+  })
+  .refine((data) => data.registrationCode === "Ellaisttoll", {
+    message: "Ungültiger Registrierungscode.",
+    path: ["registrationCode"],
   });
 
 export default function RegisterPage() {
