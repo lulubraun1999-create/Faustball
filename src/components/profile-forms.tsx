@@ -75,19 +75,16 @@ export function ProfileForm() {
       if (user && firestore) {
         const userDocRef = doc(firestore, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
-        const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
-        const profileDocSnap = await getDoc(profileDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          const profileData = profileDocSnap.exists() ? profileDocSnap.data() : {};
           const fullProfile = {
             id: user.uid,
             name: `${userData.firstName} ${userData.lastName}`,
             firstName: userData.firstName,
             lastName: userData.lastName,
             email: user.email || '',
-            ...profileData,
+            ...userData,
           };
           setUserProfile(fullProfile);
           form.reset({
@@ -105,7 +102,7 @@ export function ProfileForm() {
     if (!user || !firestore) return;
     setIsLoading(true);
     try {
-      const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
+      const userDocRef = doc(firestore, "users", user.uid);
       const dataToUpdate = {
         phone: values.phoneNumber,
         location: values.location,
@@ -113,7 +110,7 @@ export function ProfileForm() {
         birthday: values.birthday,
         gender: values.gender,
       }
-      await updateDocumentNonBlocking(profileDocRef, dataToUpdate);
+      await updateDocumentNonBlocking(userDocRef, dataToUpdate);
       
       toast({
         title: "Profil aktualisiert",

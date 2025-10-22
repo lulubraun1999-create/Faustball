@@ -30,13 +30,6 @@ export function MainHeader() {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          const profileDocRef = doc(firestore, `users/${user.uid}/profile/${user.uid}`);
-          const profileDocSnap = await getDoc(profileDocRef);
-          
-          let profileData = {};
-          if (profileDocSnap.exists()) {
-            profileData = profileDocSnap.data();
-          }
 
           setUserProfile({
             id: user.uid,
@@ -46,7 +39,7 @@ export function MainHeader() {
             email: user.email || '',
             avatar: user.photoURL || undefined,
             role: 'user', // Replace with actual role from DB if available
-            ...profileData
+            ...userData
           });
         }
       }

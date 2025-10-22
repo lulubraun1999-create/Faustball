@@ -96,20 +96,14 @@ export default function RegisterPage() {
       const user = userCredential.user;
 
       const userDocData = {
+        userId: user.uid,
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
       };
 
-      const userProfileData = {
-        userId: user.uid,
-      };
-
       const userDocRef = doc(firestore, "users", user.uid);
-      const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
-
       setDocumentNonBlocking(userDocRef, userDocData, { merge: true });
-      setDocumentNonBlocking(profileDocRef, userProfileData, { merge: true });
 
       toast({
         title: "Registrierung erfolgreich",
@@ -122,7 +116,7 @@ export default function RegisterPage() {
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
       } else if (error.name === 'FirebaseError' && error.message.includes('permission-denied')) {
-        description = "Fehler beim Einrichten des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
+        description = "Fehler beim Erstellen des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
       } else if (error.name === 'FirebaseError') {
         description = "Berechtigungsfehler: Sie haben keine Erlaubnis, diese Aktion auszuführen.";
       }
@@ -258,4 +252,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-    
