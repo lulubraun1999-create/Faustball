@@ -63,7 +63,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
             <CardContent>
-              <Link href="/kalender" legacyBehavior>
+              <Link href="/kalender">
                 <Button className="w-full">
                   Zum Kalender <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
             <CardContent>
-              <Link href="/chat" legacyBehavior>
+              <Link href="/chat">
                 <Button className="w-full">
                   Chat öffnen <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
             <CardContent>
-              <Link href="/verwaltung/mitglieder" legacyBehavior>
+              <Link href="/verwaltung/mitglieder">
                 <Button className="w-full">
                   Zur Verwaltung <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
