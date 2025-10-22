@@ -3,161 +3,136 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Manages user profile data, ensuring only the authenticated user can access their own profile.
+     * @description Controls access to user profile information.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' creates their profile.
-     *   - Request: auth.uid = 'user123', resource.data.id = 'user123'
-     * @allow (get) User with ID 'user123' reads their profile.
-     *   - Request: auth.uid = 'user123'
-     * @allow (update) User with ID 'user123' updates their profile.
-     *   - Request: auth.uid = 'user123'
-     * @allow (delete) User with ID 'user123' deletes their profile.
-     *   - Request: auth.uid = 'user123'
-     * @deny (create) User with ID 'user456' attempts to create profile for 'user123'.
-     *   - Request: auth.uid = 'user456', resource.data.id = 'user123'
-     * @deny (get) User with ID 'user456' attempts to read profile for 'user123'.
-     *   - Request: auth.uid = 'user456'
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) User with UID 'user123' can create their profile.
+     *   request.auth.uid == 'user123' and request.resource.data.id == 'user123'
+     * @allow (get) User with UID 'user123' can get their profile.
+     *   request.auth.uid == 'user123'
+     * @allow (update) User with UID 'user123' can update their profile.
+     *   request.auth.uid == 'user123'
+     * @allow (delete) User with UID 'user123' can delete their profile.
+     *   request.auth.uid == 'user123'
+     * @deny (create) User with UID 'user456' cannot create a profile for 'user123'.
+     *   request.auth.uid == 'user456' and request.resource.data.id == 'user123'
+     * @principle Enforces document ownership for writes and validates user-specific data.
      */
     match /users/{userId} {
-      // Verify identity
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      // Verify ownership
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
 
-      // Verify existing ownership
       function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+          return exists(/databases/$(database)/documents/users/$(userId));
       }
 
-      allow get: if isSignedIn() && isOwner(userId);
+      allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == request.auth.uid;
-      allow update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
+
+      allow create: if request.auth.uid == userId && request.resource.data.id == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId) && isExistingOwner(userId);
     }
 
     /**
-     * @description Manages team data, ensuring only team members can access and modify team details.
+     * @description Controls access to team information.
      * @path /teams/{teamId}
-     * @allow (create) User with ID 'user123' creates a new team and is added as a member.
-     *   - Request: auth.uid = 'user123', resource.data.memberIds includes 'user123'
-     * @allow (get) User with ID 'user123' reads a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @allow (update) User with ID 'user123' updates a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @allow (delete) User with ID 'user123' deletes a team they are a member of (e.g., team admin).
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @deny (create) User with ID 'user456' attempts to create a team without being a member.
-     *   - Request: auth.uid = 'user456', resource.data.memberIds does not include 'user456'
-     * @deny (get) User with ID 'user456' attempts to read a team they are not a member of.
-     *   - Request: auth.uid = 'user456', team document does not contain 'user456' in memberIds
-     * @principle Enforces team membership for all operations.
+     * @allow (get) Any authenticated user can read team information.
+     *   request.auth.uid != null
+     * @allow (create) User with UID 'user123' who is in `memberIds` can create a team.
+     *   request.auth.uid == 'user123' and 'user123' in request.resource.data.memberIds
+     * @allow (update) User with UID 'user123' who is in `memberIds` can update team information.
+     *   request.auth.uid == 'user123' and 'user123' in resource.data.memberIds
+     * @allow (delete) User with UID 'user123' who is in `memberIds` can delete a team.
+     *   request.auth.uid == 'user123' and 'user123' in resource.data.memberIds
+     * @deny (create) User with UID 'user456' who is not in `memberIds` cannot create a team.
+     *   request.auth.uid == 'user456' and 'user456' not in request.resource.data.memberIds
+     * @principle Enforces shared access based on team membership.
      */
     match /teams/{teamId} {
-      // Verify identity
       function isSignedIn() {
         return request.auth != null;
       }
 
-      // Verify that user is a team member
       function isTeamMember(teamId) {
-        return request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
+        return isSignedIn() && resource.data.memberIds.hasAny([request.auth.uid]);
       }
 
-      function isExistingTeamMember(teamId) {
-        return isTeamMember(teamId) && resource != null;
+      function isCreatingTeamMember() {
+        return isSignedIn() && request.resource.data.memberIds is list && request.resource.data.memberIds.hasAny([request.auth.uid]);
       }
 
-      allow get: if isSignedIn() && isTeamMember(teamId);
-      allow list: if isSignedIn() && isTeamMember(teamId);
-      allow create: if isSignedIn() && request.resource.data.memberIds is list && request.resource.data.memberIds.hasAny([request.auth.uid]);
-      allow update: if isSignedIn() && isTeamMember(teamId);
-      allow delete: if isSignedIn() && isTeamMember(teamId);
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if request.auth.uid != null && request.resource.data.memberIds is list && request.resource.data.memberIds.hasAny([request.auth.uid]);
+      allow update: if isTeamMember(teamId);
+      allow delete: if isTeamMember(teamId);
     }
 
     /**
-     * @description Manages calendar events for teams, ensuring only team members can create, modify, and access events.
+     * @description Controls access to calendar events for teams.
      * @path /teams/{teamId}/calendar_events/{calendarEventId}
-     * @allow (create) User with ID 'user123' creates a calendar event for a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @allow (get) User with ID 'user123' reads a calendar event for a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @allow (update) User with ID 'user123' updates a calendar event for a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @allow (delete) User with ID 'user123' deletes a calendar event for a team they are a member of.
-     *   - Request: auth.uid = 'user123', team document contains 'user123' in memberIds
-     * @deny (create) User with ID 'user456' attempts to create a calendar event for a team they are not a member of.
-     *   - Request: auth.uid = 'user456', team document does not contain 'user456' in memberIds
-     * @deny (get) User with ID 'user456' attempts to read a calendar event for a team they are not a member of.
-     *   - Request: auth.uid = 'user456', team document does not contain 'user456' in memberIds
-     * @principle Enforces team membership for calendar event management.
+     * @allow (get) Any authenticated user can read calendar event information if they are a member of the parent team.
+     *   request.auth.uid != null
+     * @allow (create) User with UID 'user123' who is a member of the parent team can create a calendar event.
+     *   request.auth.uid == 'user123'
+     * @allow (update) User with UID 'user123' who is a member of the parent team can update a calendar event.
+     *   request.auth.uid == 'user123'
+     * @allow (delete) User with UID 'user123' who is a member of the parent team can delete a calendar event.
+     *   request.auth.uid == 'user123'
+     * @deny (create) User with UID 'user456' who is not a member of the parent team cannot create a calendar event.
+     *   request.auth.uid == 'user456'
+     * @principle Enforces shared access based on team membership for subcollection data.
      */
     match /teams/{teamId}/calendar_events/{calendarEventId} {
-      // Verify identity
       function isSignedIn() {
         return request.auth != null;
       }
 
-      // Verify that user is a team member
       function isTeamMember(teamId) {
-        return request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
+        return isSignedIn() && get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds is list && get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds.hasAny([request.auth.uid]);
       }
 
-      function isExistingTeamMember(teamId) {
-        return isTeamMember(teamId) && resource != null;
-      }
-      allow get: if isSignedIn() && isTeamMember(teamId);
-      allow list: if isSignedIn() && isTeamMember(teamId);
-      allow create: if isSignedIn() && isTeamMember(teamId);
-      allow update: if isSignedIn() && isTeamMember(teamId);
-      allow delete: if isSignedIn() && isTeamMember(teamId);
+      allow get: if isTeamMember(teamId);
+      allow list: if isTeamMember(teamId);
+      allow create: if isTeamMember(teamId);
+      allow update: if isTeamMember(teamId);
+      allow delete: if isTeamMember(teamId);
     }
 
     /**
-     * @description Manages news articles, allowing public read access but restricting write access to the author.
+     * @description Controls access to news articles.
      * @path /news_articles/{newsArticleId}
-     * @allow (get) Any user can read a news article.
-     *   - Request: Any auth.uid
-     * @allow (list) Any user can list news articles.
-     *   - Request: Any auth.uid
-     * @allow (create) User with ID 'user123' creates a news article with 'authorId' set to 'user123'.
-     *   - Request: auth.uid = 'user123', resource.data.authorId = 'user123'
-     * @allow (update) User with ID 'user123' updates their own news article.
-     *   - Request: auth.uid = 'user123', resource.data.authorId = 'user123'
-     * @allow (delete) User with ID 'user123' deletes their own news article.
-     *   - Request: auth.uid = 'user123', resource.data.authorId = 'user123'
-     * @deny (create) User with ID 'user456' attempts to create a news article with 'authorId' set to 'user123'.
-     *   - Request: auth.uid = 'user456', resource.data.authorId = 'user123'
-     * @deny (update) User with ID 'user456' attempts to update news article authored by 'user123'.
-     *   - Request: auth.uid = 'user456', resource.data.authorId = 'user123'
-     * @principle Enforces document ownership for write operations while allowing public read access.
+     * @allow (get) Any user can read news articles.
+     *   true
+     * @allow (create) User with UID 'user123' can create a news article.
+     *   request.auth.uid == 'user123' and request.resource.data.authorId == 'user123'
+     * @allow (update) User with UID 'user123' can update their news article.
+     *   request.auth.uid == 'user123' and resource.data.authorId == 'user123'
+     * @allow (delete) User with UID 'user123' can delete their news article.
+     *   request.auth.uid == 'user123' and resource.data.authorId == 'user123'
+     * @deny (create) User with UID 'user456' cannot create a news article for 'user123'.
+     *   request.auth.uid == 'user456' and request.resource.data.authorId == 'user123'
+     * @principle Enforces public read access with owner-only writes.
      */
     match /news_articles/{newsArticleId} {
-      // Verify identity
       function isSignedIn() {
         return request.auth != null;
       }
 
-      // Verify ownership
       function isOwner(authorId) {
-        return request.auth.uid == authorId;
+        return isSignedIn() && request.auth.uid == authorId;
       }
 
-      // Verify existing ownership
       function isExistingOwner(authorId) {
-        return isOwner(authorId) && resource != null;
+          return isSignedIn() && request.auth.uid == resource.data.authorId;
       }
 
       allow get: if true;
       allow list: if true;
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isSignedIn() && request.resource.data.authorId == resource.data.authorId;
+      allow update: if isSignedIn() && resource.data.authorId == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
     }
   }
