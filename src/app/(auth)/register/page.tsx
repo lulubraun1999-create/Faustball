@@ -100,7 +100,7 @@ export default function RegisterPage() {
       let description = "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.";
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
-      } else {
+      } else if (error.code === 'permission-denied' || error.message.includes('permission-denied')) {
         description = "Berechtigungsfehler: Sie haben keine Erlaubnis, diese Aktion auszuführen.";
       }
       
