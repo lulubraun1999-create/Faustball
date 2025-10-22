@@ -95,40 +95,17 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores user authentication and registration data. Accessible only by the authenticated user (path-based ownership).",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user, matching the Firebase Auth UID."
-            }
-          ]
-        }
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/backend/entities/User"
       },
-      {
-        "path": "/member_profiles/{memberProfileId}",
-        "definition": {
-          "entityName": "MemberProfile",
-          "schema": {
-            "$ref": "#/backend/entities/MemberProfile"
-          },
-          "description": "Stores member profile data, separate from authentication information. All members can be listed, but editing is restricted.",
-          "params": [
-            {
-              "name": "memberProfileId",
-              "description": "The unique identifier for the member profile."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "This Firestore structure prioritizes authorization independence and QAPs. The primary design decision is to segregate user data and member profiles. User authentication details (`users/{userId}`) are separated from member profile data (`member_profiles/{memberProfileId}`). This structure ensures clarity, simplifies security rules, and avoids hierarchical dependencies.\n\n*   **Authorization Independence:** No `get()` calls are needed in rules. User data and profile data can be secured based on the `request.auth.uid` without needing to read related documents.\n*   **QAPs:** Segregation allows secure `list` operations on each collection. For example, you can securely list all member profiles or only the current user's profile without exposing private user data.\n*   **Ownership**: `/users/{userId}` path-based ownership ensures that only the authenticated user has access to their own user document.\n*   **Predictable Schema:** Ensures a standard and consistent data structure for easier development and debugging."
+      "description": "Stores user authentication and registration data. Accessible only by the authenticated user (path-based ownership)."
+    },
+    "/member_profiles/{memberProfileId}": {
+      "schema": {
+        "$ref": "#/backend/entities/MemberProfile"
+      },
+      "description": "Stores member profile data, separate from authentication information. All members can be listed, but editing is restricted."
+    }
   }
 }
