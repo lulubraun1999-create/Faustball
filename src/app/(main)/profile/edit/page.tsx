@@ -129,6 +129,21 @@ export default function ProfileEditPage() {
       location: '',
       birthday: '',
       position: [],
+      gender: undefined,
+    },
+  });
+
+  const passwordForm = useForm<PasswordFormValues>({
+    resolver: zodResolver(passwordFormSchema),
+    defaultValues: {
+      newPassword: '',
+    },
+  });
+
+  const emailForm = useForm<EmailFormValues>({
+    resolver: zodResolver(emailFormSchema),
+    defaultValues: {
+      newEmail: '',
     },
   });
 
@@ -512,8 +527,7 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
-                        defaultValue={member?.gender}
+                        value={field.value || ''}
                       >
                         <FormControl>
                           <SelectTrigger>
