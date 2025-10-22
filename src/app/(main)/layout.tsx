@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { useUser, useFirestore } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MainHeader } from "@/components/main-header";
@@ -20,36 +20,51 @@ export default function MainAppLayout({
   const [isCheckingFirstLogin, setIsCheckingFirstLogin] = useState(true);
 
   useEffect(() => {
+    // Wait until authentication is resolved
     if (isAuthLoading) {
       return;
     }
 
+    // If no user is logged in, redirect to login page
     if (!authUser) {
       router.replace("/login");
       return;
     }
 
+    // If firestore is not ready, don't do anything yet.
     if (!firestore) {
-        setIsCheckingFirstLogin(false);
-        return;
+      // It might be temporarily unavailable, but we shouldn't get stuck.
+      // If we can't check, we'll assume it's not the first login for now.
+      setIsCheckingFirstLogin(false);
+      return;
     }
 
+    // Function to check the first login status
     const checkFirstLogin = async () => {
-      const userDocRef = doc(firestore, "users", authUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      try {
+        const userDocRef = doc(firestore, "users", authUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data() as UserProfile;
-        if (userData.firstLoginComplete === false) {
-          // It's the first login, redirect to profile edit
-          await setDoc(userDocRef, { firstLoginComplete: true }, { merge: true });
-          router.replace("/profile/edit");
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data() as UserProfile;
+          // Check if the flag is explicitly false
+          if (userData.firstLoginComplete === false) {
+            // This is the first login. Update the flag and redirect.
+            await setDoc(userDocRef, { firstLoginComplete: true }, { merge: true });
+            router.replace("/profile/edit");
+            // The component will unmount or re-run, so we don't need to set loading to false here.
+          } else {
+            // The flag is true or undefined, so it's not the first login.
+            setIsCheckingFirstLogin(false);
+          }
         } else {
-          // Not the first login, allow access to dashboard
+          // User document doesn't exist. This might be a race condition during registration.
+          // For safety, we'll allow access and not get stuck.
           setIsCheckingFirstLogin(false);
         }
-      } else {
-        // User document doesn't exist, something is wrong, but for now let's just proceed
+      } catch (error) {
+        console.error("Error checking first login:", error);
+        // In case of an error, we don't want to block the user.
         setIsCheckingFirstLogin(false);
       }
     };
@@ -67,7 +82,6 @@ export default function MainAppLayout({
       </div>
     );
   }
-
 
   return (
     <div className="flex min-h-screen flex-col">
