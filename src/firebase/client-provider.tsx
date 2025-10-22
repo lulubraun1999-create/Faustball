@@ -13,25 +13,18 @@ interface FirebaseClientProviderProps {
 
 // This component ensures Firebase is initialized only once on the client.
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
-  const firebaseServices = useMemo(() => {
-    let app: FirebaseApp;
-    if (getApps().length === 0) {
-      app = initializeApp(firebaseConfig);
-    } else {
-      app = getApp();
-    }
-    
-    const auth: Auth = getAuth(app);
-    const firestore: Firestore = getFirestore(app);
-    
+  const { firebaseApp, auth, firestore } = useMemo(() => {
+    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    const auth = getAuth(app);
+    const firestore = getFirestore(app);
     return { firebaseApp: app, auth, firestore };
   }, []);
 
   return (
     <FirebaseProvider
-      firebaseApp={firebaseServices.firebaseApp}
-      auth={firebaseServices.auth}
-      firestore={firebaseServices.firestore}
+      firebaseApp={firebaseApp}
+      auth={auth}
+      firestore={firestore}
     >
       {children}
     </FirebaseProvider>
