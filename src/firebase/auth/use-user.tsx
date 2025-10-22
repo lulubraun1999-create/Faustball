@@ -1,11 +1,11 @@
 'use client';
 
-import { useFirebaseContext } from '../provider';
+import { useFirebase } from '../provider';
 
 /**
  * Hook specifically for accessing the authenticated user's state.
  */
 export const useUser = () => {
-  const { user, isUserLoading } = useFirebaseContext();
+  const { user, isUserLoading } = useFirebase();
   return { user, isUserLoading };
 };
