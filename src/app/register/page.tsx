@@ -76,19 +76,11 @@ export default function RegisterPage() {
       });
       router.push('/dashboard');
     } catch (error: any) {
-      let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
-      // Use error.message first to get the descriptive error from Firebase
-      if (error.message) {
-        errorMessage = error.message;
-      } else if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'Diese E-Mail-Adresse wird bereits verwendet.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Das Passwort ist zu schwach.';
-      }
+      console.error("Registration Error:", error);
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Registrierung',
-        description: errorMessage,
+        description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
       });
     }
   };

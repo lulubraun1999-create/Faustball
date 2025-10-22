@@ -48,8 +48,6 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormValues) => {
     if (!auth) {
-      // Services are not ready yet, just return.
-      // The provider will handle showing a loading state.
       return;
     }
     try {
@@ -60,10 +58,11 @@ export default function LoginPage() {
       });
       router.push('/dashboard');
     } catch (error: any) {
+      console.error("Login Error:", error);
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Anmeldung',
-        description: 'E-Mail oder Passwort ist falsch.',
+        description: error.message || 'E-Mail oder Passwort ist falsch.',
       });
     }
   };
