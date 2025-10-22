@@ -51,8 +51,8 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
-        <div className="mr-4 ml-4 flex">
+      <div className="container flex h-16 items-center justify-between">
+        <div className="flex items-center">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -60,7 +60,7 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <nav className="flex flex-1 items-center justify-center">
+        <nav className="flex items-center justify-center">
             <div className="flex items-center space-x-6 text-sm font-medium">
                 <Link
                 href="/dashboard"
