@@ -1,87 +1,59 @@
 /**
- * @fileOverview Security rules for the FaustApp Firestore database.
+ * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user profiles
- * and separate ownership for member profiles. It ensures that only the
- * authenticated user can read and modify their own profile data, while
- * member profiles are independently managed.
+ * This ruleset enforces a user-ownership model for user documents and allows public read access to member profiles while restricting write access.
  *
  * Data Structure:
- * - /users/{userId}: Stores user authentication and registration data, accessible only by the user themselves.
- * - /members/{memberId}: Stores member profile data, accessible only by the member themselves.
+ * - /users/{userId}: Stores user account information, accessible only by the user themselves.
+ * - /members/{memberId}: Stores member profile information, publicly readable, but write-protected.
  *
  * Key Security Decisions:
- * - User listing is disallowed to prevent unauthorized access to user data.
- * - Member listing is disallowed to prevent unauthorized access to member data.
- * - All write operations are protected by authorization checks to ensure data integrity and prevent unauthorized modifications.
- *
- * Denormalization for Authorization:
- * The security rules are designed to avoid costly `get()` calls by denormalizing
- * authorization data directly onto the documents being secured. For example,
- * the `/users/{userId}` path inherently links the document to the user's ID,
- * eliminating the need to fetch additional user information for authorization.
+ * - Users can only access their own data in the /users collection.
+ * - The /members collection is publicly readable, but creation, update, and deletion are disallowed.
+ * - Denormalization is employed by storing the userId within the member document, enabling efficient queries.
+ * - User listing is implicitly disallowed by the rules structure.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profile data. Only the authenticated user can read, update, or delete their own profile.
+     * @description Enforces user-ownership for documents in the /users collection.
      * @path /users/{userId}
-     * @allow (create) - Authenticated user with matching userId can create their profile.
-     * @allow (get) - Authenticated user can read their own profile.
-     * @allow (update) - Authenticated user can update their own profile.
-     * @allow (delete) - Authenticated user can delete their own profile.
-     * @deny (create) - Authenticated user cannot create a profile with a mismatched userId.
-     * @deny (get) - Authenticated user cannot read another user's profile.
-     * @deny (update) - Authenticated user cannot update another user's profile.
-     * @deny (delete) - Authenticated user cannot delete another user's profile.
-     * @principle Enforces document ownership for reads and writes. Validates relational integrity between the path and the document's userId.
+     * @allow (create) - A user with UID 'user_abc' can create their own document at /users/user_abc if the document's 'id' field also equals 'user_abc'.
+     * @allow (get, update, delete) - A user with UID 'user_abc' can read, update, or delete their own document at /users/user_abc.
+     * @deny (create) - A user with UID 'user_abc' cannot create a document at /users/another_user_id.
+     * @deny (get, update, delete) - A user with UID 'user_abc' cannot read, update, or delete the document at /users/another_user_id.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
 
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
+      function isSignedIn() {
+        return request.auth != null;
       }
 
       allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+
+      allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.id == userId;
+      allow update: if isSignedIn() && isOwner(userId) && resource != null && request.resource.data.id == resource.data.id;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Controls access to member profile data. Only the authenticated member can read, update, or delete their own profile.
+     * @description Allows public read access to documents in the /members collection, but restricts write access.
      * @path /members/{memberId}
-     * @allow (create) - Authenticated user with matching memberId can create their profile.
-     * @allow (get) - Authenticated user can read their own profile.
-     * @allow (update) - Authenticated user can update their own profile.
-     * @allow (delete) - Authenticated user can delete their own profile.
-     * @deny (create) - Authenticated user cannot create a profile with a mismatched memberId.
-     * @deny (get) - Authenticated user cannot read another member's profile.
-     * @deny (update) - Authenticated user cannot update another member's profile.
-     * @deny (delete) - Authenticated user cannot delete another member's profile.
-     * @principle Enforces document ownership for reads and writes.
+     * @allow (get, list) - Any user, authenticated or not, can read any document in the /members collection.
+     * @deny (create, update, delete) - No user can create, update, or delete documents in the /members collection.
+     * @principle Provides public read access while maintaining control over data modification.
      */
     match /members/{memberId} {
-      function isOwner(memberId) {
-        return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
-      }
-
-      function isExistingOwner(memberId) {
-          return isOwner(memberId) && resource != null;
-      }
-
-      allow get: if isOwner(memberId);
-      allow list: if false;
-      allow create: if request.auth.uid != null; // Allow creation if signed in
-      allow update: if isExistingOwner(memberId);
-      allow delete: if isExistingOwner(memberId);
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
   }
 }
