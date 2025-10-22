@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Instagram, Shield } from "lucide-react";
-import { UserNav } from "./user-nav";
 import { ThemeToggle } from "./theme-toggle";
 import {
   DropdownMenu,
@@ -12,41 +11,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
-import { useUser } from "@/firebase";
-import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { useFirestore } from "@/firebase";
 import type { UserProfile } from "@/lib/types";
 
 export function MainHeader() {
-  const { user } = useUser();
-  const firestore = useFirestore();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    async function fetchUserProfile() {
-      if (user && firestore) {
-        const userDocRef = doc(firestore, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data();
-
-          setUserProfile({
-            id: user.uid,
-            name: `${userData.firstName} ${userData.lastName}`,
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            email: user.email || '',
-            avatar: user.photoURL || undefined,
-            role: 'user', // Replace with actual role from DB if available
-            ...userData
-          });
-        }
-      }
-    }
-    fetchUserProfile();
-  }, [user, firestore]);
-
   const adminPages = [
     { href: "/verwaltung/termine-bearbeiten", label: "Termine bearbeiten" },
     { href: "/verwaltung/gruppen-bearbeiten", label: "Gruppe bearbeiten" },
@@ -55,6 +22,8 @@ export function MainHeader() {
     { href: "/verwaltung/news-bearbeiten", label: "News bearbeiten" },
     { href: "/verwaltung/mannschaftskasse-bearbeiten", label: "Mannschaftskasse bearbeiten" },
   ];
+
+  const userProfile: UserProfile | null = null; // No user logged in
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -129,7 +98,6 @@ export function MainHeader() {
             </Button>
           </a>
           <ThemeToggle />
-          {userProfile && <UserNav user={userProfile} />}
         </div>
       </div>
     </header>
