@@ -1,126 +1,95 @@
-/**
- * @fileoverview Firestore Security Rules for the Faustballplaner application.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for personal data,
- * a role-based access control model for team-related data, and public
- * read access with owner-only write access for news articles.
- *
- * Data Structure:
- * - /users/{userId}: Stores user account information, accessible only by the user.
- * - /users/{userId}/profile: Stores user profile data, accessible only by the user.
- * - /teams/{teamId}: Stores team information, accessible to team members.
- * - /teams/{teamId}/calendar_events/{calendarEventId}: Stores calendar events, accessible to team members.
- * - /news_articles/{newsArticleId}: Stores news articles, publicly readable but writable only by the author.
- *
- * Key Security Decisions:
- * - User data is strictly controlled by the owning user.
- * - Team membership dictates access to team-related data.
- * - News articles are publicly readable but have restricted write access.
- * - Listing of user documents is allowed only for the owning user.
- *
- * Denormalization for Authorization:
- * - The `Team` entity contains a `memberIds` array, denormalizing user IDs for efficient membership checks.
- * - The `CalendarEvent` entity contains a `teamId` field, denormalizing the team ID for efficient access control.
- * - The `NewsArticle` entity contains an `authorId` field, denormalizing the author's user ID for efficient access control.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user account information.
+     * @description Manages user accounts, ensuring users can only access their own account data.
      * @path /users/{userId}
-     * @allow (create) - If the user is creating their own document (auth.uid matches userId).
-     * @allow (get, list) - If the user is requesting their own document (auth.uid matches userId).
-     * @allow (update, delete) - If the user is updating their own document (auth.uid matches userId) and the document exists.
-     * @deny (create) - If the user tries to create a document with a different userId.
-     * @deny (get, list) - If the user tries to access a different user's document.
-     * @deny (update, delete) - If the user tries to modify/delete a different user's document or a non-existent document.
+     * @allow (create) - User with matching `uid` can create their account.
+     * @allow (get, update, delete) - User with matching `uid` can access and modify their account.
+     * @deny (create, get, update, delete) - Any user attempting to access another user's account.
      * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
       function isSignedIn() {
         return request.auth != null;
       }
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource.data != null;
+      }
 
       allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) && resource != null;
-      allow delete: if isOwner(userId) && resource != null;
+      allow list: if false; // Prevent listing of all users.
+
+      // Self-creation: User can create their own document if the UID matches the document ID.
+      allow create: if isSignedIn() && isOwner(userId);
+
+      // Owner-only access for updates and deletes.
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to user profile information.
-     * @path /users/{userId}/profile
-     * @allow (create) - If the user is creating their own profile (auth.uid matches userId).
-     * @allow (get, list) - If the user is requesting their own profile (auth.uid matches userId).
-     * @allow (update, delete) - If the user is updating their own profile (auth.uid matches userId) and the document exists.
-     * @deny (create) - If the user tries to create a profile with a different userId.
-     * @deny (get, list) - If the user tries to access a different user's profile.
-     * @deny (update, delete) - If the user tries to modify/delete a different user's profile or a non-existent profile.
-     * @principle Enforces document ownership for all operations on user profiles.
+     * @description Manages user profiles, ensuring users can only access their own profile data.
+     * @path /users/{userId}/profile/{profileId}
+     * @allow (create) - User with matching `uid` can create their profile.
+     * @allow (get, update, delete) - User with matching `uid` can access and modify their profile.
+     * @deny (create, get, update, delete) - Any user attempting to access another user's profile.
+     * @principle Enforces document ownership for all operations.
      */
-    match /users/{userId}/profile {
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
+    match /users/{userId}/profile/{profileId} {
+        function isSignedIn() {
+          return request.auth != null;
+        }
+        function isOwner(userId) {
+          return request.auth.uid == userId;
+        }
+        function isExistingOwner(userId) {
+          return isOwner(userId) && resource.data != null;
+        }
 
-      function isSignedIn() {
-        return request.auth != null;
-      }
+        allow get: if isOwner(userId);
+        allow list: if false;
 
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) && resource != null;
-      allow delete: if isOwner(userId) && resource != null;
+        allow create: if isSignedIn() && isOwner(userId);
+        allow update: if isExistingOwner(userId);
+        allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to team information.
+     * @description Manages team information, restricting access to team members.
      * @path /teams/{teamId}
-     * @allow (get, list) - If true (publicly readable team information).
-     * @allow (create) - If the user is a member of the team.
-     * @allow (update, delete) - If the user is a member of the team and the document exists.
-     * @deny (create) - If the user is not a member of the team.
-     * @deny (update, delete) - If the user is not a member of the team or the team does not exist.
-     * @principle Enforces team membership for write operations.
+     * @allow (get, list) - All users can view team information.
+     * @allow (create, update, delete) - Only team members can create, update, or delete team information.
+     * @principle Enforces team-based access control using the `memberIds` array.
      */
     match /teams/{teamId} {
       function isSignedIn() {
         return request.auth != null;
       }
-
       function isTeamMember(teamId) {
         return isSignedIn() && request.auth.uid in resource.data.memberIds;
       }
-
-      function isCreatingTeamWithAuthenticatedUser(teamId) {
-            return isSignedIn() && request.resource.data.memberIds.hasAny([request.auth.uid])
+      function isExistingTeamMember(teamId) {
+        return isTeamMember(teamId) && resource.data != null;
       }
 
-      allow get: if true;
-      allow list: if true;
-      allow create: if isCreatingTeamWithAuthenticatedUser(teamId);
-      allow update: if isTeamMember(teamId) && resource != null;
-      allow delete: if isTeamMember(teamId) && resource != null;
+      allow get, list: if true;
+
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+      allow update: if isExistingTeamMember(teamId);
+      allow delete: if isExistingTeamMember(teamId);
     }
 
     /**
-     * @description Controls access to calendar events for teams.
+     * @description Manages calendar events for teams, restricting access to team members.
      * @path /teams/{teamId}/calendar_events/{calendarEventId}
-     * @allow (get, list) - If the user is a member of the team.
-     * @allow (create) - If the user is a member of the team.
-     * @allow (update, delete) - If the user is a member of the team and the document exists.
-     * @deny (create) - If the user is not a member of the team.
-     * @deny (update, delete) - If the user is not a member of the team or the event does not exist.
-     * @principle Enforces team membership for all operations on calendar events.
+     * @allow (get, list) - Only team members can view calendar events.
+     * @allow (create, update, delete) - Only team members can create, update, or delete calendar events.
+     * @principle Enforces team-based access control using the `memberIds` array in the parent `Team` document.
      */
     match /teams/{teamId}/calendar_events/{calendarEventId} {
       function isSignedIn() {
@@ -128,44 +97,43 @@ service cloud.firestore {
       }
 
       function isTeamMember(teamId) {
-          return isSignedIn() && get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds.hasAny([request.auth.uid]);
+        return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
       }
 
-      allow get: if isTeamMember(teamId);
-      allow list: if isTeamMember(teamId);
+      function isExistingTeamMember(teamId) {
+        return isTeamMember(teamId) && resource.data != null;
+      }
+
+      allow get, list: if isTeamMember(teamId);
       allow create: if isTeamMember(teamId);
-      allow update: if isTeamMember(teamId) && resource != null;
-      allow delete: if isTeamMember(teamId) && resource != null;
+      allow update: if isExistingTeamMember(teamId);
+      allow delete: if isExistingTeamMember(teamId);
     }
 
     /**
-     * @description Controls access to news articles.
+     * @description Manages news articles, allowing public read access but restricting write access to the author.
      * @path /news_articles/{newsArticleId}
-     * @allow (get, list) - If true (publicly readable news articles).
-     * @allow (create) - If the authenticated user is the author.
-     * @allow (update, delete) - If the authenticated user is the author and the document exists.
-     * @deny (create) - If the authenticated user is not the author.
-     * @deny (update, delete) - If the authenticated user is not the author or the article does not exist.
-     * @principle Allows public read access but enforces author-only write access.
+     * @allow (get, list) - All users can view news articles.
+     * @allow (create) - Only authenticated users can create news articles, with `authorId` matching their `uid`.
+     * @allow (update, delete) - Only the author of the article can update or delete it.
+     * @principle Enforces public read access with owner-only write access.
      */
     match /news_articles/{newsArticleId} {
       function isSignedIn() {
         return request.auth != null;
       }
-
-      function isAuthor(authorId) {
+      function isOwner(authorId) {
         return isSignedIn() && request.auth.uid == authorId;
       }
-
-      function isCreatingArticleWithAuthenticatedUser() {
-        return isSignedIn() && request.resource.data.authorId == request.auth.uid
+      function isExistingOwner(authorId) {
+        return isOwner(authorId) && resource.data != null;
       }
 
-      allow get: if true;
-      allow list: if true;
-      allow create: if isCreatingArticleWithAuthenticatedUser();
-      allow update: if isAuthor(resource.data.authorId) && resource != null;
-      allow delete: if isAuthor(resource.data.authorId) && resource != null;
+      allow get, list: if true;
+
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isExistingOwner(authorId);
+      allow delete: if isExistingOwner(authorId);
     }
   }
 }

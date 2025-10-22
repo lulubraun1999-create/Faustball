@@ -26,42 +26,6 @@
         "lastName"
       ]
     },
-    "UserProfile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserProfile",
-      "type": "object",
-      "description": "Represents user profile information.",
-      "properties": {
-        "userId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:1 UserProfile)"
-        },
-        "phoneNumber": {
-          "type": "string",
-          "description": "User's phone number."
-        },
-        "location": {
-          "type": "string",
-          "description": "User's location or address."
-        },
-        "position": {
-          "type": "string",
-          "description": "User's playing position (e.g., defense, attack)."
-        },
-        "birthday": {
-          "type": "string",
-          "description": "User's birthday.",
-          "format": "date-time"
-        },
-        "gender": {
-          "type": "string",
-          "description": "User's gender (male, female, diverse)."
-        }
-      },
-      "required": [
-        "userId"
-      ]
-    },
     "Team": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Team",
@@ -185,16 +149,6 @@
             "$ref": "#/backend/entities/User"
           },
           "description": "Stores user account information. This collection is path-based owned. `userId` corresponds to `request.auth.uid`."
-        }
-      },
-      {
-        "path": "/users/{userId}/profile/{profileId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores user profile information. This is a subcollection under the user document to ensure only the user can access their profile.  `userId` corresponds to `request.auth.uid`."
         }
       },
       {
