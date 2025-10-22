@@ -4,20 +4,16 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user account within the FaustApp application.",
+      "description": "Represents a user account and their profile within the FaustApp application.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the user account."
+          "description": "Unique identifier for the user account (matches Firebase Auth UID)."
         },
         "email": {
           "type": "string",
           "description": "Email address of the user.",
           "format": "email"
-        },
-        "passwordHash": {
-          "type": "string",
-          "description": "Hashed password for authentication. (Note: actual password storage is handled externally)"
         },
         "firstName": {
           "type": "string",
@@ -27,40 +23,15 @@
           "type": "string",
           "description": "Last name of the user."
         },
-        "registrationCode": {
+        "role": {
           "type": "string",
-          "description": "Registration code used during account creation."
+          "description": "User role, e.g., 'admin' or 'user'.",
+          "enum": [
+            "admin",
+            "user"
+          ]
         },
-        "emailVerified": {
-          "type": "boolean",
-          "description": "Indicates whether the user's email address has been verified."
-        }
-      },
-      "required": [
-        "id",
-        "email",
-        "passwordHash",
-        "firstName",
-        "lastName",
-        "registrationCode",
-        "emailVerified"
-      ]
-    },
-    "MemberProfile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "MemberProfile",
-      "type": "object",
-      "description": "Represents the profile information of a member, extending the base user information.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the member profile."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:1 MemberProfile)"
-        },
-        "phoneNumber": {
+        "phone": {
           "type": "string",
           "description": "Phone number of the member."
         },
@@ -70,21 +41,34 @@
         },
         "position": {
           "type": "string",
-          "description": "Playing position of the member (e.g., Abwehr, Spiel, Angriff)."
+          "description": "Playing position of the member.",
+          "enum": [
+            "Abwehr",
+            "Zuspiel",
+            "Angriff"
+          ]
         },
         "birthday": {
           "type": "string",
           "description": "Birthday of the member.",
-          "format": "date-time"
+          "format": "date"
         },
         "gender": {
           "type": "string",
-          "description": "Gender of the member (e.g., male, female, diverse)."
+          "description": "Gender of the member or team association.",
+          "enum": [
+            "männlich",
+            "weiblich",
+            "divers (damenteam)",
+            "divers (herrenteam)"
+          ]
         }
       },
       "required": [
         "id",
-        "userId"
+        "email",
+        "firstName",
+        "lastName"
       ]
     }
   },
@@ -99,13 +83,8 @@
       "schema": {
         "$ref": "#/backend/entities/User"
       },
-      "description": "Stores user authentication and registration data. Accessible only by the authenticated user (path-based ownership)."
-    },
-    "/member_profiles/{memberProfileId}": {
-      "schema": {
-        "$ref": "#/backend/entities/MemberProfile"
-      },
-      "description": "Stores member profile data, separate from authentication information. All members can be listed, but editing is restricted."
+      "description": "Stores user authentication and profile data. Accessible only by the authenticated user (path-based ownership).",
+      "rules": "allow read, write: if request.auth.uid == userId;"
     }
   }
 }
