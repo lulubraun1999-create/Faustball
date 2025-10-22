@@ -32,6 +32,9 @@ const registerSchema = z.object({
   lastName: z.string().min(1, { message: 'Nachname ist erforderlich.' }),
   email: z.string().email({ message: 'Ungültige E-Mail-Adresse.' }),
   password: z.string().min(6, { message: 'Das Passwort muss mindestens 6 Zeichen lang sein.' }),
+  registrationCode: z.string().refine(code => code === 'Ellaisttoll', {
+    message: 'Ungültiger Registrierungscode.',
+  }),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -49,6 +52,7 @@ export default function RegisterPage() {
       lastName: '',
       email: '',
       password: '',
+      registrationCode: '',
     },
   });
 
@@ -138,6 +142,19 @@ export default function RegisterPage() {
                     <FormLabel>PASSWORT</FormLabel>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="registrationCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>REGISTRIERUNGSCODE</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Registrierungscode" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
