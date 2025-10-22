@@ -98,41 +98,39 @@ export default function RegisterPage() {
       const user = userCredential.user;
 
       const userDocData = {
-        id: user.uid,
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
-        registrationCode: values.registrationCode,
-        emailVerified: user.emailVerified,
       };
 
       const userProfileData = {
-        id: user.uid,
         userId: user.uid,
       };
 
       const userDocRef = doc(firestore, "users", user.uid);
       const profileDocRef = doc(firestore, "users", user.uid, "profile", user.uid);
 
-      await setDoc(userDocRef, userDocData)
+      // We are not awaiting these promises. Instead we chain a .catch to them
+      // to handle errors in a non-blocking way.
+      setDoc(userDocRef, userDocData)
         .catch(error => {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: userDocRef.path,
             operation: 'create',
             requestResourceData: userDocData
           }));
-          // Throw it again so we can catch it in the outer block
+          // Throw it again so we can catch it in the outer block and show a toast
           throw error;
       });
 
-      await setDoc(profileDocRef, userProfileData)
+      setDoc(profileDocRef, userProfileData)
         .catch(error => {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: profileDocRef.path,
             operation: 'create',
             requestResourceData: userProfileData
           }));
-           // Throw it again so we can catch it in the outer block
+           // Throw it again so we can catch it in the outer block and show a toast
           throw error;
       });
 
@@ -147,6 +145,7 @@ export default function RegisterPage() {
       if (error.code === "auth/email-already-in-use") {
         description = "Ein Benutzer mit dieser E-Mail-Adresse existiert bereits.";
       } else if (error.name === 'FirebaseError' && error.message.includes('permission-denied')) {
+        // This is a generic message, the detailed error is in the dev console
         description = "Fehler beim Einrichten des Benutzerprofils. Überprüfen Sie die Datenbankregeln.";
       }
       toast({
