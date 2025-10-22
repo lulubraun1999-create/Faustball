@@ -51,7 +51,7 @@ export default function MainAppLayout({
           if (userData.firstLoginComplete === false) {
             // This is the first login. Update the flag and redirect.
             await setDoc(userDocRef, { firstLoginComplete: true }, { merge: true });
-            router.replace("/profile/edit");
+            router.replace("/dashboard");
             // The component will unmount or re-run, so we don't need to set loading to false here.
           } else {
             // The flag is true or undefined, so it's not the first login.
