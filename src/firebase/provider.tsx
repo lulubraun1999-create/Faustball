@@ -82,7 +82,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
       (error) => { // Auth listener error
-        console.error("FirebaseProvider: onAuthStateChanged error:", error);
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
       }
     );
@@ -123,6 +122,8 @@ export const useFirebase = (): FirebaseServicesAndUser => {
   }
 
   if (!context.areServicesAvailable || !context.firebaseApp || !context.firestore || !context.auth) {
+    // This case should ideally be handled by a loading state or error boundary in the UI
+    // before this hook is ever called. Throwing here is a safeguard.
     throw new Error('Firebase core services not available. Check FirebaseProvider props.');
   }
 
