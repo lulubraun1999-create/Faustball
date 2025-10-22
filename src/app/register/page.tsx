@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -64,19 +64,31 @@ export default function RegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const user = userCredential.user;
 
-      await setDoc(doc(firestore, 'users', user.uid), {
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userData = {
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
-      });
+      };
 
-      toast({
-        title: 'Registrierung erfolgreich',
-        description: 'Ihr Konto wurde erstellt.',
-      });
-      router.push('/dashboard');
+      setDoc(userDocRef, userData)
+        .then(() => {
+            toast({
+              title: 'Registrierung erfolgreich',
+              description: 'Ihr Konto wurde erstellt.',
+            });
+            router.push('/dashboard');
+        })
+        .catch(error => {
+            const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'create',
+                requestResourceData: userData
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
     } catch (error: any) {
-      console.error("Registration Error:", error);
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Registrierung',
