@@ -306,19 +306,16 @@ function AdminUmfragenPageContent() {
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <Card>
-                            <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                disabled={(date) => {
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0); 
-                                    return date < today;
-                                }}
-                                initialFocus
-                            />
-                          </Card>
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            fromDate={new Date()}
+                            captionLayout="dropdown-buttons"
+                            fromYear={new Date().getFullYear()}
+                            toYear={new Date().getFullYear() + 5}
+                            initialFocus
+                          />
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
