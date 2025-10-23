@@ -5,25 +5,16 @@ import {
   useDoc,
   useFirestore,
   useMemoFirebase,
-  errorEmitter,
-  FirestorePermissionError,
 } from '@/firebase';
 import type { NewsArticle } from '@/lib/types';
-import { doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, Timestamp } from 'firebase/firestore';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Loader2, Wand2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { summarize } from '@/ai/flows/summarize-flow';
-import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export default function NewsArticlePage() {
   const { id } = useParams();
   const firestore = useFirestore();
-  const { toast } = useToast();
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   const articleId = typeof id === 'string' ? id : '';
 
@@ -33,51 +24,6 @@ export default function NewsArticlePage() {
   );
 
   const { data: article, isLoading } = useDoc<NewsArticle>(articleRef);
-
-  const handleGenerateSummary = async () => {
-    if (!firestore || !article || !article.id) return;
-    
-    // Strict check to ensure content is a non-empty string before calling the AI function.
-    if (typeof article.content !== 'string' || article.content.trim() === '') {
-        toast({
-            variant: 'destructive',
-            title: 'Fehler',
-            description: 'Der Artikel-Inhalt ist leer oder ungültig und kann nicht zusammengefasst werden.',
-        });
-        return;
-    };
-
-    setIsGeneratingSummary(true);
-
-    try {
-      const result = await summarize(article.content);
-      const docRef = doc(firestore, 'news', article.id);
-      
-      updateDoc(docRef, { summary: result }).catch((e) => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-              path: docRef.path,
-              operation: 'update',
-              requestResourceData: { summary: result }
-          }));
-      });
-
-      toast({
-        title: 'Zusammenfassung erstellt',
-        description: 'Die KI-Zusammenfassung wurde für den Artikel gespeichert.',
-      });
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: 'destructive',
-        title: 'Fehler bei der Zusammenfassung',
-        description:
-          'Die KI konnte keine Zusammenfassung erstellen. Bitte versuchen Sie es erneut.',
-      });
-    } finally {
-      setIsGeneratingSummary(false);
-    }
-  };
-
 
   if (isLoading) {
     return (
@@ -95,8 +41,6 @@ export default function NewsArticlePage() {
       </div>
     );
   }
-
-  const canGenerateSummary = !article.summary;
 
   return (
     <div className="container mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
@@ -124,45 +68,6 @@ export default function NewsArticlePage() {
                         : 'N/A'}
                 </p>
             </div>
-            
-            {(article.summary || canGenerateSummary) && (
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                       <div className="space-y-1">
-                         <CardTitle>Zusammenfassung</CardTitle>
-                         <CardDescription>Kurz und bündig von unserer KI.</CardDescription>
-                       </div>
-                        {canGenerateSummary && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleGenerateSummary}
-                                disabled={isGeneratingSummary}
-                            >
-                                {isGeneratingSummary ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Wand2 className="mr-2 h-4 w-4" />
-                                )}
-                                Generieren
-                            </Button>
-                        )}
-                    </CardHeader>
-                    <CardContent>
-                        {isGeneratingSummary ? (
-                             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>Zusammenfassung wird erstellt...</span>
-                            </div>
-                        ) : article.summary ? (
-                             <p className="text-muted-foreground">{article.summary}</p>
-                        ): (
-                            <p className="text-sm text-muted-foreground italic">Für diesen Artikel wurde noch keine KI-Zusammenfassung erstellt. Klicken Sie auf "Generieren", um den Artikel jetzt zusammenfassen zu lassen.</p>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
 
             <div className="prose prose-lg dark:prose-invert max-w-none mx-auto break-words">
                 <p className="whitespace-pre-wrap">{article.content}</p>

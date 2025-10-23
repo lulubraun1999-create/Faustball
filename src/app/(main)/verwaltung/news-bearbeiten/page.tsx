@@ -149,7 +149,6 @@ function AdminNewsPageContent() {
         // Create new article
         await addDoc(collection(firestore, 'news'), {
           ...articleData,
-          summary: '', // Initialize with empty summary
           createdAt: serverTimestamp(),
         });
         toast({ title: 'Neuer Artikel erfolgreich erstellt.' });

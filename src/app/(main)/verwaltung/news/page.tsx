@@ -77,7 +77,7 @@ export default function VerwaltungNewsPage() {
               </CardHeader>
               <CardContent className="flex-grow">
                 <p className="text-sm text-muted-foreground line-clamp-4">
-                  {article.summary || article.content}
+                  {article.content}
                 </p>
               </CardContent>
               <CardFooter>
