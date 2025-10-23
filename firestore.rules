@@ -2,74 +2,84 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for both authentication data and editable profile information.
- * Users can only read and write their own data, and administrators have no special privileges defined in this version.
+ * This ruleset enforces a user-ownership model for both core user data and profile information.
+ * Only the authenticated user or an admin can read or write their own data.
  *
  * Data Structure:
- * - /users/{userId}: Stores core user authentication data (read-only after creation).
- * - /members/{memberId}: Stores editable user profile data.
+ * - /users/{userId}: Stores core user data (authentication).
+ * - /members/{memberId}: Stores editable profile information for members.  It is assumed that `memberId` will match `userId`.
  *
  * Key Security Decisions:
- * - No public listing of users or members.
- * - Strict ownership checks for all write operations.
- * - No validation of the data shape during writes.
+ * - Users can only read and write their own user document and member profile.
+ * - There is no public listing of users or members.
+ * - Role-based authorization is not yet implemented (no admin role checks).
  *
  * Denormalization for Authorization:
- * - User IDs are used as document IDs to simplify ownership checks and avoid extra reads.
+ *   - The `/members/{memberId}` collection's documents should denormalize the `userId` from the `Member` schema into the document ID (`memberId`).
+ *     This allows for efficient ownership checks without extra `get()` calls.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for user authentication data.
+     * @description Controls access to user authentication data.
      * @path /users/{userId}
-     * @allow (get) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can read their own user data.
-     * @allow (create) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own user data.
-     * @allow (update) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can update their own user data.
-     * @deny (get) User with UID 'otherUserId' cannot read user data of 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (create) User with UID 'otherUserId' cannot create user data for 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (update) User with UID 'otherUserId' cannot update user data of 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @principle Enforces document ownership for all access.
+     * @allow (create) User with matching auth UID can create their own document.
+     * @allow (get, update, delete) Authenticated user can access their own document.
+     * @deny (create) User cannot create a document with a mismatched ID.
+     * @deny (get, update, delete) User cannot access another user's document.
+     * @principle Enforces strict user-ownership; self-creation on create.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+          return isSignedIn() && isOwner(userId) && resource != null;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId);
+
+      allow create: if isSignedIn() && isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-ownership for editable member profile data.
+     * @description Controls access to member profile data.
      * @path /members/{memberId}
-     * @allow (get) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can read their own member data.
-     * @allow (create) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own member data.
-     * @allow (update) User with UID 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can update their own member data.
-     * @deny (get) User with UID 'otherUserId' cannot read member data of 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (create) User with UID 'otherUserId' cannot create member data for 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (update) User with UID 'otherUserId' cannot update member data of 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @principle Enforces document ownership for all access.
+     * @allow (create) User with matching auth UID can create their own profile.
+     * @allow (get, update, delete) Authenticated user can access their own profile.
+     * @deny (create) User cannot create a profile with a mismatched ID.
+     * @deny (get, update, delete) User cannot access another user's profile.
+     * @principle Enforces strict user-ownership; self-creation on create.
      */
     match /members/{memberId} {
-      allow get: if isOwner(memberId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(memberId) {
+        return request.auth.uid == memberId;
+      }
+
+        function isExistingOwner(memberId) {
+          return isSignedIn() && isOwner(memberId) && resource != null;
+      }
+
+      allow get: if isSignedIn() && isOwner(memberId);
       allow list: if false;
-      allow create: if isOwner(memberId);
+
+      allow create: if isSignedIn() && isOwner(memberId);
       allow update: if isExistingOwner(memberId);
       allow delete: if isExistingOwner(memberId);
-    }
-
-    //---------- Helper functions ----------
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
     }
   }
 }

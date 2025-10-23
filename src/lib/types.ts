@@ -16,3 +16,12 @@ export interface MemberProfile {
   birthday?: string;
   gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
 }
+
+export interface Appointment {
+  id?: string;
+  title: string;
+  date: string;
+  type: 'Training' | 'Spieltag' | 'Event';
+  location?: string;
+  description?: string;
+}

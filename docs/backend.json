@@ -91,6 +91,44 @@
       "required": [
         "userId"
       ]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "type": "object",
+      "description": "Represents an event, training, or game in the calendar.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the appointment."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date and time of the appointment.",
+          "format": "date-time"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of appointment.",
+          "enum": [
+            "Training",
+            "Spieltag",
+            "Event"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "description": "The location of the appointment."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the appointment."
+        }
+      },
+      "required": [
+        "title",
+        "date",
+        "type"
+      ]
     }
   },
   "auth": {
@@ -111,6 +149,12 @@
         "$ref": "#/backend/entities/Member"
       },
       "description": "Stores editable user profile data. Accessible by admins or the owning user."
+    },
+    "/appointments/{appointmentId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Appointment"
+      },
+      "description": "Stores all appointments. Writable only by admins, readable by all users."
     }
   }
 }
