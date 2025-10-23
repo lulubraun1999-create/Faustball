@@ -13,7 +13,6 @@ export const setAdminRole = onCall(async (request) => {
   }
 
   // To-Do: Re-enable this check in a production environment.
-  // For development, we allow a user to make themselves an admin.
   // if (request.auth.token.admin !== true) {
   //   throw new HttpsError('permission-denied', 'The function must be called by an admin.');
   // }
@@ -21,17 +20,21 @@ export const setAdminRole = onCall(async (request) => {
   const { uid, role } = request.data;
 
   if (typeof uid !== 'string' || typeof role !== 'string') {
-    console.error('Invalid arguments:', { uid, role });
+    console.error('Invalid arguments received:', { uid, role });
     throw new HttpsError('invalid-argument', 'The function must be called with a "uid" and "role" argument.');
   }
 
   try {
+    console.log(`Attempting to set role '${role}' for user ${uid}`);
+    
     // Set custom user claims
     await admin.auth().setCustomUserClaims(uid, { admin: role === 'admin' });
+    console.log(`Successfully set custom claim for ${uid}`);
     
     // Update the user's role in Firestore
     const userDocRef = admin.firestore().collection('users').doc(uid);
     await userDocRef.set({ role: role }, { merge: true });
+    console.log(`Successfully updated Firestore role for ${uid}`);
 
     return {
       message: `Success! User ${uid} has been made an ${role}.`,
