@@ -51,7 +51,7 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto h-16 grid grid-cols-3 items-center">
+      <div className="container mx-auto grid h-16 grid-cols-3 items-center">
         {/* Left Section */}
         <div className="flex justify-self-start">
           <Link href="/dashboard" className="flex items-center space-x-2">
@@ -76,7 +76,7 @@ export function MainHeader() {
             >
               Chat
             </Link>
-            <VerwaltungDropdown />
+            <VerwaltungDropdown userProfile={userProfile} />
           </div>
         </nav>
         

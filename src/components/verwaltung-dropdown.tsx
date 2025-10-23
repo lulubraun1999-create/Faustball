@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -5,11 +6,22 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
+import type { UserProfile } from "@/lib/types";
 
-export function VerwaltungDropdown() {
+interface VerwaltungDropdownProps {
+  userProfile: UserProfile | null | undefined;
+}
+
+export function VerwaltungDropdown({ userProfile }: VerwaltungDropdownProps) {
+  const isAdmin = userProfile?.role === 'admin';
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -41,6 +53,36 @@ export function VerwaltungDropdown() {
             Mannschaftskasse
           </Link>
         </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <span>Admin</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/termine-bearbeiten">Termine bearbeiten</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/gruppen-bearbeiten">Gruppen bearbeiten</Link>
+                </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/mitglieder-bearbeiten">Mitglieder bearbeiten</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/umfragen-bearbeiten">Umfragen bearbeiten</Link>
+                </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/news-bearbeiten">News bearbeiten</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/mannschaftskasse-bearbeiten">Mannschaftskasse bearbeiten</Link>
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
