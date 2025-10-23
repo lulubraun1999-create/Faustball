@@ -179,19 +179,19 @@ export default function ProfileEditPage() {
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
       await setAdminRole({ uid: authUser.uid, role: 'admin' });
+      
+      toast({
+        title: 'Admin-Rolle wird zugewiesen',
+        description: 'Ihre Berechtigungen werden aktualisiert. Die Seite wird in Kürze neu geladen.',
+      });
 
-      // This is crucial: force a refresh of the ID token to get the new custom claim
+      // Crucial: Force a refresh of the ID token to get the new custom claim
       if (forceRefresh) {
         await forceRefresh();
       }
-      
-      toast({
-        title: 'Admin-Rolle zugewiesen',
-        description: 'Ihre Berechtigungen wurden aktualisiert. Die Seite wird in Kürze neu geladen.',
-      });
 
       // Give a moment for the user to see the toast, then reload to ensure all components get the new state.
-      setTimeout(() => window.location.reload(), 2000);
+      setTimeout(() => window.location.reload(), 3000);
 
     } catch (error: any) {
       console.error('Fehler beim Zuweisen der Admin-Rolle:', error);
@@ -200,8 +200,7 @@ export default function ProfileEditPage() {
         title: 'Fehler bei der Rollenzuweisung',
         description: error.message || 'Die Admin-Rolle konnte nicht zugewiesen werden.',
       });
-    } finally {
-      setIsSettingAdmin(false);
+       setIsSettingAdmin(false);
     }
   };
 
