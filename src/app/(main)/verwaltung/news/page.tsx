@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Newspaper, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useMemo } from 'react';
+import Link from 'next/link';
 
 export default function VerwaltungNewsPage() {
   const firestore = useFirestore();
@@ -80,9 +81,11 @@ export default function VerwaltungNewsPage() {
                 </p>
               </CardContent>
               <CardFooter>
-                <Button variant="secondary" className="w-full" disabled>
-                  Mehr lesen (in Kürze)
-                </Button>
+                 <Link href={`/verwaltung/news/${article.id}`} passHref className="w-full">
+                  <Button variant="secondary" className="w-full">
+                    Mehr lesen
+                  </Button>
+                </Link>
               </CardFooter>
             </Card>
           ))}
@@ -99,5 +102,3 @@ export default function VerwaltungNewsPage() {
     </div>
   );
 }
-
-    

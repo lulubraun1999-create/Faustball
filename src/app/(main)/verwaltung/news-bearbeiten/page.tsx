@@ -64,13 +64,12 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Edit, Newspaper, Wand2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit, Newspaper } from 'lucide-react';
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { summarize } from '@/ai/flows/summarize-flow';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
@@ -85,7 +84,6 @@ type NewsArticleFormValues = z.infer<typeof newsArticleSchema>;
 function AdminNewsPageContent() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState<Record<string, boolean>>({});
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const firestore = useFirestore();
 
@@ -126,31 +124,6 @@ function AdminNewsPageContent() {
       imageUrls: article.imageUrls.join('\n'),
     });
     setIsDialogOpen(true);
-  };
-
-  const handleGenerateSummary = async (article: NewsArticle) => {
-    if (!firestore || !article.id) return;
-    
-    setIsGeneratingSummary(prev => ({...prev, [article.id!]: true}));
-
-    try {
-      const result = await summarize(article.content);
-      const docRef = doc(firestore, 'news', article.id);
-      await updateDoc(docRef, { summary: result });
-      toast({
-        title: 'Zusammenfassung erstellt',
-        description: 'Die KI-Zusammenfassung wurde für den Artikel gespeichert.',
-      });
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler bei der Zusammenfassung',
-        description:
-          'Die KI konnte keine Zusammenfassung erstellen. Bitte versuchen Sie es erneut.',
-      });
-    } finally {
-      setIsGeneratingSummary(prev => ({...prev, [article.id!]: false}));
-    }
   };
 
   const onSubmit = async (data: NewsArticleFormValues) => {
@@ -323,7 +296,6 @@ function AdminNewsPageContent() {
                 <TableRow>
                   <TableHead className="w-[100px]">Bild</TableHead>
                   <TableHead>Titel</TableHead>
-                  <TableHead>Zusammenfassung</TableHead>
                   <TableHead>Datum</TableHead>
                   <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
@@ -346,36 +318,12 @@ function AdminNewsPageContent() {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-xs truncate font-medium">{article.title}</TableCell>
-                      <TableCell className="max-w-sm text-sm text-muted-foreground">
-                        <p className='line-clamp-3'>{article.summary || '-'}</p>
-                      </TableCell>
                       <TableCell>
                         {article.createdAt instanceof Timestamp
                           ? article.createdAt.toDate().toLocaleDateString('de-DE')
                           : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {!article.summary && (
-                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleGenerateSummary(article)}
-                                disabled={isGeneratingSummary[article.id!]}
-                              >
-                                {isGeneratingSummary[article.id!] ? (
-                                    <Loader2 className="h-4 w-4 animate-spin"/>
-                                ) : (
-                                    <Wand2 className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Zusammenfassung erstellen</p>
-                            </TooltipContent>
-                           </Tooltip>
-                        )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
@@ -427,7 +375,7 @@ function AdminNewsPageContent() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={4} className="h-24 text-center">
                       Noch keine Artikel erstellt.
                     </TableCell>
                   </TableRow>
