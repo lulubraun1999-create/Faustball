@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Instagram, LogOut, User as UserIcon } from "lucide-react";
+import { Instagram, LogOut, User as UserIcon, Globe } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import {
   DropdownMenu,
@@ -82,6 +82,16 @@ export function MainHeader() {
         
         {/* Right Section */}
         <div className="flex items-center justify-self-end space-x-2">
+          <a
+            href="https://www.faustball.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="ghost" size="icon">
+              <Globe className="h-5 w-5 text-foreground/60 hover:text-foreground/80 dark:text-foreground/80 dark:hover:text-foreground" />
+              <span className="sr-only">Faustball.com</span>
+            </Button>
+          </a>
           <a
             href="https://www.instagram.com/tsvbayer04_faustball/#"
             target="_blank"
