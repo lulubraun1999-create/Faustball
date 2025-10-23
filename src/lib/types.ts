@@ -57,3 +57,14 @@ export interface Poll {
         customAnswer?: string;
     }[];
 }
+
+export interface NewsArticle {
+  id?: string;
+  title: string;
+  content: string;
+  summary: string;
+  imageUrls: string[];
+  createdAt: any; // Firestore Timestamp
+}
+
+    

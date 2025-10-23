@@ -216,6 +216,39 @@
         }
       },
       "required": ["title", "options", "endDate", "createdAt"]
+    },
+    "NewsArticle": {
+      "title": "News Article",
+      "type": "object",
+      "description": "Represents a news article or announcement.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the news article."
+        },
+        "content": {
+          "type": "string",
+          "description": "The full content of the news article in markdown or plain text."
+        },
+        "summary": {
+          "type": "string",
+          "description": "A short, AI-generated summary of the content."
+        },
+        "imageUrls": {
+          "type": "array",
+          "description": "A list of URLs for images associated with the article.",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the article was created.",
+          "format": "date-time"
+        }
+      },
+      "required": ["title", "content", "createdAt"]
     }
   },
   "auth": {
@@ -254,6 +287,14 @@
         "$ref": "#/backend/entities/Poll"
       },
       "description": "Stores all polls. Writable only by admins, readable by designated users."
+    },
+     "/news/{newsId}": {
+      "schema": {
+        "$ref": "#/backend/entities/NewsArticle"
+      },
+      "description": "Stores all news articles. Writable only by admins, readable by all users."
     }
   }
 }
+
+    
