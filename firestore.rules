@@ -1,10 +1,41 @@
+/**
+ * @fileoverview Firestore Security Rules for FaustApp.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a role-based access control model for administrative data
+ * (appointments, groups, polls, news) and an ownership model for user-specific data
+ * (users, members).  It leverages the Firebase Authentication service (`request.auth`)
+ * to verify user identity and enforce these access controls.
+ *
+ * Data Structure:
+ * - /users/{userId}:  Stores core user data. Accessible only by the user and admins.
+ * - /members/{memberId}: Stores member profile data. Accessible only by the user and admins.
+ * - /appointments/{appointmentId}: Stores appointment data. Publicly readable, writable by admins only.
+ * - /groups/{groupId}: Stores group data. Publicly readable, writable by admins only.
+ * - /polls/{pollId}: Stores poll data. Publicly readable, writable by admins only.
+ * - /news/{newsId}: Stores news article data. Publicly readable, writable by admins only.
+ *
+ * Key Security Decisions:
+ * - Admin-Only Writes:  Collections like `appointments`, `groups`, `polls`, and `news` are
+ *   protected with strict admin-only write access.
+ * - User-Specific Data: The `users` and `members` collections enforce user-ownership, where only the
+ *   authenticated user or an admin can access a specific document.
+ * - Public Reads: The `appointments`, `groups`, `polls`, and `news` collections are publicly readable.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for /users/{userId} documents.
+     * @description Grants read and write access to user documents only to the authenticated user or admins.
      * @path /users/{userId}
+     * @allow (create) - Authenticated user can create their own user document.
+     * @allow (get, list) - Authenticated user can read their own user document, admins can list all user documents.
+     * @allow (update, delete) - Authenticated user can update their own user document, admins can delete any user document.
+     * @deny (create) - User cannot create a document with a different ID than their own.
+     * @deny (get, list) - User cannot read other user's documents.
+     * @deny (update, delete) - User cannot modify or delete other user's documents.
+     * @principle Enforces document ownership and admin overrides.
      */
     match /users/{userId} {
       function isSignedIn() {
@@ -16,19 +47,30 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        return request.auth.token.admin == true;
       }
 
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
+      function isExistingOwner(userId) {
+        return isOwner(userId);
+      }
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isExistingOwner(userId) || isAdmin();
+      allow delete: if isExistingOwner(userId) || isAdmin();
     }
 
     /**
-     * @description Enforces user-ownership for /members/{memberId} documents.
+     * @description Grants read and write access to member documents only to the authenticated user or admins.
      * @path /members/{memberId}
+     * @allow (create) - Authenticated user can create their own member document.
+     * @allow (get, list) - Authenticated user can read their own member document, admins can list all member documents.
+     * @allow (update, delete) - Authenticated user can update their own member document, admins can delete any user document.
+     * @deny (create) - User cannot create a document with a different ID than their own.
+     * @deny (get, list) - User cannot read other user's documents.
+     * @deny (update, delete) - User cannot modify or delete other user's documents.
+     * @principle Enforces document ownership and admin overrides.
      */
     match /members/{memberId} {
       function isSignedIn() {
@@ -36,31 +78,39 @@ service cloud.firestore {
       }
 
       function isOwner(memberId) {
-        return request.auth.uid == memberId;
+        return request.auth.uid == resource.data.userId;
+      }
+
+       function isExistingOwner(memberId) {
+        return isOwner(memberId);
       }
 
       function isAdmin() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        return request.auth.token.admin == true;
       }
 
-      allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(memberId);
-      allow update: if isSignedIn() && (isOwner(memberId) || isAdmin());
-      allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
+      allow get: if isOwner(memberId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isExistingOwner(memberId) || isAdmin();
+      allow delete: if isExistingOwner(memberId) || isAdmin();
     }
 
     /**
-     * @description Allows public read access and admin-only write access to /appointments/{appointmentId} documents.
+     * @description Allows anyone to read appointments, but only admins can create, update, or delete them.
      * @path /appointments/{appointmentId}
+     * @allow (get, list) - Anyone can read appointment data.
+     * @allow (create, update, delete) - Only admins can modify appointment data.
+     * @deny (create, update, delete) - Non-admins cannot modify appointment data.
+     * @principle Public read, admin-only write access.
      */
     match /appointments/{appointmentId} {
-      function isSignedIn() {
+       function isSignedIn() {
         return request.auth != null;
       }
 
       function isAdmin() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        return request.auth.token.admin == true;
       }
 
       allow get: if true;
@@ -71,8 +121,12 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access and admin-only write access to /groups/{groupId} documents.
+     * @description Allows anyone to read groups, but only admins can create, update, or delete them.
      * @path /groups/{groupId}
+     * @allow (get, list) - Anyone can read group data.
+     * @allow (create, update, delete) - Only admins can modify group data.
+     * @deny (create, update, delete) - Non-admins cannot modify group data.
+     * @principle Public read, admin-only write access.
      */
     match /groups/{groupId} {
       function isSignedIn() {
@@ -80,7 +134,30 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        return request.auth.token.admin == true;
+      }
+      allow get: if true;
+      allow list: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Allows anyone to read polls, but only admins can create, update, or delete them.
+     * @path /polls/{pollId}
+     * @allow (get, list) - Anyone can read poll data.
+     * @allow (create, update, delete) - Only admins can modify poll data.
+     * @deny (create, update, delete) - Non-admins cannot modify poll data.
+     * @principle Public read, admin-only write access.
+     */
+    match /polls/{pollId} {
+     function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return request.auth.token.admin == true;
       }
 
       allow get: if true;
@@ -91,24 +168,24 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows admin-only write access to /polls/{pollId} documents and restricts read access based on poll visibility.
-     * @path /polls/{pollId}
+     * @description Allows anyone to read news articles, but only admins can create, update, or delete them.
+     * @path /news/{newsId}
+     * @allow (get, list) - Anyone can read news article data.
+     * @allow (create, update, delete) - Only admins can modify news article data.
+     * @deny (create, update, delete) - Non-admins cannot modify news article data.
+     * @principle Public read, admin-only write access.
      */
-    match /polls/{pollId} {
-      function isSignedIn() {
+    match /news/{newsId} {
+       function isSignedIn() {
         return request.auth != null;
       }
 
       function isAdmin() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        return request.auth.token.admin == true;
       }
 
-      function isVisibleToUser(poll) {
-        return true;
-      }
-
-      allow get: if isSignedIn() && isVisibleToUser(resource.data);
-      allow list: if isSignedIn(); // Assuming listing should be restricted to signed-in users.
+      allow get: if true;
+      allow list: if true;
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
