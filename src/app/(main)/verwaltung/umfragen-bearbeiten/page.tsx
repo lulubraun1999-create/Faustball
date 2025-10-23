@@ -3,7 +3,6 @@
 
 import { AdminGuard } from '@/components/admin-guard';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -25,11 +24,6 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -56,10 +50,9 @@ import {
 import type { Group, Poll } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { collection, addDoc, Timestamp, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import {
-  CalendarIcon,
   Loader2,
   Plus,
   Trash2,
@@ -88,9 +81,7 @@ const pollSchema = z.object({
   options: z
     .array(z.object({ text: z.string().min(1, 'Option darf nicht leer sein.') }))
     .min(2, 'Es müssen mindestens 2 Optionen vorhanden sein.'),
-  endDate: z.date({
-    required_error: 'Ein Enddatum ist erforderlich.',
-  }),
+  endDate: z.string().min(1, 'Ein Enddatum ist erforderlich.'),
   allowCustomAnswers: z.boolean().default(false),
   visibilityType: z.enum(['all', 'specificTeams']).default('all'),
   visibleTeamIds: z.array(z.string()).default([]),
@@ -124,7 +115,7 @@ function AdminUmfragenPageContent() {
     defaultValues: {
       title: '',
       options: [{ text: '' }, { text: '' }],
-      endDate: undefined,
+      endDate: '',
       allowCustomAnswers: false,
       visibilityType: 'all',
       visibleTeamIds: [],
@@ -141,9 +132,13 @@ function AdminUmfragenPageContent() {
   const onSubmit = async (data: PollFormValues) => {
     if (!firestore) return;
     
+    // The input for date gives a string in 'YYYY-MM-DD' format.
+    // We parse it and create a Timestamp.
+    const endDateTimestamp = Timestamp.fromDate(parseISO(data.endDate));
+
     const pollData = {
         ...data,
-        endDate: Timestamp.fromDate(data.endDate),
+        endDate: endDateTimestamp,
         createdAt: serverTimestamp(),
         visibility: {
             type: data.visibilityType,
@@ -286,38 +281,9 @@ function AdminUmfragenPageContent() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Abstimmung endet am</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                'w-[240px] pl-3 text-left font-normal',
-                                !field.value && 'text-muted-foreground'
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, 'PPP')
-                              ) : (
-                                <span>Datum auswählen</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            fromDate={new Date()}
-                            captionLayout="dropdown-buttons"
-                            fromYear={new Date().getFullYear()}
-                            toYear={new Date().getFullYear() + 5}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                       <FormControl>
+                         <Input type="date" {...field} />
+                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
