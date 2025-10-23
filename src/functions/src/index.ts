@@ -1,6 +1,4 @@
 
-'use client';
-
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
@@ -12,8 +10,6 @@ if (admin.apps.length === 0) {
 export const setAdminRole = onCall(async (request) => {
   // A user can make themselves an admin for the first time.
   // This is a simplified approach for this app's context.
-  // In a production app, you might have a more secure way to bootstrap the first admin,
-  // or a check like `if (request.auth.token.admin !== true)` to ensure only admins can make others admins.
   
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
@@ -25,12 +21,16 @@ export const setAdminRole = onCall(async (request) => {
   if (typeof targetUid !== 'string' || typeof role !== 'string' || role !== 'admin') {
     throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" and "role" argument.');
   }
+  
+  // For this app, any authenticated user can make themselves an admin.
+  // In a real production scenario, you would add a check here to ensure only existing admins can call this.
+  // For example: if (request.auth.token.admin !== true) { ... }
 
   try {
     // Set custom user claims on the target user
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
     
-    // Also update the user's role in the Firestore 'users' collection for consistency in the UI
+    // Also update the user's role in the Firestore 'users' collection for UI consistency
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
     await userDocRef.set({ role: 'admin' }, { merge: true });
 
