@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState, useMemo, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { AdminGuard } from '@/components/admin-guard';
@@ -18,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -86,8 +85,6 @@ import {
   PiggyBank,
   BookMarked,
   Coins,
-  MinusCircle,
-  PlusCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Group, Penalty, TreasuryTransaction, MemberProfile } from '@/lib/types';
@@ -117,7 +114,7 @@ function AdminKassePageContent() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
-  // Data fetching
+  // Data fetching - Defer heavy queries until a team is selected
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
@@ -129,7 +126,7 @@ function AdminKassePageContent() {
 
   const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-
+  
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groupsData]);
   const membersOfSelectedTeam = useMemo(() => members?.filter(m => m.teams?.includes(selectedTeamId || '')) || [], [members, selectedTeamId]);
   const totalBalance = useMemo(() => transactions?.reduce((acc, tx) => acc + tx.amount, 0) || 0, [transactions]);
@@ -139,13 +136,13 @@ function AdminKassePageContent() {
   const transactionForm = useForm<TransactionFormValues>({ resolver: zodResolver(transactionSchema), defaultValues: { type: 'income', description: '', amount: 0 } });
 
   const watchTxType = transactionForm.watch('type');
-  const watchPenaltyId = transactionForm.watch('penaltyId');
 
   // Penalty Catalog Logic
   const onAddPenalty = async (data: PenaltyFormValues) => {
     if (!firestore || !selectedTeamId) return;
+    const penaltyCollectionRef = collection(firestore, 'penalties');
     const penaltyData = { ...data, teamId: selectedTeamId };
-    addDoc(collection(firestore, 'penalties'), penaltyData).then(() => {
+    addDoc(penaltyCollectionRef, penaltyData).then(() => {
       toast({ title: 'Strafe hinzugefügt' });
       penaltyForm.reset();
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'penalties', operation: 'create', requestResourceData: penaltyData })));
@@ -172,14 +169,16 @@ function AdminKassePageContent() {
         return;
       }
       const penalty = penalties?.find(p => p.id === data.penaltyId);
-      if (!penalty) return;
+      const member = membersOfSelectedTeam.find(m => m.userId === data.memberId)
+      if (!penalty || !member) return;
       finalAmount = -penalty.amount;
-      finalDescription = `${membersOfSelectedTeam.find(m => m.userId === data.memberId)?.firstName || 'Unbekannt'}: ${penalty.description}`;
+      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
       finalStatus = 'unpaid';
     } else if (data.type === 'expense') {
       finalAmount = -data.amount;
     }
-
+    
+    const treasuryCollectionRef = collection(firestore, 'treasury');
     const txData = {
       teamId: selectedTeamId,
       description: finalDescription,
@@ -190,10 +189,10 @@ function AdminKassePageContent() {
       status: finalStatus,
     };
     
-    addDoc(collection(firestore, 'treasury'), txData).then(() => {
+    addDoc(treasuryCollectionRef, txData).then(() => {
       toast({ title: 'Transaktion hinzugefügt' });
       setIsTxDialogOpen(false);
-      transactionForm.reset();
+      transactionForm.reset({type: 'income', description: '', amount: 0});
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'treasury', operation: 'create', requestResourceData: txData })));
   };
 
@@ -212,7 +211,7 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingGroups || isLoadingMembers;
+  const isLoading = isLoadingGroups || (selectedTeamId && (isLoadingMembers || isLoadingPenalties || isLoadingTransactions));
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -238,6 +237,10 @@ function AdminKassePageContent() {
             <h2 className="mt-4 text-xl font-semibold">Keine Mannschaft ausgewählt</h2>
             <p className="mt-2 text-muted-foreground">Bitte wählen Sie eine Mannschaft aus, um die Kasse zu verwalten.</p>
         </Card>
+      ) : isLoading ? (
+         <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           {/* Transactions */}
