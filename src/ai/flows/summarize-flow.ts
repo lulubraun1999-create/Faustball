@@ -1,20 +1,10 @@
-
 'use server';
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Define the schema for the raw input string.
 const summarizeInputSchema = z.string().min(1, 'Input must not be empty.');
 const summarizeOutputSchema = z.string();
-
-/**
- * The public function that components will call.
- * It takes a simple string and passes it directly to the flow.
- */
-export async function summarize(text: string): Promise<string> {
-  return summarizeFlow(text);
-}
 
 const summarizePrompt = ai.definePrompt(
   {
@@ -32,17 +22,11 @@ Zusammenfassung:`,
   },
 );
 
-const summarizeFlow = ai.defineFlow(
-  {
-    name: 'summarizeFlow',
-    // The flow's public interface is also a simple string.
-    inputSchema: summarizeInputSchema,
-    outputSchema: summarizeOutputSchema,
-  },
-  async (text) => {
-    // The 'text' variable is guaranteed to be a non-empty string due to the schema.
-    // We can pass it directly to the prompt.
+/**
+ * The public function that components will call.
+ * It directly invokes the configured prompt.
+ */
+export async function summarize(text: string): Promise<string> {
     const { output } = await summarizePrompt(text);
     return output!;
-  }
-);
+}
