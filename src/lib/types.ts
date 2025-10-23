@@ -23,7 +23,7 @@ export interface FullUserProfile extends UserProfile, Omit<MemberProfile, 'userI
 export interface Appointment {
   id?: string;
   title: string;
-  date: string;
+  date: any;
   type: 'Training' | 'Spieltag' | 'Event';
   location?: string;
   description?: string;
@@ -35,3 +35,5 @@ export interface Group {
   type: 'class' | 'team';
   parentId?: string;
 }
+
+    

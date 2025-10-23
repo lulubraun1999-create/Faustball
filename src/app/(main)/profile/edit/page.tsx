@@ -188,9 +188,10 @@ export default function ProfileEditPage() {
         const setAdminRole = httpsCallable(functions, 'setAdminRole');
         await setAdminRole({ uid: authUser.uid, role: 'admin' });
         
-        await authUser.getIdToken(true); // Force refresh of the ID token
+        // Force a refresh of the user's ID token to get the new custom claim.
+        await authUser.getIdToken(true); 
         
-        toast({ title: "Admin-Rolle zugewiesen", description: "Bitte laden Sie die Seite neu, damit die Änderungen wirksam werden." });
+        toast({ title: "Admin-Rolle zugewiesen", description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt auf Admin-Bereiche zugreifen." });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });
     } finally {
@@ -202,8 +203,7 @@ export default function ProfileEditPage() {
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !userDocRef || !authUser) return;
 
-    const memberData: MemberProfile = {
-      userId: authUser.uid,
+    const memberData: Omit<MemberProfile, 'userId'> = {
       phone: data.phone,
       location: data.location,
       birthday: data.birthday,
@@ -215,7 +215,7 @@ export default function ProfileEditPage() {
       role: data.role,
     };
 
-    const p1 = setDoc(memberDocRef, memberData, { merge: true })
+    const p1 = setDoc(memberDocRef, { userId: authUser.uid, ...memberData }, { merge: true })
       .catch(() => {
         const permissionError = new FirestorePermissionError({
           path: memberDocRef.path,
@@ -543,7 +543,6 @@ export default function ProfileEditPage() {
              <h3 className="font-semibold">Admin Status</h3>
              <p className="mt-2 text-sm text-muted-foreground">
                Klicken Sie hier, um sich selbst Administratorrechte zu geben.
-               Sie müssen die Seite danach neu laden.
              </p>
              <Button
                 variant="outline"
@@ -788,3 +787,5 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
