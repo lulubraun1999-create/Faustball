@@ -132,5 +132,5 @@ export default function AdminMitgliederPage() {
     <AdminGuard>
       <AdminMitgliederPageContent />
     </AdminGuard>
-  )
+  );
 }

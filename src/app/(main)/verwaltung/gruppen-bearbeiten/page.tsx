@@ -219,7 +219,7 @@ function AdminGruppenBearbeitenPageContent() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-2">
+              <div className="space-y-2 flex justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
             ) : (
@@ -323,7 +323,7 @@ function AdminGruppenBearbeitenPageContent() {
                 render={({ field }) => (
                   <FormItem>
                     <Select
-                      onValueChange={field.onChange}
+                      onValuechange={field.onChange}
                       defaultValue={field.value}
                     >
                       <FormControl>
@@ -461,5 +461,5 @@ export default function AdminGruppenBearbeitenPage() {
     <AdminGuard>
       <AdminGruppenBearbeitenPageContent />
     </AdminGuard>
-  )
+  );
 }

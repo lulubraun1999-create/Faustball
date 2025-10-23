@@ -118,29 +118,33 @@ function AdminTerminePageContent() {
     try {
       if (selectedAppointment) {
         const docRef = doc(firestore, 'appointments', selectedAppointment.id!);
-        await updateDoc(docRef, appointmentData);
+        updateDoc(docRef, appointmentData).catch((e) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: appointmentData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
         toast({ title: 'Termin erfolgreich aktualisiert.' });
       } else {
-        await addDoc(appointmentsRef, appointmentData);
+        addDoc(appointmentsRef, appointmentData).catch((e) => {
+          const permissionError = new FirestorePermissionError({
+            path: 'appointments',
+            operation: 'create',
+            requestResourceData: appointmentData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
         toast({ title: 'Neuer Termin erfolgreich erstellt.' });
       }
       resetForm();
     } catch (error: any) {
-      const operation = selectedAppointment ? 'update' : 'create';
-      const path = selectedAppointment
-        ? `appointments/${selectedAppointment.id}`
-        : 'appointments';
-      const permissionError = new FirestorePermissionError({
-        path: path,
-        operation: operation,
-        requestResourceData: appointmentData,
-      });
-      errorEmitter.emit('permission-error', permissionError);
-      toast({
-        variant: 'destructive',
-        title: 'Fehler',
-        description: 'Der Termin konnte nicht gespeichert werden.',
-      });
+        toast({
+            variant: 'destructive',
+            title: 'Fehler',
+            description: 'Der Termin konnte nicht gespeichert werden.',
+        });
     } finally {
       setIsSubmitting(false);
     }
@@ -149,21 +153,14 @@ function AdminTerminePageContent() {
   const handleDelete = async (id: string) => {
     if (!firestore) return;
     const docRef = doc(firestore, 'appointments', id);
-    try {
-      await deleteDoc(docRef);
-      toast({ title: 'Termin gelöscht.' });
-    } catch (error) {
-      const permissionError = new FirestorePermissionError({
-        path: docRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-      toast({
-        variant: 'destructive',
-        title: 'Fehler',
-        description: 'Der Termin konnte nicht gelöscht werden.',
-      });
-    }
+    deleteDoc(docRef).catch((e) => {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
+    toast({ title: 'Termin gelöscht.' });
   };
 
   const handleEdit = (appointment: Appointment) => {
@@ -392,5 +389,5 @@ export default function AdminTerminePage() {
     <AdminGuard>
       <AdminTerminePageContent />
     </AdminGuard>
-  )
+  );
 }

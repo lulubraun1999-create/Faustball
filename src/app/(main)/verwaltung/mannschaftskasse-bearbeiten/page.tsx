@@ -1,4 +1,6 @@
 
+'use client';
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Edit } from "lucide-react";
 import { AdminGuard } from "@/components/admin-guard";
@@ -31,5 +33,5 @@ export default function AdminKassePage() {
     <AdminGuard>
       <AdminKassePageContent />
     </AdminGuard>
-  )
+  );
 }
