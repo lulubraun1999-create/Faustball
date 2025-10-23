@@ -39,19 +39,16 @@ export default function MainAppLayout({
       const memberDocRef = doc(firestore, "members", authUser.uid);
       
       try {
-        const [userDocSnap, memberDocSnap] = await Promise.all([
-          getDoc(userDocRef),
-          getDoc(memberDocRef)
-        ]);
+        const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data() as UserProfile;
-          const batch = writeBatch(firestore);
-          let writeNeeded = false;
-
-          // Self-healing: If the member document is missing, create it correctly.
+          const memberDocSnap = await getDoc(memberDocRef);
+          
           if (!memberDocSnap.exists()) {
             console.log("Member document missing for user. Creating it now.", authUser.uid);
+            const batch = writeBatch(firestore);
+            
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
               firstName: userData.firstName,
@@ -66,19 +63,20 @@ export default function MainAppLayout({
               gender: undefined,
             };
             batch.set(memberDocRef, newMemberData);
-            writeNeeded = true;
-          }
 
-          // Handle first login flag
-          if (userData.firstLoginComplete === false) {
-            batch.update(userDocRef, { firstLoginComplete: true });
-            writeNeeded = true;
-          }
-
-          if (writeNeeded) {
+            if (userData.firstLoginComplete === false) {
+                batch.update(userDocRef, { firstLoginComplete: true });
+            }
+            
             console.log("Committing batch write for profile consistency.");
             await batch.commit();
+          } else if (userData.firstLoginComplete === false) {
+            // If member doc exists, but first login is not complete
+            const batch = writeBatch(firestore);
+            batch.update(userDocRef, { firstLoginComplete: true });
+            await batch.commit();
           }
+
         } else {
             console.warn("User document does not exist for authenticated user:", authUser.uid);
         }
