@@ -87,7 +87,10 @@ export default function RegisterPage() {
       
       const memberDocRef = doc(firestore, 'members', user.uid);
       const memberData = {
-          userId: user.uid
+          userId: user.uid,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
       };
       batch.set(memberDocRef, memberData);
       

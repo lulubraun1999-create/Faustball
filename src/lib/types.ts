@@ -11,6 +11,9 @@ export interface UserProfile {
 
 export interface MemberProfile {
   userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
   phone?: string;
   location?: string;
   position?: string[];
