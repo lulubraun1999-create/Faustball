@@ -10,7 +10,7 @@ import {
   useUser,
 } from '@/firebase';
 import { collection, doc, setDoc } from 'firebase/firestore';
-import type { MemberProfile, UserProfile, Group } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -48,33 +48,18 @@ function AdminMitgliederPageContent() {
     () => (firestore ? collection(firestore, 'members') : null),
     [firestore]
   );
-    const usersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
     [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const combinedData = useMemo(() => {
-    if (!membersData || !usersData) return [];
-    
-    const usersMap = new Map(usersData.map(user => [user.id, user]));
-    
-    return membersData.map(member => ({
-      ...member,
-      role: usersMap.get(member.userId)?.role || 'user',
-    }));
-  }, [membersData, usersData]);
 
   const sortedMembers = useMemo(() => {
-    if (!combinedData) return [];
-    return [...combinedData].sort((a, b) => {
+    if (!membersData) return [];
+    return [...membersData].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -82,7 +67,7 @@ function AdminMitgliederPageContent() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData]);
+  }, [membersData]);
 
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
 
@@ -122,7 +107,7 @@ function AdminMitgliederPageContent() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
+  const isLoading = isLoadingMembers || isLoadingGroups;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -147,7 +132,6 @@ function AdminMitgliederPageContent() {
                     <TableHead>Vorname</TableHead>
                     <TableHead>Nachname</TableHead>
                     <TableHead>Position</TableHead>
-                    <TableHead>Rolle</TableHead>
                     <TableHead>Geschlecht</TableHead>
                     <TableHead>Geburtstag</TableHead>
                     <TableHead>Email</TableHead>
@@ -164,7 +148,6 @@ function AdminMitgliederPageContent() {
                         <TableCell>{member.firstName || 'N/A'}</TableCell>
                         <TableCell>{member.lastName || 'N/A'}</TableCell>
                         <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
-                        <TableCell className="capitalize">{member.role}</TableCell>
                         <TableCell>{member.gender || 'N/A'}</TableCell>
                         <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : 'N/A'}</TableCell>
                         <TableCell>{member.email || 'N/A'}</TableCell>
@@ -221,7 +204,7 @@ function AdminMitgliederPageContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={11} className="h-24 text-center">
+                      <TableCell colSpan={10} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>
