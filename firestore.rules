@@ -1,84 +1,97 @@
 /**
- * @fileoverview Firestore Security Rules for FaustApp.
+ * @fileoverview Firestore Security Rules for the FaustApp application.
  *
  * Core Philosophy:
- * This ruleset enforces a role-based access control model with public read access to appointments.
- * User and Member data is secured with owner-only access.
+ * This ruleset enforces a user-ownership model for user profiles and restricts appointment creation to admins, with public read access.
  *
  * Data Structure:
- * - /users/{userId}: Stores core user data. Accessible only by the user and admins.
- * - /members/{memberId}: Stores profile data for team members. Accessible only by the user and admins.
- * - /appointments/{appointmentId}: Stores event, training, and game data. Publicly readable, writable only by admins.
+ * - /users/{userId}: Stores core user data, accessible only by the user and admins.
+ * - /members/{memberId}: Stores detailed user profile information, accessible only by the user and admins.
+ * - /appointments/{appointmentId}: Stores appointment data, writable only by admins, and readable by all.
  *
  * Key Security Decisions:
- * - Appointments are publicly readable.
- * - Users can only access their own user and member documents.
- * - Only admins can create/update/delete appointments.
+ * - User listing is disabled to protect user privacy.
+ * - Read access to appointments is public to allow all users to view the calendar.
+ * - Ambiguous or missing write rules default to explicit denial.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secures user data, allowing only the user and admins to read/write.
+     * @description Controls access to user profile documents.
      * @path /users/{userId}
-     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own document.
-     * @allow (get, update, delete) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can access their own document.
-     * @deny (create) User 'attackerId' cannot create a document with userId 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (get, update, delete) User 'attackerId' cannot access user document 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @principle Enforces document ownership for user profiles.
+     * @allow (create) User with matching UID can create their own document.
+     * @allow (get, update, delete) User with matching UID can access their own document.
+     * @deny (create) User cannot create a document with a different UID.
+     * @deny (get, update, delete) User cannot access another user's document.
+     * @principle Enforces document ownership and prevents unauthorized access to user data.
      */
     match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+        return isOwner(userId) && exists(resource);
+      }
+
       allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId);
+      allow list: if false; // User listing is not permitted.
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Secures member data, allowing only the user and admins to read/write.
+     * @description Controls access to member profile documents.
      * @path /members/{memberId}
-     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own member document.
-     * @allow (get, update, delete) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can access their own member document.
-     * @deny (create) User 'attackerId' cannot create a document with memberId 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @deny (get, update, delete) User 'attackerId' cannot access member document 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2'.
-     * @principle Enforces document ownership for member profiles.
+     * @allow (create) User with matching UID can create their own member document.
+     * @allow (get, update, delete) User with matching UID can access their own member document.
+     * @deny (create) User cannot create a member document with a different UID.
+     * @deny (get, update, delete) User cannot access another user's member document.
+     * @principle Enforces document ownership and prevents unauthorized access to user data.
      */
     match /members/{memberId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner(memberId) {
+        return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
+      }
+       function isExistingOwner(memberId) {
+        return isOwner(memberId) && exists(resource);
+      }
+
       allow get: if isOwner(memberId);
-      allow list: if false;
-      allow create: if isOwner(memberId);
+      allow list: if false; // User listing is not permitted.
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isExistingOwner(memberId);
       allow delete: if isExistingOwner(memberId);
     }
 
     /**
-     * @description Allows public read access to appointments and restricts write access to admins only.
+     * @description Controls access to appointment documents.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Any user can read appointments.
-     * @allow (create, update, delete) Only admins can modify appointments.
-     * @deny (create, update, delete) Non-admin user 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' cannot modify appointments.
-     * @principle Provides public read access with admin-only writes for appointments.
+     * @allow (get, list) All users can read appointments.
+     * @deny (create, update, delete) Only admins can create, update, or delete appointments.
+     * @principle Allows public read access for calendar visibility while restricting write access to authorized personnel.
      */
     match /appointments/{appointmentId} {
+      function isAdmin() {
+        return request.auth.token.role == 'admin';
+      }
+
       allow get: if true;
       allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

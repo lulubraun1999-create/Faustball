@@ -25,3 +25,10 @@ export interface Appointment {
   location?: string;
   description?: string;
 }
+
+export interface Group {
+  id: string;
+  name: string;
+  type: 'class' | 'team';
+  parentId?: string;
+}

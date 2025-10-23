@@ -129,6 +129,27 @@
         "date",
         "type"
       ]
+    },
+    "Group": {
+      "title": "Group",
+      "type": "object",
+      "description": "Represents a class (Obergruppe) or a team (Untergruppe).",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the group."
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of group.",
+          "enum": ["class", "team"]
+        },
+        "parentId": {
+          "type": "string",
+          "description": "The ID of the parent group (class) if it's a team."
+        }
+      },
+      "required": ["name", "type"]
     }
   },
   "auth": {
@@ -155,6 +176,12 @@
         "$ref": "#/backend/entities/Appointment"
       },
       "description": "Stores all appointments. Writable only by admins, readable by all users."
+    },
+    "/groups/{groupId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Group"
+      },
+      "description": "Stores all groups (classes and teams). Writable only by admins, readable by all users."
     }
   }
 }
