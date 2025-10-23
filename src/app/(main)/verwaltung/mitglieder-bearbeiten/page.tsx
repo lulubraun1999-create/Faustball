@@ -8,7 +8,7 @@ import {
   useUser,
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { UserProfile, MemberProfile, FullUserProfile } from '@/lib/types';
+import type { MemberProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -32,34 +32,22 @@ function AdminMitgliederPageContent() {
   const firestore = useFirestore();
   const { isAdmin } = useUser();
 
-  const usersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
-    [firestore, isAdmin]
-  );
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
   );
 
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const fullUserProfiles = useMemo<FullUserProfile[]>(() => {
-    if (!users) return [];
-
-    const membersMap = new Map(members?.map((member) => [member.userId, member]));
-
-    return users.map((user) => {
-      const memberData = membersMap.get(user.id) || {};
-      return {
-        ...user,
-        ...memberData,
-      };
-    }).sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
-  }, [users, members]);
+  const sortedMembers = useMemo<MemberProfile[]>(() => {
+    if (!membersData) return [];
+    return [...membersData].sort((a, b) =>
+      (a.lastName || '').localeCompare(b.lastName || '')
+    );
+  }, [membersData]);
 
 
-  const isLoading = isLoadingUsers || isLoadingMembers;
+  const isLoading = isLoadingMembers;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -91,9 +79,9 @@ function AdminMitgliederPageContent() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {fullUserProfiles.length > 0 ? (
-                        fullUserProfiles.map((profile) => (
-                            <TableRow key={profile.id}>
+                        {sortedMembers.length > 0 ? (
+                        sortedMembers.map((profile) => (
+                            <TableRow key={profile.userId}>
                             <TableCell className="font-medium">{`${profile.firstName || ''} ${profile.lastName || ''}`}</TableCell>
                             <TableCell>{profile.gender || 'N/A'}</TableCell>
                             <TableCell>{profile.position?.join(', ') || 'N/A'}</TableCell>
