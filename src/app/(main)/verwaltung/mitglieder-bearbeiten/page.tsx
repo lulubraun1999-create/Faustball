@@ -44,12 +44,12 @@ function AdminMitgliederPageContent() {
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
 
   const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
+    () => (firestore ? collection(firestore, 'members') : null),
+    [firestore]
   );
   const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
@@ -66,11 +66,10 @@ function AdminMitgliederPageContent() {
       const firstNameA = a.firstName || '';
       const firstNameB = b.firstName || '';
 
-      if (lastNameA < lastNameB) return -1;
-      if (lastNameA > lastNameB) return 1;
-      if (firstNameA < firstNameB) return -1;
-      if (firstNameA > firstNameB) return 1;
-      return 0;
+      if (lastNameA.localeCompare(lastNameB) !== 0) {
+        return lastNameA.localeCompare(lastNameB);
+      }
+      return firstNameA.localeCompare(firstNameB);
     });
   }, [membersData]);
 
