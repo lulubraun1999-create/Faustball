@@ -39,3 +39,22 @@ export interface Group {
   type: 'class' | 'team';
   parentId?: string;
 }
+
+export interface Poll {
+    id?: string;
+    title: string;
+    options: { id: string; text: string }[];
+    allowCustomAnswers: boolean;
+    isAnonymous: boolean;
+    endDate: any; // Firestore Timestamp
+    createdAt: any; // Firestore Timestamp
+    visibility: {
+        type: 'all' | 'specificTeams';
+        teamIds: string[];
+    };
+    votes: {
+        userId: string;
+        optionId: string;
+        customAnswer?: string;
+    }[];
+}

@@ -50,12 +50,14 @@ import {
     useCollection,
     useFirestore,
     useMemoFirebase,
+    errorEmitter, 
+    FirestorePermissionError
 } from '@/firebase';
-import type { Group } from '@/lib/types';
+import type { Group, Poll } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { collection } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import {
   CalendarIcon,
   Loader2,
@@ -68,6 +70,18 @@ import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const pollSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
@@ -87,6 +101,7 @@ type PollFormValues = z.infer<typeof pollSchema>;
 
 function AdminUmfragenPageContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
   const firestore = useFirestore();
 
   const groupsRef = useMemoFirebase(
@@ -94,6 +109,12 @@ function AdminUmfragenPageContent() {
     [firestore]
   );
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
+  const pollsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'polls') : null),
+    [firestore]
+  );
+  const { data: polls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
 
   const teams = useMemo(() => {
     return groupsData?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [];
@@ -104,7 +125,7 @@ function AdminUmfragenPageContent() {
     defaultValues: {
       title: '',
       options: [{ text: '' }, { text: '' }],
-      endDate: new Date(),
+      endDate: undefined,
       allowCustomAnswers: false,
       isAnonymous: false,
       visibilityType: 'all',
@@ -119,11 +140,61 @@ function AdminUmfragenPageContent() {
   
   const watchVisibilityType = form.watch('visibilityType');
 
-  const onSubmit = (data: PollFormValues) => {
-    console.log(data);
-    // TODO: Firestore logic
-    setIsDialogOpen(false);
+  const onSubmit = async (data: PollFormValues) => {
+    if (!firestore) return;
+    
+    const pollData = {
+        ...data,
+        endDate: Timestamp.fromDate(data.endDate),
+        createdAt: serverTimestamp(),
+        visibility: {
+            type: data.visibilityType,
+            teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [],
+        },
+        votes: [],
+        options: data.options.map((opt, index) => ({ id: `${index}`, text: opt.text }))
+    };
+
+    // Remove temporary form fields from final data
+    delete (pollData as any).visibilityType;
+    delete (pollData as any).visibleTeamIds;
+
+    try {
+        await addDoc(collection(firestore, 'polls'), pollData);
+        toast({ title: "Erfolg", description: "Die Umfrage wurde erfolgreich erstellt." });
+        form.reset();
+        setIsDialogOpen(false);
+    } catch (error) {
+         errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'polls',
+            operation: 'create',
+            requestResourceData: pollData,
+        }));
+    }
   };
+  
+  const handleDeletePoll = async (pollId: string) => {
+    if (!firestore) return;
+    try {
+        await deleteDoc(doc(firestore, 'polls', pollId));
+        toast({ title: "Erfolg", description: "Die Umfrage wurde gelöscht." });
+    } catch(e) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `polls/${pollId}`,
+            operation: 'delete',
+        }));
+    }
+  }
+  
+  const sortedPolls = useMemo(() => {
+    if (!polls) return [];
+    // Sort by end date, most recent first
+    return [...polls].sort((a, b) => {
+      const dateA = a.endDate as Timestamp;
+      const dateB = b.endDate as Timestamp;
+      return dateB.toMillis() - dateA.toMillis();
+    });
+  }, [polls]);
 
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
@@ -228,7 +299,7 @@ function AdminUmfragenPageContent() {
                               )}
                             >
                               {field.value ? (
-                                format(field.value, 'PPP')
+                                format(field.value, 'PPP', { timeZone: 'Europe/Berlin' })
                               ) : (
                                 <span>Datum auswählen</span>
                               )}
@@ -241,7 +312,11 @@ function AdminUmfragenPageContent() {
                             mode="single"
                             selected={field.value}
                             onSelect={field.onChange}
-                            disabled={(date) => date < new Date()}
+                            disabled={(date) => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0); // Set time to beginning of the day
+                                return date < today;
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -367,12 +442,12 @@ function AdminUmfragenPageContent() {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => {form.reset(); setIsDialogOpen(false)}}
                   >
                     Abbrechen
                   </Button>
-                  <Button type="submit">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin hidden" />
+                  <Button type="submit" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Umfrage speichern
                   </Button>
                 </DialogFooter>
@@ -387,6 +462,11 @@ function AdminUmfragenPageContent() {
           <CardTitle>Bestehende Umfragen</CardTitle>
         </CardHeader>
         <CardContent>
+           {isLoadingPolls ? (
+             <div className="flex justify-center p-12">
+                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+             </div>
+           ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -397,13 +477,55 @@ function AdminUmfragenPageContent() {
               </TableRow>
             </TableHeader>
             <TableBody>
+            {sortedPolls && sortedPolls.length > 0 ? (
+                sortedPolls.map((poll) => {
+                    const endDate = (poll.endDate as Timestamp).toDate();
+                    const isActive = endDate >= new Date();
+                    return (
+                        <TableRow key={poll.id}>
+                            <TableCell className="font-medium">{poll.title}</TableCell>
+                            <TableCell>{format(endDate, 'dd.MM.yyyy')}</TableCell>
+                            <TableCell>
+                                <span className={cn("px-2 py-1 rounded-full text-xs font-medium", isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")}>
+                                    {isActive ? 'Aktiv' : 'Abgelaufen'}
+                                </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Möchten Sie die Umfrage "{poll.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeletePoll(poll.id!)} className="bg-destructive hover:bg-destructive/90">
+                                            Löschen
+                                        </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </TableCell>
+                        </TableRow>
+                    )
+                })
+            ) : (
               <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center">
                   Noch keine Umfragen erstellt.
                 </TableCell>
               </TableRow>
+            )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </div>
