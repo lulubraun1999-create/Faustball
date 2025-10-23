@@ -30,10 +30,6 @@ import { cn } from '@/lib/utils';
 import {
   Users,
   Loader2,
-  Trash2,
-  Edit,
-  ChevronDown,
-  ChevronRight,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -53,6 +49,7 @@ import {
   query,
   where,
   writeBatch,
+  getDocs,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Group } from '@/lib/types';
@@ -99,17 +96,23 @@ export default function AdminGruppenBearbeitenPage() {
             setSelectedClass(null);
         }
     }
-  }, [groups, classes]);
+  }, [groups, classes, selectedClass]);
 
   const form = useForm<GroupManagementValues>({
     resolver: zodResolver(groupManagementSchema),
-    defaultValues: { action: 'add', type: 'class' },
+    defaultValues: {
+      action: 'add',
+      type: 'class',
+      name: '',
+      parentId: '',
+      deleteId: '',
+    },
   });
   const watchAction = form.watch('action');
   const watchType = form.watch('type');
 
   const onManagementSubmit = async (data: GroupManagementValues) => {
-    if (!firestore) return;
+    if (!firestore || !groupsRef) return;
 
     if (data.action === 'add') {
       if (!data.name || data.name.trim() === '') {
@@ -133,10 +136,9 @@ export default function AdminGruppenBearbeitenPage() {
       };
       
       try {
-        if (!groupsRef) throw new Error("Groups collection not found");
         await addDoc(groupsRef, newGroup);
         toast({ title: 'Gruppe erfolgreich erstellt.' });
-        form.reset({ action: 'add', type: 'class' });
+        form.reset({ action: 'add', type: 'class', name: '', parentId: '', deleteId: '' });
       } catch (error) {
         const permissionError = new FirestorePermissionError({
           path: 'groups',
@@ -172,7 +174,7 @@ export default function AdminGruppenBearbeitenPage() {
             await deleteDoc(docRef);
             toast({ title: 'Gruppe erfolgreich gelöscht.' });
         }
-        form.reset({ action: 'add', type: 'class' });
+        form.reset({ action: 'add', type: 'class', name: '', parentId: '', deleteId: '' });
       } catch (error) {
          const permissionError = new FirestorePermissionError({
           path: `groups/${data.deleteId}`,
@@ -188,7 +190,7 @@ export default function AdminGruppenBearbeitenPage() {
       return classes;
     }
     if (watchType === 'team' && form.watch('parentId')) {
-      return groups?.filter((g) => g.parentId === form.watch('parentId'));
+      return groups?.filter((g) => g.parentId === form.watch('parentId')) || [];
     }
     return [];
   };
@@ -392,7 +394,7 @@ export default function AdminGruppenBearbeitenPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Zu löschendes Element</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={watchType === 'team' && !form.watch('parentId')}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={watchType === 'team' && !form.watch('parentId')}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Element zum Löschen auswählen" />
