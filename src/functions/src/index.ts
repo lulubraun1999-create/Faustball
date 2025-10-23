@@ -42,3 +42,4 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('internal', error.message, error);
   }
 });
+
