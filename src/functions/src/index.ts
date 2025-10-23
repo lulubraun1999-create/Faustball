@@ -8,8 +8,11 @@ if (admin.apps.length === 0) {
 }
 
 export const setAdminRole = onCall(async (request) => {
-  // A user can make themselves an admin for the first time.
-  // This is a simplified approach for this app's context.
+  // A user can make themselves an admin. 
+  // In a real-world app, you'd want to secure this. For example:
+  // if (request.auth.token.admin !== true) {
+  //   throw new HttpsError('permission-denied', 'Only admins can set other admins.');
+  // }
   
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
@@ -21,10 +24,6 @@ export const setAdminRole = onCall(async (request) => {
   if (typeof targetUid !== 'string' || typeof role !== 'string' || role !== 'admin') {
     throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" and "role" argument.');
   }
-  
-  // For this app, any authenticated user can make themselves an admin.
-  // In a real production scenario, you would add a check here to ensure only existing admins can call this.
-  // For example: if (request.auth.token.admin !== true) { ... }
 
   try {
     // Set custom user claims on the target user
@@ -42,5 +41,4 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('internal', 'An internal error occurred while trying to set the admin role.', error.message);
   }
 });
-
     
