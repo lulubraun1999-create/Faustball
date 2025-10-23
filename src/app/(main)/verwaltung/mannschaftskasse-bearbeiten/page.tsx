@@ -66,6 +66,7 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
+  useUser,
 } from '@/firebase';
 import {
   collection,
@@ -111,6 +112,7 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
@@ -124,7 +126,7 @@ function AdminKassePageContent() {
   const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
 
-  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
   
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groupsData]);
@@ -445,3 +447,5 @@ export default function AdminKassePage() {
     </AdminGuard>
   );
 }
+
+    
