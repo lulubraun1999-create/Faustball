@@ -5,7 +5,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 // Define schemas as local constants, not exported.
-const summarizeInputSchema = z.string();
+const summarizeInputSchema = z.string().min(1, 'Input must not be empty.');
 const summarizeOutputSchema = z.string();
 
 export async function summarize(text: string): Promise<string> {

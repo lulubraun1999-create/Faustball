@@ -38,11 +38,11 @@ export default function NewsArticlePage() {
   const { data: article, isLoading } = useDoc<NewsArticle>(articleRef);
 
   const handleGenerateSummary = async () => {
-    if (!firestore || !article || !article.id || !article.content) {
+    if (!firestore || !article || !article.id || !article.content || article.content.trim() === '') {
         toast({
             variant: 'destructive',
             title: 'Fehler',
-            description: 'Der Artikel-Inhalt fehlt und kann nicht zusammengefasst werden.',
+            description: 'Der Artikel-Inhalt ist leer und kann nicht zusammengefasst werden.',
         });
         return;
     };
