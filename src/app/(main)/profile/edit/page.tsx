@@ -108,11 +108,10 @@ export default function ProfileEditPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const auth = useAuth();
-  const { user: authUser, userProfile, isUserLoading, isAdmin, forceRefresh } = useUser();
+  const { user: authUser, userProfile, isUserLoading } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
-  const [isSettingAdmin, setIsSettingAdmin] = useState(false);
 
   const memberDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
@@ -165,43 +164,6 @@ export default function ProfileEditPage() {
       });
     }
   }, [userProfile, member, profileForm]);
-
-  const handleSetAdmin = async () => {
-    if (!authUser) {
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht angemeldet.' });
-      return;
-    }
-    setIsSettingAdmin(true);
-
-    try {
-      const { firebaseApp } = initializeFirebase();
-      const functions = getFunctions(firebaseApp);
-      const setAdminRole = httpsCallable(functions, 'setAdminRole');
-
-      await setAdminRole({ uid: authUser.uid });
-      
-      toast({
-        title: 'Admin-Rolle wird zugewiesen',
-        description: 'Ihre Berechtigungen werden aktualisiert. Die Seite wird in Kürze neu geladen.',
-      });
-
-      // Force a refresh of the ID token to get the new custom claim
-      await forceRefresh?.();
-
-      // Reload the page to ensure all components get the new state
-      setTimeout(() => window.location.reload(), 3000);
-
-    } catch (error: any) {
-      console.error('Fehler beim Zuweisen der Admin-Rolle:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Fehler bei der Rollenzuweisung',
-        description: error.message || 'Die Admin-Rolle konnte nicht zugewiesen werden. Versuchen Sie es später erneut.',
-      });
-       setIsSettingAdmin(false);
-    }
-  };
-
 
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !authUser) return;
@@ -358,9 +320,6 @@ export default function ProfileEditPage() {
       </div>
     );
   }
-  
-  const isConsideredAdmin = isAdmin || userProfile?.role === 'admin';
-
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -532,24 +491,6 @@ export default function ProfileEditPage() {
               Logout
             </Button>
           </nav>
-
-          <div className="mt-8 rounded-lg border border-border p-4">
-             <h3 className="font-semibold">Admin Status</h3>
-             <p className="mt-2 text-sm text-muted-foreground">
-              {isConsideredAdmin ? "Sie haben bereits Administratorrechte." : "Klicken Sie hier, um sich selbst Administratorrechte zu geben."}
-             </p>
-             {!isConsideredAdmin && (
-                <Button
-                    variant="outline"
-                    className="mt-4 w-full"
-                    onClick={handleSetAdmin}
-                    disabled={isSettingAdmin}
-                >
-                    {isSettingAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Mich zum Admin machen
-                </Button>
-             )}
-          </div>
 
           <div className="mt-8 rounded-lg border border-destructive/50 p-4">
             <h3 className="font-semibold">Konto löschen</h3>
