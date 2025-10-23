@@ -2,182 +2,155 @@
  * @fileoverview Firestore Security Rules for the FaustApp application.
  *
  * Core Philosophy:
- * This ruleset implements a hybrid security model, balancing open read access for public content (e.g., appointments, groups, news) with strict owner-only or admin-only write access.
- * User data (profiles) are protected using an ownership model.
+ * This ruleset implements a hybrid security model, blending user-based access control with role-based access.
+ * Users have full control over their own profile data. Certain collections (appointments, groups, news)
+ * are publicly readable but only writable by administrative users. Treasury and Penalty data
+ * is locked down to admin users only.
  *
  * Data Structure:
- * - /users/{userId}: User authentication and profile data, accessible only by the user or admins.
- * - /members/{memberId}: Detailed, editable member profile data, accessible only by the user or admins.
- * - /appointments/{appointmentId}: Publicly readable appointments data, writable only by admins.
- * - /groups/{groupId}: Publicly readable groups (classes and teams) data, writable only by admins.
- * - /polls/{pollId}: Publicly readable polls data, writable only by admins.
- * - /news/{newsId}: Publicly readable news articles, writable only by admins.
- * - /treasury/{transactionId}: Treasury transaction data, writable only by admins.
- * - /penalties/{penaltyId}: Penalty rules, writable only by admins.
+ * - /users/{userId}: Stores core, mostly read-only user data.
+ * - /members/{memberId}: Stores editable profile data for team members.
+ * - /appointments/{appointmentId}: Stores appointment and events data.
+ * - /groups/{groupId}: Stores group information, including class and team details.
+ * - /polls/{pollId}: Stores information about polls and surveys.
+ * - /news/{newsId}: Stores news articles and announcements.
+ * - /treasury/{transactionId}: Stores financial transactions.
+ * - /penalties/{penaltyId}: Stores team penalty rules.
  *
  * Key Security Decisions:
- * - No user listing is allowed.
- * - Public read access is granted to appointments, groups, polls, and news.
- * - Admin role is not explicitly implemented in this version. All admin-only access is based on Firebase Auth.
+ * - User listing is disabled for privacy reasons.
+ * - Public read access is granted to certain collections (appointments, groups, news) to allow for broad data visibility.
+ * - The default security posture for ambiguous cases is "deny all".
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secure user accounts. Only the user themselves or an admin can read or write their data.
+     * @description Secures the core user data. Users can only read/write their own data, and admins have full access.
      * @path /users/{userId}
-     * @allow (create) User with ID 'test_user' can create their own account if request.auth.uid == 'test_user'.
-     * @allow (get) User with ID 'test_user' can read their own account if request.auth.uid == 'test_user'.
-     * @allow (update) User with ID 'test_user' can update their own account if request.auth.uid == 'test_user'.
-     * @allow (delete) User with ID 'test_user' can delete their own account if request.auth.uid == 'test_user'.
-     * @deny (create) User with ID 'test_user' cannot create an account with ID 'another_user'.
-     * @deny (get) User with ID 'test_user' cannot read account with ID 'another_user'.
-     * @deny (update) User with ID 'test_user' cannot update account with ID 'another_user'.
-     * @deny (delete) User with ID 'test_user' cannot delete account with ID 'another_user'.
-     * @principle Enforces user-ownership for accessing user profiles.
+     * @allow (create) - Authenticated user creates their own record with matching ID.
+     * @allow (get, update, delete) - Authenticated user with a matching ID.
+     * @deny (create) - Authenticated user attempts to create a record with a mismatched ID.
+     * @deny (list) - Listing all users is prohibited.
+     * @principle Enforces document ownership and prevents unauthorized data access.
      */
     match /users/{userId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+      function isSignedIn() {
+        return request.auth != null;
       }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
       allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId); //Enforce immutability of userId
-      allow delete: if isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Secure member profiles. Only the user themselves or an admin can read or write their profile.
+     * @description Secures editable member profile data. Accessible by admins or the owning user.
      * @path /members/{memberId}
-     * @allow (create) User with ID 'test_user' can create their own profile if request.auth.uid == 'test_user'.
-     * @allow (get) User with ID 'test_user' can read their own profile if request.auth.uid == 'test_user'.
-     * @allow (update) User with ID 'test_user' can update their own profile if request.auth.uid == 'test_user'.
-     * @allow (delete) User with ID 'test_user' can delete their own profile if request.auth.uid == 'test_user'.
-     * @deny (create) User with ID 'test_user' cannot create a profile with ID 'another_user'.
-     * @deny (get) User with ID 'test_user' cannot read profile with ID 'another_user'.
-     * @deny (update) User with ID 'test_user' cannot update profile with ID 'another_user'.
-     * @deny (delete) User with ID 'test_user' cannot delete profile with ID 'another_user'.
-     * @principle Enforces user-ownership for accessing member profiles.
+     * @allow (create) - Authenticated user creates their own record with matching ID.
+     * @allow (get, update, delete) - Authenticated user with a matching ID.
+     * @deny (create) - Authenticated user attempts to create a record with a mismatched ID.
+     * @deny (list) - Listing all members is prohibited.
+     * @principle Enforces document ownership and prevents unauthorized data access.
      */
     match /members/{memberId} {
-      function isOwnerByUserId(memberId) {
-        return request.auth != null && request.auth.uid == memberId;
+      function isSignedIn() {
+        return request.auth != null;
       }
-      allow get: if isOwnerByUserId(memberId); // List operation was failing - setting this to 'true'
-      allow list: if false; // Intentionally disabling listing for prototyping
-      allow create: if isOwnerByUserId(memberId); // TODO: Add admin/owner validation once the schema is updated with an ownership field.
-      allow update: if isOwnerByUserId(memberId); // TODO: Add admin/owner validation once the schema is updated with an ownership field.
-      allow delete: if isOwnerByUserId(memberId); // TODO: Add admin/owner validation once the schema is updated with an ownership field.
+
+      function isOwner(memberId) {
+          return request.auth.uid == get(resource.data, "userId");
+      }
+
+      function isExistingOwner(memberId) {
+        return isOwner(memberId) && resource != null;
+      }
+
+      allow get: if isSignedIn() && isOwner(memberId);
+      allow list: if false;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow update: if isSignedIn() && isOwner(memberId);
+      allow delete: if isSignedIn() && isOwner(memberId);
     }
 
     /**
-     * @description Allows read access to all appointments, but restricts write access to admins only.
+     * @description Stores all appointments. Writable only by admins, readable by all users.
      * @path /appointments/{appointmentId}
-     * @allow (get) Any user can read an appointment.
-     * @allow (list) Any user can list appointments.
-     * @deny (create) Non-admin user cannot create an appointment.
-     * @deny (update) Non-admin user cannot update an appointment.
-     * @deny (delete) Non-admin user cannot delete an appointment.
-     * @principle Public read, admin-only write for appointments.
+     * @allow (get, list) - All users can read appointments.
+     * @deny (create, update, delete) - Only admins should create, update, or delete appointments.
+     * @principle Public read access with admin-only writes.
      */
     match /appointments/{appointmentId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Allows read access to all groups, but restricts write access to admins only.
+     * @description Stores all groups (classes and teams). Writable only by admins, readable by all users.
      * @path /groups/{groupId}
-     * @allow (get) Any user can read a group.
-     * @allow (list) Any user can list groups.
-     * @deny (create) Non-admin user cannot create a group.
-     * @deny (update) Non-admin user cannot update a group.
-     * @deny (delete) Non-admin user cannot delete a group.
-     * @principle Public read, admin-only write for groups.
+     * @allow (get, list) - All users can read groups.
+     * @deny (create, update, delete) - Only admins should create, update, or delete groups.
+     * @principle Public read access with admin-only writes.
      */
     match /groups/{groupId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Allows read access to all polls, but restricts write access to admins only.
+     * @description Stores all polls. Writable only by admins, readable by designated users.
      * @path /polls/{pollId}
-     * @allow (get) Any user can read a poll.
-     * @allow (list) Any user can list polls.
-     * @deny (create) Non-admin user cannot create a poll.
-     * @deny (update) Non-admin user cannot update a poll.
-     * @deny (delete) Non-admin user cannot delete a poll.
-     * @principle Public read, admin-only write for polls.
+     * @allow (get, list) - All users can read polls.
+     * @deny (create, update, delete) - Only admins should create, update, or delete polls.
      */
     match /polls/{pollId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Allows read access to all news articles, but restricts write access to admins only.
+     * @description Stores all news articles. Writable only by admins, readable by all users.
      * @path /news/{newsId}
-     * @allow (get) Any user can read a news article.
-     * @allow (list) Any user can list news articles.
-     * @deny (create) Non-admin user cannot create a news article.
-     * @deny (update) Non-admin user cannot update a news article.
-     * @deny (delete) Non-admin user cannot delete a news article.
-     * @principle Public read, admin-only write for news articles.
+     * @allow (get, list) - All users can read news articles.
+     * @deny (create, update, delete) - Only admins should create, update, or delete news articles.
+     * @principle Public read access with admin-only writes.
      */
     match /news/{newsId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Restricts write access to treasury transactions to admins only.
+     * @description Stores all financial transactions for all teams. Writable only by admins.
      * @path /treasury/{transactionId}
-     * @deny (get) Non-admin user cannot get a treasury transaction.
-     * @deny (list) Non-admin user cannot list treasury transactions.
-     * @deny (create) Non-admin user cannot create a treasury transaction.
-     * @deny (update) Non-admin user cannot update a treasury transaction.
-     * @deny (delete) Non-admin user cannot delete a treasury transaction.
-     * @principle Admin-only write for treasury transactions.
+     * @deny (get, list, create, update, delete) - Only admins can access treasury transactions.
      */
     match /treasury/{transactionId} {
-      allow get: if false; // TODO: Add admin role check
-      allow list: if false; // TODO: Add admin role check
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list, create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Restricts write access to penalty rules to admins only.
+     * @description Stores the penalty catalog rules for all teams. Writable only by admins.
      * @path /penalties/{penaltyId}
-     * @deny (get) Non-admin user cannot get a penalty rule.
-     * @deny (list) Non-admin user cannot list penalty rules.
-     * @deny (create) Non-admin user cannot create a penalty rule.
-     * @deny (update) Non-admin user cannot update a penalty rule.
-     * @deny (delete) Non-admin user cannot delete a penalty rule.
-     * @principle Admin-only write for penalty rules.
+     * @deny (get, list, create, update, delete) - Only admins can access penalty rules.
      */
     match /penalties/{penaltyId} {
-      allow get: if false; // TODO: Add admin role check
-      allow list: if false; // TODO: Add admin role check
-      allow create: if false; // TODO: Add admin role check
-      allow update: if false; // TODO: Add admin role check
-      allow delete: if false; // TODO: Add admin role check
+      allow get, list, create, update, delete: if isAdmin();
+    }
+    
+    function isAdmin() {
+        return request.auth.token.email == 'admin@example.com'; // Replace with your admin check
     }
   }
 }
