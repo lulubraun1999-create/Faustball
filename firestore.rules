@@ -2,94 +2,83 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for both user authentication data and editable member profile data.
- * Only the authenticated user or an admin can access their own data.  Data validation is relaxed during this rapid prototyping phase.
+ * This ruleset enforces a strict user-ownership model for both user authentication data and editable profile information. Users can only read and write their own data, and administrators have no special privileges in this version.
  *
  * Data Structure:
- * - `/users/{userId}`: Stores core user data. The `userId` in the path MUST match the `id` field in the document.
- * - `/members/{memberId}`: Stores editable member profile data. The `userId` field within the document links to the corresponding `/users/{userId}` document.
+ * - /users/{userId}: Stores core, mostly read-only user data.
+ * - /members/{memberId}: Stores editable profile information for each user.
  *
  * Key Security Decisions:
- * - User listing is disallowed for both `/users` and `/members` collections to protect privacy.
- * - Ownership is enforced using the `userId` field in both the path and the documents.
- * - No role-based access control is currently implemented beyond simple ownership.
+ * - No user listing: Listing all users is explicitly denied to prevent information leakage.
+ * - Owner-only access: Only the authenticated user can read or write data under their respective /users/{userId} and /members/{memberId} paths.
+ *
+ * Denormalization for Authorization:
+ * To simplify authorization checks and improve performance, the 'userId' field within the /members/{memberId} document is used to directly enforce ownership. This avoids the need for costly `get()` operations to a separate /users/{userId} document.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-level access control for core user data.
+     * @description Secure core user authentication data.
      * @path /users/{userId}
-     * @allow (create) - User with matching UID can create their own record.
-     * @allow (get, update, delete) - User with matching UID can access their own record.
-     * @deny (create, get, update, delete) - Any other user cannot access this record.
-     * @principle Enforces document ownership for writes.
+     * @allow (get) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can read their own profile data.
+     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own profile data.
+     * @allow (update) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can update their own profile data.
+     * @allow (delete) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can delete their own profile data.
+     * @deny (get) User 'attackerId' cannot read User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' data.
+     * @deny (create) User 'attackerId' cannot create User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' data.
+     * @deny (update) User 'attackerId' cannot update User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' data.
+     * @deny (delete) User 'attackerId' cannot delete User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' data.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      // Allow the user to create their own record if the userId matches their auth.uid
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-
-      // Allow the user to read their own record if the userId matches their auth.uid
-      allow get: if isSignedIn() && isOwner(userId);
-
-      // Allow the user to update their own record if the userId matches their auth.uid and the document exists
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-
-      // Allow the user to delete their own record if the userId matches their auth.uid and the document exists
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-
-      // Prevent anyone from listing all users
+      allow get: if isOwner(userId);
       allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && resource.data.id == userId;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-level access control for editable member profile data.
+     * @description Secure editable user profile data.
      * @path /members/{memberId}
-     * @allow (create) - User with matching UID in userId field can create their own record.
-     * @allow (get, update, delete) - User with matching UID in userId field can access their own record.
-     * @deny (create, get, update, delete) - Any other user cannot access this record.
-     * @principle Enforces document ownership for writes.
+     * @allow (get) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can read their own member data.
+     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own member data.
+     * @allow (update) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can update their own member data.
+     * @allow (delete) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can delete their own member data.
+     * @deny (get) User 'attackerId' cannot read User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' member data.
+     * @deny (create) User 'attackerId' cannot create User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' member data.
+     * @deny (update) User 'attackerId' cannot update User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' member data.
+     * @deny (delete) User 'attackerId' cannot delete User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' member data.
+     * @principle Enforces document ownership for all operations.
      */
     match /members/{memberId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      // Allow the user to create their own record if the userId matches their auth.uid
-      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-
-      // Allow the user to read their own record if the userId matches their auth.uid
-      allow get: if isSignedIn() && isOwner(resource.data.userId);
-
-      // Allow the user to update their own record if the userId matches their auth.uid and the document exists
-      allow update: if isSignedIn() && isExistingOwner(resource.data.userId);
-
-      // Allow the user to delete their own record if the userId matches their auth.uid and the document exists
-      allow delete: if isSignedIn() && isExistingOwner(resource.data.userId);
-
-      // Prevent anyone from listing all members
+      allow get: if isMember(memberId);
       allow list: if false;
+      allow create: if isMember(memberId) && request.resource.data.userId == request.auth.uid;
+      allow update: if isExistingMember(memberId) && resource.data.userId == request.auth.uid;
+      allow delete: if isExistingMember(memberId);
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isMember(memberId) {
+        return isSignedIn() && request.auth.uid == memberId;
+    }
+
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+    
+    function isExistingMember(memberId) {
+      return isMember(memberId) && resource != null;
     }
   }
 }
