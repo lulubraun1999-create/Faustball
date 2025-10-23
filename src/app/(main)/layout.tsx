@@ -51,7 +51,7 @@ export default function MainAppLayout({
           let writeNeeded = false;
 
           // Self-healing: If the user exists but the member document is missing, create it.
-          // This fixes accounts created with the old, faulty registration logic.
+          // This is the definitive fix for accounts created with faulty registration logic.
           if (!memberDocSnap.exists()) {
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
