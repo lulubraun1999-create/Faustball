@@ -176,10 +176,6 @@
           "type": "boolean",
           "description": "Whether users can add their own answers."
         },
-        "isAnonymous": {
-          "type": "boolean",
-          "description": "Whether the votes are anonymous."
-        },
         "endDate": {
           "type": "string",
           "description": "The date and time when the poll closes.",

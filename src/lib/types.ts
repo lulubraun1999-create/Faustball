@@ -45,7 +45,6 @@ export interface Poll {
     title: string;
     options: { id: string; text: string }[];
     allowCustomAnswers: boolean;
-    isAnonymous: boolean;
     endDate: any; // Firestore Timestamp
     createdAt: any; // Firestore Timestamp
     visibility: {

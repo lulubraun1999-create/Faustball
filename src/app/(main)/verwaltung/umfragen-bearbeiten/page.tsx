@@ -92,7 +92,6 @@ const pollSchema = z.object({
     required_error: 'Ein Enddatum ist erforderlich.',
   }),
   allowCustomAnswers: z.boolean().default(false),
-  isAnonymous: z.boolean().default(false),
   visibilityType: z.enum(['all', 'specificTeams']).default('all'),
   visibleTeamIds: z.array(z.string()).default([]),
 });
@@ -127,7 +126,6 @@ function AdminUmfragenPageContent() {
       options: [{ text: '' }, { text: '' }],
       endDate: undefined,
       allowCustomAnswers: false,
-      isAnonymous: false,
       visibilityType: 'all',
       visibleTeamIds: [],
     },
@@ -338,26 +336,6 @@ function AdminUmfragenPageContent() {
                           <FormLabel>Eigene Antworten erlauben</FormLabel>
                           <FormDescription>
                             Benutzer können eigene Antwortoptionen hinzufügen.
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="isAnonymous"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                        <div className="space-y-0.5">
-                          <FormLabel>Anonyme Umfrage</FormLabel>
-                          <FormDescription>
-                            Die Stimmen der Benutzer werden nicht angezeigt.
                           </FormDescription>
                         </div>
                         <FormControl>
