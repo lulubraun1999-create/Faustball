@@ -36,8 +36,9 @@ export const setAdminRole = onCall(async (request) => {
     return {
       message: `Success! User ${uid} has been made an ${role}.`,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error setting custom claims and Firestore role:', error);
-    throw new HttpsError('internal', 'An internal error occurred while setting the user role.', error);
+    // Return a more detailed error to the client for better debugging
+    throw new HttpsError('internal', error.message, error);
   }
 });

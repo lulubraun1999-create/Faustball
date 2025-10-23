@@ -185,7 +185,12 @@ export default function ProfileEditPage() {
           description: "Ihre Berechtigungen wurden aktualisiert." 
         });
     } catch (error: any) {
-        toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });
+        console.error("Detaillierter Fehler:", error);
+        toast({ 
+            variant: "destructive", 
+            title: "Fehler beim Zuweisen der Admin-Rolle", 
+            description: error.message || "Ein unbekannter Fehler ist aufgetreten." 
+        });
     } finally {
         setIsSettingAdmin(false);
     }
@@ -693,7 +698,7 @@ export default function ProfileEditPage() {
                             divers (Damenteam)
                           </SelectItem>
                           <SelectItem value="divers (Herrenteam)">
-                            divers (Herrenteam)
+                            divers (herrenteam)
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -752,3 +757,5 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
