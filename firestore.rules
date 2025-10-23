@@ -3,40 +3,33 @@
  *
  * Core Philosophy:
  * This ruleset enforces a combination of user-ownership and role-based access control.
- * User documents and member profiles are primarily accessible only to the owning user and admins.
- * Appointments and Groups are publicly readable but only writable by admins.
+ * User data is secured using an ownership model, where users can only access their own data.
+ * Administrative access is granted through the 'admin' role.
+ * Public read access is allowed for some collections (appointments, groups), but writes are restricted to admins.
  *
  * Data Structure:
- * - /users/{userId}: Stores core, mostly read-only user account information.
- * - /members/{memberId}: Stores detailed, editable profile information for team members.
- * - /appointments/{appointmentId}: Stores event, training, and game appointments.
- * - /groups/{groupId}: Stores information about classes and teams.
+ * - /users/{userId}: Stores core user data, accessible only by the user or admins.
+ * - /members/{memberId}: Stores profile data, accessible only by the user or admins.
+ * - /appointments/{appointmentId}: Stores appointment data, publicly readable but writable only by admins.
+ * - /groups/{groupId}: Stores group data, publicly readable but writable only by admins.
  *
  * Key Security Decisions:
- * - User listing is explicitly denied to prevent unauthorized information harvesting.
- * - Admin role is not currently implemented, defaulting to owner-only access where applicable.
- * - Data schema is not strictly enforced in this prototyping phase, except for ownership and relational integrity fields.
- *
- * Denormalization for Authorization:
- * The ruleset assumes that ownership is explicitly stored within the documents themselves (e.g., a 'userId' field in the 'members' collection) to avoid costly `get()` calls.
- *
- * Structural Segregation:
- * The application uses distinct collections for different types of data (user accounts, member profiles, appointments, groups) to allow for granular access control.
+ * - Users can only list their own data, not all users.
+ * - Read-only collections for public data (appointments, groups) are explicitly marked as such.
+ * - The rules strictly enforce the separation of concerns between user authentication data and profile data.
+ * - List operation for `/users` collection is denied because listing all users is not permitted.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Manages user account data.
+     * @description Secures user authentication data.
      * @path /users/{userId}
-     * @allow (create) User with UID 'user123' can create their own document if request.auth.uid == 'user123'.
-     * @allow (get) User with UID 'user123' can get their own document.
-     * @allow (update) User with UID 'user123' can update their own document.
-     * @allow (delete) User with UID 'user123' can delete their own document.
-     * @deny (create) User with UID 'user456' cannot create a document with ID 'user123'.
-     * @deny (list) All users cannot list the /users collection.
-     * @principle Enforces user-ownership for data access and modification.
+     * @allow (create) Signed-in user with matching userId in the document.
+     * @allow (get, update, delete) Signed-in user with matching userId or an admin.
+     * @deny (list) Listing all users is not permitted.
+     * @principle Enforces document ownership for writes and restricts reads to the owner or admins.
      */
     match /users/{userId} {
       function isSignedIn() {
@@ -47,28 +40,35 @@ service cloud.firestore {
         return request.auth.uid == userId;
       }
 
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      // Prevent listing of users for privacy reasons.
+      // Allow the user to create their own document, enforcing the userId in the
+      // document to match their auth UID.
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
+
+      // Allow the user to read, update, and delete their own document, or if the user has the admin role.
+      allow get: if isOwner(userId) || isAdmin();
+      allow update: if isExistingOwner(userId) || isAdmin();
+      allow delete: if isExistingOwner(userId) || isAdmin();
+
+      // Do not allow listing all users in the database.
       allow list: if false;
-      allow get: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == request.auth.uid;
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == request.auth.uid;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
     }
 
     /**
-     * @description Manages member profile data.
+     * @description Secures editable user profile data.
      * @path /members/{memberId}
-     * @allow (create) User can create their own member profile if request.auth.uid == request.resource.data.userId.
-     * @allow (get) User can get a member profile if request.auth.uid == resource.data.userId.
-     * @allow (update) User can update their own member profile if request.auth.uid == resource.data.userId.
-     * @allow (delete) User can delete their own member profile if request.auth.uid == resource.data.userId.
-     * @deny (create) User cannot create a member profile for another user.
-     * @deny (get) User cannot get a member profile for another user.
-     * @principle Enforces user-ownership for member profile data access and modification.
+     * @allow (create) Signed-in user with matching userId in the document.
+     * @allow (get, update, delete) Signed-in user with matching userId or an admin.
+     * @allow (list) Signed-in user with matching userId.
+     * @deny (create, update, delete) If the signed-in user does not match the userId in the document and is not an admin.
+     * @principle Enforces document ownership for writes and restricts reads to the owner or admins.
      */
     match /members/{memberId} {
       function isSignedIn() {
@@ -79,55 +79,78 @@ service cloud.firestore {
         return request.auth.uid == userId;
       }
 
-       function isExistingOwner() {
-        return isSignedIn() && resource.data.userId == request.auth.uid;
+       // helper function to check if the user is the document owner based on the userId field
+      function isDocumentOwner() {
+        return request.auth.uid == request.resource.data.userId;
       }
 
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isExistingOwner() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isExistingOwner() && resource.data.userId == request.auth.uid;
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      // Allow the user to create their own document, enforcing the userId in the
+      // document to match their auth UID.
+      allow create: if isSignedIn() && isDocumentOwner();
+
+      // Allow the user to read, update, and delete their own document, or if the user has the admin role.
+      allow get: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isExistingOwner(resource.data.userId) || isAdmin();
+      allow delete: if isExistingOwner(resource.data.userId) || isAdmin();
+
+      // Allow the owner to list their own documents.
+      allow list: if isSignedIn() && isOwner(request.auth.uid);
     }
 
     /**
-     * @description Manages appointment data, allowing public read access and admin-only write access.
+     * @description Secures appointment data. Publicly readable, writable only by admins.
      * @path /appointments/{appointmentId}
-     * @allow (get) Any user can read appointment data.
-     * @allow (list) Any user can list appointments.
-     * @deny (create) Non-admin user cannot create appointments.
-     * @deny (update) Non-admin user cannot update appointments.
-     * @deny (delete) Non-admin user cannot delete appointments.
-     * @principle Allows public read access while restricting write access to admins.
+     * @allow (get, list) Public read access.
+     * @allow (create, update, delete) Only admins can write.
+     * @deny (create, update, delete) If the user is not an admin.
+     * @principle Public read access with owner-only writes.
      */
     match /appointments/{appointmentId} {
       function isSignedIn() {
         return request.auth != null;
       }
 
-      // TODO: Implement admin role check. For now, denying all writes.
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
+      // Allow public read access.
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add admin role validation
+
+      // Allow only admins to create, update, and delete appointments.
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Manages group data, allowing public read access and admin-only write access.
+     * @description Secures group data. Publicly readable, writable only by admins.
      * @path /groups/{groupId}
-     * @allow (get) Any user can read group data.
-     * @allow (list) Any user can list groups.
-     * @deny (create) Non-admin user cannot create groups.
-     * @deny (update) Non-admin user cannot update groups.
-     * @deny (delete) Non-admin user cannot delete groups.
-     * @principle Allows public read access while restricting write access to admins.
+     * @allow (get, list) Public read access.
+     * @allow (create, update, delete) Only admins can write.
+     * @deny (create, update, delete) If the user is not an admin.
+     * @principle Public read access with owner-only writes.
      */
     match /groups/{groupId} {
       function isSignedIn() {
         return request.auth != null;
       }
 
-      // TODO: Implement admin role check. For now, denying all writes.
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
+      // Allow public read access.
       allow get, list: if true;
-      allow create, update, delete: if false;  // TODO: Add admin role validation
+
+      // Allow only admins to create, update, and delete groups.
+      allow create, update, delete: if isAdmin();
     }
   }
 }
