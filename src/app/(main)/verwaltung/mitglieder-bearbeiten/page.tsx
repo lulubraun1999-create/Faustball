@@ -5,6 +5,7 @@ import {
   useFirestore,
   useCollection,
   useMemoFirebase,
+  useUser,
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { UserProfile, MemberProfile, FullUserProfile } from '@/lib/types';
@@ -29,14 +30,15 @@ import { AdminGuard } from '@/components/admin-guard';
 
 function AdminMitgliederPageContent() {
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
 
   const usersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
+    [firestore, isAdmin]
   );
   const membersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
   );
 
   const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
