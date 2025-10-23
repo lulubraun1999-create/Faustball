@@ -32,9 +32,8 @@ import {
   errorEmitter,
   FirestorePermissionError,
   initializeFirebase,
-  useCollection,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -44,7 +43,7 @@ import {
   EmailAuthProvider,
 } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, UserProfile } from '@/lib/types';
+import type { MemberProfile } from '@/lib/types';
 import { Loader2, ShieldQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -113,11 +112,9 @@ export default function ProfileEditPage() {
   const [isMakingAdmin, setIsMakingAdmin] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [noAdminExists, setNoAdminExists] = useState(false);
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
 
-  const usersCollectionRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
-  const { data: allUsers, isLoading: isLoadingAllUsers } = useCollection<UserProfile>(usersCollectionRef);
-
-  const noAdminExists = !isLoadingAllUsers && allUsers?.every(u => u.role !== 'admin');
 
   const memberDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
@@ -126,6 +123,30 @@ export default function ProfileEditPage() {
 
   const { data: member, isLoading: isMemberDocLoading } =
     useDoc<MemberProfile>(memberDocRef);
+    
+  useEffect(() => {
+    if (isUserLoading) return; // Wait until user auth state is resolved
+
+    const checkAdminExistence = async () => {
+      setIsCheckingAdmin(true);
+      try {
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+        const anyAdminExistsFn = httpsCallable(functions, 'anyAdminExists');
+        const result = await anyAdminExistsFn();
+        setNoAdminExists(!(result.data as { isAdminPresent: boolean }).isAdminPresent);
+      } catch (error) {
+        console.error("Error checking for admin existence:", error);
+        // Assume an admin exists to be on the safe side, hiding the button.
+        setNoAdminExists(false); 
+      } finally {
+        setIsCheckingAdmin(false);
+      }
+    };
+
+    checkAdminExistence();
+  }, [isUserLoading]);
+
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -347,7 +368,7 @@ export default function ProfileEditPage() {
     }
   };
 
-  const isLoading = isUserLoading || isMemberDocLoading || isLoadingAllUsers;
+  const isLoading = isUserLoading || isMemberDocLoading || isCheckingAdmin;
 
   if (isLoading) {
     return (
@@ -757,5 +778,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    

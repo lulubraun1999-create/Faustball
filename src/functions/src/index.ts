@@ -9,12 +9,19 @@ if (admin.apps.length === 0) {
 
 /**
  * Checks if any admin users exist in the system by checking Firestore.
- * @returns {Promise<boolean>} True if at least one admin exists, false otherwise.
+ * This is a callable function that any authenticated user can hit to check
+ * if the initial admin setup needs to be performed.
+ * @returns {Promise<{isAdminPresent: boolean}>} True if at least one admin exists, false otherwise.
  */
-async function anyAdminExists(): Promise<boolean> {
+export const anyAdminExists = onCall(async (request) => {
+    // This function should be callable by any authenticated user.
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
     const userQuerySnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
-    return !userQuerySnapshot.empty;
-}
+    return { isAdminPresent: !userQuerySnapshot.empty };
+});
+
 
 /**
  * Sets a user's role to 'admin'.
@@ -22,7 +29,7 @@ async function anyAdminExists(): Promise<boolean> {
  * 1. Initial Bootstrap: If NO admin exists in the system, any authenticated user can call this
  *    function to make themselves the first admin.
  * 2. Admin-only Promotion: If at least one admin already exists, only another admin can call
- *    this function to promote other users (this part is handled by the security check).
+ *    this function to promote other users.
  */
 export const setAdminRole = onCall(async (request) => {
   // 1. Check for authentication
@@ -32,13 +39,14 @@ export const setAdminRole = onCall(async (request) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid; // UID might be passed to make another user an admin
+  const targetUid = request.data?.uid; 
 
   // 2. Determine which user to make admin
   const uidToPromote = targetUid || callerUid;
   
   // 3. Authorization Logic
-  const adminsExist = await anyAdminExists();
+  const adminSnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
+  const adminsExist = !adminSnapshot.empty;
 
   // Allow if:
   // - The caller is already an admin (and can promote themselves or others).
@@ -116,6 +124,3 @@ export const revokeAdminRole = onCall(async (request) => {
     throw new HttpsError('internal', 'An internal error occurred while trying to revoke the admin role.', error.message);
   }
 });
-
-
-    
