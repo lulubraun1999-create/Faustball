@@ -9,7 +9,6 @@ if (admin.apps.length === 0) {
 
 /**
  * Sets a user's role to 'admin' by adding a custom claim and updating Firestore.
- * This function is the single source of truth for promoting a user to an admin.
  * Any authenticated user can call this to make themselves an admin for demo purposes.
  */
 export const setAdminRole = onCall(async (request) => {
@@ -24,20 +23,16 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
   }
   
-  // For this application, any authenticated user can make themselves an admin.
   // In a real-world scenario, you would add a check here to ensure the CALLER is already an admin.
-  // For example:
   // if (request.auth.token.admin !== true) {
   //   throw new HttpsError('permission-denied', 'Only an admin can set other users as admins.');
   // }
   
   try {
     // 3. Set the custom claim on the user's auth token.
-    // This is the source of truth for secure access via Firestore Security Rules.
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
     
     // 4. Update the user's document in Firestore for UI consistency.
-    // This makes the UI update faster without waiting for a token refresh.
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
     await userDocRef.set({ role: 'admin' }, { merge: true });
 
@@ -48,8 +43,40 @@ export const setAdminRole = onCall(async (request) => {
     };
   } catch (error: any) {
     console.error(`Error setting admin role for UID: ${targetUid}`, error);
-    // Throw a detailed error for easier debugging on the client-side.
     throw new HttpsError('internal', 'An internal error occurred while trying to set the admin role.', error.message);
   }
 });
+
+/**
+ * Revokes a user's 'admin' role by removing the custom claim and updating Firestore.
+ */
+export const revokeAdminRole = onCall(async (request) => {
+  // 1. Check for authentication and admin privileges of the caller
+  if (request.auth?.token.admin !== true) {
+    throw new HttpsError('permission-denied', 'Only an admin can revoke admin roles.');
+  }
+
+  // 2. Validate input data
+  const targetUid = request.data.uid;
+  if (typeof targetUid !== 'string') {
+    throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+  }
+
+  try {
+    // 3. Remove the custom claim by setting it to null or an empty object.
+    await admin.auth().setCustomUserClaims(targetUid, { admin: null });
     
+    // 4. Update the user's document in Firestore to 'user'.
+    const userDocRef = admin.firestore().collection('users').doc(targetUid);
+    await userDocRef.set({ role: 'user' }, { merge: true });
+
+    console.log(`Successfully revoked admin role for user ${targetUid}.`);
+    return {
+      status: 'success',
+      message: `Success! User ${targetUid}'s admin role has been revoked.`,
+    };
+  } catch (error: any) {
+    console.error(`Error revoking admin role for UID: ${targetUid}`, error);
+    throw new HttpsError('internal', 'An internal error occurred while trying to revoke the admin role.', error.message);
+  }
+});

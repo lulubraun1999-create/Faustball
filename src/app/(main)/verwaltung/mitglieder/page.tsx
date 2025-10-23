@@ -7,7 +7,7 @@ import {
   useMemoFirebase,
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -32,19 +32,40 @@ export default function VerwaltungMitgliederPage() {
     () => (firestore ? collection(firestore, 'members') : null),
     [firestore]
   );
+  const usersRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'users') : null),
+    [firestore]
+  );
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
     [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const sortedMembers = useMemo(() => {
-    if (!membersData) return [];
-    return [...membersData].sort((a, b) => 
-        (a.lastName || '').localeCompare(b.lastName || ''))
-  }, [membersData]);
+
+  const combinedUsers = useMemo(() => {
+    if (!membersData || !usersData) return [];
+    
+    const usersMap = new Map(usersData.map(u => [u.id, u]));
+
+    return membersData.map(member => {
+        const user = usersMap.get(member.userId);
+        return {
+            ...member,
+            role: user?.role || 'user',
+        };
+    }).sort((a, b) => {
+      const lastNameA = a.lastName || '';
+      const lastNameB = b.lastName || '';
+      if (lastNameA.localeCompare(lastNameB) !== 0) {
+        return lastNameA.localeCompare(lastNameB);
+      }
+      return (a.firstName || '').localeCompare(b.firstName || '');
+    });
+  }, [membersData, usersData]);
 
   const teamsMap = useMemo(() => {
     if (!groupsData) return new Map();
@@ -57,7 +78,7 @@ export default function VerwaltungMitgliederPage() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -81,6 +102,7 @@ export default function VerwaltungMitgliederPage() {
                     <TableHead>Mannschaft</TableHead>
                     <TableHead>Vorname</TableHead>
                     <TableHead>Nachname</TableHead>
+                    <TableHead>Rolle</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Geschlecht</TableHead>
                     <TableHead>Geburtstag</TableHead>
@@ -90,12 +112,13 @@ export default function VerwaltungMitgliederPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedMembers.length > 0 ? (
-                    sortedMembers.map((member) => (
+                  {combinedUsers.length > 0 ? (
+                    combinedUsers.map((member) => (
                       <TableRow key={member.userId}>
                         <TableCell>{getTeamNames(member.teams)}</TableCell>
                         <TableCell>{member.firstName || 'N/A'}</TableCell>
                         <TableCell>{member.lastName || 'N/A'}</TableCell>
+                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
                         <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
                         <TableCell>{member.gender || 'N/A'}</TableCell>
                         <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : 'N/A'}</TableCell>
@@ -106,7 +129,7 @@ export default function VerwaltungMitgliederPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center">
+                      <TableCell colSpan={10} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>

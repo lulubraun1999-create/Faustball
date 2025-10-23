@@ -9,8 +9,10 @@ import {
   FirestorePermissionError,
   useUser,
 } from '@/firebase';
-import { collection, doc, setDoc } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
+import { collection, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { initializeFirebase } from '@/firebase';
+import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -30,22 +32,51 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Edit, ChevronsUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
 import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
-
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
+  const { forceRefresh } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
+  const [memberToEdit, setMemberToEdit] = useState<MemberProfile | null>(null);
+  const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
   const membersRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'members') : null),
+    [firestore]
+  );
+  const usersRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'users') : null),
     [firestore]
   );
   const groupsRef = useMemoFirebase(
@@ -54,22 +85,42 @@ function AdminMitgliederPageContent() {
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
+  const combinedUsers = useMemo(() => {
+    if (!membersData || !usersData) return [];
+    
+    const usersMap = new Map(usersData.map(u => [u.id, u]));
 
-  const sortedMembers = useMemo(() => {
-    if (!membersData) return [];
-    return [...membersData].sort((a, b) => {
-      const lastNameA = a.lastName || '';
-      const lastNameB = b.lastName || '';
-      if (lastNameA.localeCompare(lastNameB) !== 0) {
-        return lastNameA.localeCompare(lastNameB);
-      }
-      return (a.firstName || '').localeCompare(b.firstName || '');
+    return membersData.map(member => {
+        const user = usersMap.get(member.userId);
+        return {
+            ...member,
+            role: user?.role || 'user',
+        };
+    }).sort((a, b) => {
+        const lastNameA = a.lastName || '';
+        const lastNameB = b.lastName || '';
+        if (lastNameA.localeCompare(lastNameB) !== 0) {
+            return lastNameA.localeCompare(lastNameB);
+        }
+        return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData]);
+  }, [membersData, usersData]);
 
-  const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
+  const { classes, teams, groupedTeams } = useMemo(() => {
+    const allGroups = groupsData || [];
+    const classes = allGroups.filter(g => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name));
+    const teams = allGroups.filter(g => g.type === 'team');
+
+    const grouped = classes.map(c => ({
+        ...c,
+        teams: teams.filter(t => t.parentId === c.id).sort((a, b) => a.name.localeCompare(b.name)),
+    })).filter(c => c.teams.length > 0);
+
+    return { classes, teams, groupedTeams: grouped };
+  }, [groupsData]);
 
   const handleTeamsChange = async (userId: string, newTeams: string[]) => {
     if (!firestore) return;
@@ -91,23 +142,80 @@ function AdminMitgliederPageContent() {
     }
   };
 
-  const getTeamNamesForEdit = (teamIds?: string[]) => {
-    if (!teamIds || teamIds.length === 0) return 'Mannschaft auswählen';
-    if (!teams) return 'Laden...';
-    return teamIds
-      .map(id => teams.find(t => t.id === id)?.name)
-      .filter(Boolean)
-      .join(', ');
-  };
+  const handleRoleChange = async () => {
+    if (!memberToEdit || !newRole) return;
 
-    const getTeamNamesForDisplay = (teamIds?: string[]) => {
+    const { userId } = memberToEdit;
+    setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
+    try {
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+
+        if (newRole === 'admin') {
+            const setAdminRole = httpsCallable(functions, 'setAdminRole');
+            await setAdminRole({ uid: userId });
+        } else { // newRole === 'user'
+            const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
+            await revokeAdminRole({ uid: userId });
+        }
+        
+        await forceRefresh?.(); // Refresh token to get new claims
+
+        toast({
+            title: 'Rolle aktualisiert',
+            description: `Die Rolle von ${memberToEdit.firstName} wurde zu ${newRole === 'admin' ? 'Trainer' : 'Spieler'} geändert.`,
+        });
+    } catch (error: any) {
+        console.error("Fehler beim Ändern der Rolle:", error);
+        toast({ variant: 'destructive', title: 'Fehler', description: error.message || 'Die Rolle konnte nicht geändert werden.' });
+    } finally {
+        setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
+        setMemberToEdit(null);
+        setNewRole(null);
+    }
+  }
+
+  const handleDeleteMember = async (member: MemberProfile) => {
+    if(!firestore) return;
+    const { userId, firstName, lastName } = member;
+    setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: true }));
+
+    try {
+        const batch = writeBatch(firestore);
+        const memberDocRef = doc(firestore, 'members', userId);
+        const userDocRef = doc(firestore, 'users', userId);
+
+        batch.delete(memberDocRef);
+        batch.delete(userDocRef);
+
+        await batch.commit();
+        toast({
+            title: 'Mitglied gelöscht',
+            description: `Das Profil für ${firstName} ${lastName} wurde entfernt.`,
+        });
+    } catch (error: any) {
+         console.error("Fehler beim Löschen des Mitglieds:", error);
+        // We can't be sure which delete failed, so we emit a generic one for the collection
+        const permissionError = new FirestorePermissionError({
+          path: `members/${userId}`, // or users/
+          operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({ variant: 'destructive', title: 'Fehler', description: 'Das Mitglied konnte nicht gelöscht werden.' });
+    } finally {
+        setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: false }));
+    }
+  }
+
+
+  const getTeamNamesForDisplay = (teamIds?: string[]) => {
     if (!teamIds || teamIds.length === 0) return 'N/A';
-     if (!teams) return 'Laden...';
+    if (!teams) return 'Laden...';
     return teamIds.map(id => teams.find(t => t.id === id)?.name || id).join(', ');
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -128,83 +236,133 @@ function AdminMitgliederPageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mannschaft</TableHead>
-                    <TableHead>Vorname</TableHead>
-                    <TableHead>Nachname</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Geschlecht</TableHead>
-                    <TableHead>Geburtstag</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Mannschaften</TableHead>
+                    <TableHead>Rolle</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Telefon</TableHead>
-                    <TableHead>Wohnort</TableHead>
-                    <TableHead className="text-right">Aktion</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedMembers.length > 0 ? (
-                    sortedMembers.map((member) => (
+                  {combinedUsers.length > 0 ? (
+                    combinedUsers.map((member) => (
                       <TableRow key={member.userId}>
+                        <TableCell className="font-medium">{member.lastName}, {member.firstName}</TableCell>
                         <TableCell>{getTeamNamesForDisplay(member.teams)}</TableCell>
-                        <TableCell>{member.firstName || 'N/A'}</TableCell>
-                        <TableCell>{member.lastName || 'N/A'}</TableCell>
-                        <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
-                        <TableCell>{member.gender || 'N/A'}</TableCell>
-                        <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : 'N/A'}</TableCell>
-                        <TableCell>{member.email || 'N/A'}</TableCell>
-                        <TableCell>{member.phone || 'N/A'}</TableCell>
-                        <TableCell>{member.location || 'N/A'}</TableCell>
+                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell>{member.email}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                             {updatingStates[`teams-${member.userId}`] ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
+                            {/* Action 1: Assign Teams */}
                             <Popover>
                                 <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    className="w-[200px] justify-between"
-                                    disabled={!firestore || !isAdmin}
-                                >
-                                    <span className="truncate">
-                                    {getTeamNamesForEdit(member.teams)}
-                                    </span>
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
+                                    <Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.userId}`]}>
+                                        {updatingStates[`teams-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Users className="h-4 w-4" />}
+                                        <span className="sr-only">Mannschaften zuweisen</span>
+                                    </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[200px] p-0">
-                                   {teams.map(team => (
-                                        <div key={team.id} className="flex items-center space-x-2 p-2">
-                                            <Checkbox
-                                                id={`team-${member.userId}-${team.id}`}
-                                                checked={member.teams?.includes(team.id)}
-                                                onCheckedChange={(checked) => {
-                                                    const currentTeams = member.teams || [];
-                                                    const newTeams = checked
-                                                        ? [...currentTeams, team.id]
-                                                        : currentTeams.filter(id => id !== team.id);
-                                                    handleTeamsChange(member.userId, newTeams);
-                                                }}
-                                            />
-                                            <label
-                                                htmlFor={`team-${member.userId}-${team.id}`}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                                >
-                                                {team.name}
-                                            </label>
-                                        </div>
-                                   ))}
-                                   {teams.length === 0 && <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften.</p>}
+                                <PopoverContent className="w-64 p-0">
+                                   <ScrollArea className="h-72">
+                                     <div className="p-4">
+                                       {groupedTeams.length > 0 ? groupedTeams.map(group => (
+                                            <div key={group.id} className="mb-4">
+                                                <h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4>
+                                                <div className="flex flex-col space-y-2">
+                                                    {group.teams.map(team => (
+                                                        <div key={team.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`team-${member.userId}-${team.id}`}
+                                                                checked={member.teams?.includes(team.id)}
+                                                                onCheckedChange={(checked) => {
+                                                                    const currentTeams = member.teams || [];
+                                                                    const newTeams = checked
+                                                                        ? [...currentTeams, team.id]
+                                                                        : currentTeams.filter(id => id !== team.id);
+                                                                    handleTeamsChange(member.userId, newTeams);
+                                                                }}
+                                                            />
+                                                            <label htmlFor={`team-${member.userId}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                                {team.name}
+                                                            </label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                       )) : <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>}
+                                     </div>
+                                   </ScrollArea>
                                 </PopoverContent>
                             </Popover>
-                            )}
+
+                             {/* Action 2: Change Role */}
+                             <Dialog open={memberToEdit?.userId === member.userId} onOpenChange={(isOpen) => { if (!isOpen) { setMemberToEdit(null); setNewRole(null); }}}>
+                                <DialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => { setMemberToEdit(member); setNewRole(member.role as 'user' | 'admin'); }} disabled={updatingStates[`role-${member.userId}`]}>
+                                         {updatingStates[`role-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Shield className="h-4 w-4" />}
+                                        <span className="sr-only">Rolle ändern</span>
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Rolle ändern für {member.firstName} {member.lastName}</DialogTitle>
+                                        <DialogDescription>
+                                            Ein "Trainer" hat Administratorrechte. Ein "Spieler" ist ein normaler Benutzer.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="py-4">
+                                       <RadioGroup defaultValue={member.role} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}>
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="user" id={`role-${member.userId}-user`} />
+                                                <Label htmlFor={`role-${member.userId}-user`}>Spieler</Label>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="admin" id={`role-${member.userId}-admin`} />
+                                                <Label htmlFor={`role-${member.userId}-admin`}>Trainer</Label>
+                                            </div>
+                                        </RadioGroup>
+                                    </div>
+                                    <DialogFooter>
+                                        <DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose>
+                                        <Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role}>
+                                            Speichern
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                             </Dialog>
+
+                            {/* Action 3: Delete Member */}
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" disabled={updatingStates[`delete-${member.userId}`]}>
+                                        {updatingStates[`delete-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4 text-destructive" />}
+                                        <span className="sr-only">Mitglied löschen</span>
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Der Benutzer kann sich weiterhin anmelden, verliert aber alle Profildaten.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={() => handleDeleteMember(member)}
+                                            className="bg-destructive hover:bg-destructive/90"
+                                        >
+                                            Löschen
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="h-24 text-center">
+                      <TableCell colSpan={5} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>
