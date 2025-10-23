@@ -46,15 +46,15 @@ export function MainLayoutClient({
           const batch = writeBatch(firestore);
           let writeNeeded = false;
 
-          // Self-healing: If the member document is missing, create it.
+          // Self-healing: If the member document is missing, create it correctly.
           if (!memberDocSnap.exists()) {
             console.log("Member document missing for user. Creating it now.", authUser.uid);
             
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
-              firstName: userData.firstName,
-              lastName: userData.lastName,
-              email: userData.email,
+              firstName: userData.firstName, // Use data from user doc
+              lastName: userData.lastName,   // Use data from user doc
+              email: userData.email,         // Use data from user doc
               teams: [], // Ensure 'teams' array exists and is initialized
               // Initialize other optional fields to avoid undefined issues
               phone: '',
