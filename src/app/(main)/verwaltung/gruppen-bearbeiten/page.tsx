@@ -96,7 +96,8 @@ export default function AdminGruppenBearbeitenPage() {
             setSelectedClass(null);
         }
     }
-  }, [groups, classes, selectedClass]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
 
   const form = useForm<GroupManagementValues>({
     resolver: zodResolver(groupManagementSchema),
@@ -136,7 +137,7 @@ export default function AdminGruppenBearbeitenPage() {
       };
       
       try {
-        await addDoc(groupsRef, newGroup);
+        const docRef = await addDoc(groupsRef, newGroup);
         toast({ title: 'Gruppe erfolgreich erstellt.' });
         form.reset({ action: 'add', type: 'class', name: '', parentId: '', deleteId: '' });
       } catch (error) {
@@ -357,7 +358,7 @@ export default function AdminGruppenBearbeitenPage() {
                     <FormItem>
                       <FormLabel>Name für neues Element...</FormLabel>
                       <FormControl>
-                        <Input placeholder={`Name für neue ${watchType === 'class' ? 'Obergruppe' : 'Mannschaft'}`} {...field} />
+                        <Input placeholder={`Name für neue ${watchType === 'class' ? 'Obergruppe' : 'Mannschaft'}`} {...field} value={field.value || ''}/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -440,3 +441,5 @@ export default function AdminGruppenBearbeitenPage() {
     </div>
   );
 }
+
+    
