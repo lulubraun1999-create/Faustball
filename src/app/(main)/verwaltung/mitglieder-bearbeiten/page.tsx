@@ -38,17 +38,16 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Edit, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Edit, ChevronsUpDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 
-type MemberWithRoleAndTeams = MemberProfile & {
-  role?: 'user' | 'admin';
-  teams?: string[]; // Array of group IDs
-  position?: string[];
-};
+type MemberWithRoleAndTeams = UserProfile &
+  Partial<Omit<MemberProfile, 'userId'>> & {
+    userId: string;
+    teams?: string[];
+  };
 
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
@@ -79,12 +78,12 @@ function AdminMitgliederPageContent() {
 
     const memberMap = new Map(membersData.map(m => [m.userId, m]));
 
-    const combined = usersData.map(user => {
+    const combined: MemberWithRoleAndTeams[] = usersData.map(user => {
       const memberProfile = memberMap.get(user.id);
       return {
-        ...user, // from users collection (id, email, firstName, lastName, role)
-        ...memberProfile, // from members collection (phone, location, etc., AND userId)
-        userId: user.id, // ensure userId is consistent
+        ...user,
+        ...memberProfile,
+        userId: user.id,
         teams: memberProfile?.teams || [],
       };
     });
