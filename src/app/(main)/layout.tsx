@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MainHeader } from "@/components/main-header";
 import { Loader2 } from "lucide-react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import type { UserProfile } from "@/lib/types";
+import { doc, getDoc, setDoc, writeBatch } from "firebase/firestore";
+import type { UserProfile, MemberProfile } from "@/lib/types";
 
 export default function MainAppLayout({
   children,
@@ -34,42 +34,51 @@ export default function MainAppLayout({
       return;
     }
 
-    const checkFirstLogin = async () => {
+    const ensureProfileConsistency = async () => {
       const userDocRef = doc(firestore, "users", authUser.uid);
+      const memberDocRef = doc(firestore, "members", authUser.uid);
+      
       try {
         const userDocSnap = await getDoc(userDocRef);
+        const memberDocSnap = await getDoc(memberDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data() as UserProfile;
-          if (userData.firstLoginComplete === false) {
-            setDoc(userDocRef, { firstLoginComplete: true }, { merge: true })
-              .then(() => {
-                router.replace("/dashboard");
-              })
-              .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                  path: userDocRef.path,
-                  operation: 'update',
-                  requestResourceData: { firstLoginComplete: true },
-                });
-                errorEmitter.emit('permission-error', permissionError);
-              })
-              .finally(() => {
-                 setIsCheckingFirstLogin(false);
-              });
-          } else {
-            setIsCheckingFirstLogin(false);
+          const batch = writeBatch(firestore);
+          let writeNeeded = false;
+
+          // Self-healing: Create member doc if it doesn't exist
+          if (!memberDocSnap.exists()) {
+            const newMemberData: MemberProfile = {
+              userId: authUser.uid,
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+              email: userData.email,
+              teams: [],
+            };
+            batch.set(memberDocRef, newMemberData);
+            writeNeeded = true;
           }
-        } else {
-          setIsCheckingFirstLogin(false);
+
+          // Handle first login flag
+          if (userData.firstLoginComplete === false) {
+            batch.update(userDocRef, { firstLoginComplete: true });
+            writeNeeded = true;
+          }
+
+          if (writeNeeded) {
+            await batch.commit();
+            // No navigation needed here anymore, just fix the data.
+          }
         }
       } catch (error) {
-        console.error("Error checking first login:", error);
+        console.error("Error ensuring profile consistency:", error);
+      } finally {
         setIsCheckingFirstLogin(false);
       }
     };
 
-    checkFirstLogin();
+    ensureProfileConsistency();
 
   }, [authUser, isAuthLoading, router, firestore]);
 
