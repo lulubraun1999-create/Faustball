@@ -32,8 +32,9 @@ import {
   errorEmitter,
   FirestorePermissionError,
   initializeFirebase,
+  useCollection,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -43,8 +44,8 @@ import {
   EmailAuthProvider,
 } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile } from '@/lib/types';
-import { Loader2 } from 'lucide-react';
+import type { MemberProfile, UserProfile } from '@/lib/types';
+import { Loader2, ShieldQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -56,7 +57,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Dialog,
@@ -108,10 +108,16 @@ export default function ProfileEditPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const auth = useAuth();
-  const { user: authUser, userProfile, isUserLoading } = useUser();
-
+  const { user: authUser, userProfile, isUserLoading, forceRefresh, isAdmin } = useUser();
+  
+  const [isMakingAdmin, setIsMakingAdmin] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+
+  const usersCollectionRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
+  const { data: allUsers, isLoading: isLoadingAllUsers } = useCollection<UserProfile>(usersCollectionRef);
+
+  const noAdminExists = !isLoadingAllUsers && allUsers?.every(u => u.role !== 'admin');
 
   const memberDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
@@ -270,6 +276,33 @@ export default function ProfileEditPage() {
       router.push('/login');
     }
   };
+  
+  const handleMakeAdmin = async () => {
+    if (!authUser) return;
+    setIsMakingAdmin(true);
+    try {
+      const { firebaseApp } = initializeFirebase();
+      const functions = getFunctions(firebaseApp);
+      const setAdminRole = httpsCallable(functions, 'setAdminRole');
+
+      await setAdminRole({ uid: authUser.uid });
+      await forceRefresh(); // Force a refresh of the user's token to get the new claim
+      toast({
+        title: 'Admin-Status erteilt',
+        description: 'Sie sind jetzt ein Administrator. Die Seite wird neu geladen.',
+      });
+      // A full page reload is often the most reliable way to ensure all components re-evaluate the new role.
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Zuweisen der Admin-Rolle',
+        description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
+      });
+    } finally {
+      setIsMakingAdmin(false);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     if (!authUser || !firestore) return;
@@ -311,7 +344,7 @@ export default function ProfileEditPage() {
     }
   };
 
-  const isLoading = isUserLoading || isMemberDocLoading;
+  const isLoading = isUserLoading || isMemberDocLoading || isLoadingAllUsers;
 
   if (isLoading) {
     return (
@@ -491,6 +524,26 @@ export default function ProfileEditPage() {
               Logout
             </Button>
           </nav>
+            
+          {!isAdmin && noAdminExists && (
+            <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+              <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
+                <ShieldQuestion className="h-5 w-5" />
+                Admin-Status
+              </h3>
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                Es existiert noch kein Administrator. Werden Sie der erste, um alle Funktionen freizuschalten.
+              </p>
+              <Button
+                onClick={handleMakeAdmin}
+                disabled={isMakingAdmin}
+                className="mt-4 w-full"
+              >
+                {isMakingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Erster Admin werden
+              </Button>
+            </div>
+          )}
 
           <div className="mt-8 rounded-lg border border-destructive/50 p-4">
             <h3 className="font-semibold">Konto löschen</h3>

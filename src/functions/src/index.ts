@@ -8,8 +8,21 @@ if (admin.apps.length === 0) {
 }
 
 /**
- * Sets a user's role to 'admin' by adding a custom claim and updating Firestore.
- * Any authenticated user can call this to make themselves an admin for demo purposes.
+ * Checks if any admin users exist in the system.
+ * @returns {Promise<boolean>} True if at least one admin exists, false otherwise.
+ */
+async function anyAdminExists(): Promise<boolean> {
+    const userQuerySnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
+    return !userQuerySnapshot.empty;
+}
+
+/**
+ * Sets a user's role to 'admin'.
+ * This function has two modes:
+ * 1. Initial Bootstrap: If NO admin exists in the system, any authenticated user can call this
+ *    function to make themselves the first admin.
+ * 2. Admin-only Promotion: If at least one admin already exists, only another admin can call
+ *    this function to promote other users.
  */
 export const setAdminRole = onCall(async (request) => {
   // 1. Check for authentication
@@ -17,30 +30,41 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  // 2. Validate input data - the UID to modify is passed in the data payload
+  // 2. Validate input data
   const targetUid = request.data.uid;
   if (typeof targetUid !== 'string') {
     throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument in the data payload.');
   }
   
-  // In a real-world scenario, you would add a check here to ensure the CALLER is already an admin.
-  // For this demo app, we allow any authenticated user to make themselves an admin.
-  // if (request.auth.token.admin !== true) {
-  //   throw new HttpsError('permission-denied', 'Only an admin can set other users as admins.');
-  // }
+  const adminsExist = await anyAdminExists();
+  const isCallerAdmin = request.auth.token.admin === true;
+  const isSelfPromotion = request.auth.uid === targetUid;
+
+  // 3. Authorization Logic
+  // Allow if:
+  // - The caller is already an admin.
+  // - OR, no admins exist yet AND the user is promoting themselves.
+  if (!isCallerAdmin && !(isSelfPromotion && !adminsExist)) {
+      if (adminsExist) {
+        throw new HttpsError('permission-denied', 'Only an admin can set other users as admins.');
+      } else {
+        throw new HttpsError('permission-denied', 'You can only make yourself the first admin.');
+      }
+  }
   
   try {
-    // 3. Set the custom claim on the user's auth token.
+    // 4. Set the custom claim on the user's auth token.
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
     
-    // 4. Update the user's document in Firestore for UI consistency.
+    // 5. Update the user's document in Firestore for UI consistency.
+    const batch = admin.firestore().batch();
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
-    await userDocRef.set({ role: 'admin' }, { merge: true });
-
-    // Also update the members collection for consistency
     const memberDocRef = admin.firestore().collection('members').doc(targetUid);
-    await memberDocRef.set({ role: 'admin' }, { merge: true });
 
+    batch.set(userDocRef, { role: 'admin' }, { merge: true });
+    batch.set(memberDocRef, { role: 'admin' }, { merge: true });
+
+    await batch.commit();
 
     console.log(`Successfully set user ${targetUid} as an admin.`);
     return {
@@ -52,6 +76,7 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('internal', 'An internal error occurred while trying to set the admin role.', error.message);
   }
 });
+
 
 /**
  * Revokes a user's 'admin' role by removing the custom claim and updating Firestore.
@@ -73,12 +98,14 @@ export const revokeAdminRole = onCall(async (request) => {
     await admin.auth().setCustomUserClaims(targetUid, { admin: null });
     
     // 4. Update the user's document in Firestore to 'user'.
+    const batch = admin.firestore().batch();
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
-    await userDocRef.set({ role: 'user' }, { merge: true });
-
-    // Also update the members collection for consistency
     const memberDocRef = admin.firestore().collection('members').doc(targetUid);
-    await memberDocRef.set({ role: 'user' }, { merge: true });
+    
+    batch.set(userDocRef, { role: 'user' }, { merge: true });
+    batch.set(memberDocRef, { role: 'user' }, { merge: true });
+
+    await batch.commit();
 
     console.log(`Successfully revoked admin role for user ${targetUid}.`);
     return {
