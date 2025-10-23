@@ -37,11 +37,12 @@ export default function NewsArticlePage() {
   const handleGenerateSummary = async () => {
     if (!firestore || !article || !article.id) return;
     
-    if (!article.content || article.content.trim() === '') {
+    // **FIX:** Add a robust check to ensure `article.content` is a non-empty string.
+    if (typeof article.content !== 'string' || article.content.trim() === '') {
         toast({
             variant: 'destructive',
             title: 'Fehler',
-            description: 'Der Artikel-Inhalt ist leer und kann nicht zusammengefasst werden.',
+            description: 'Der Artikel-Inhalt ist leer oder ungültig und kann nicht zusammengefasst werden.',
         });
         return;
     };
