@@ -37,7 +37,6 @@ export default function NewsArticlePage() {
   const handleGenerateSummary = async () => {
     if (!firestore || !article || !article.id) return;
     
-    // **FIX:** Add a robust check to ensure `article.content` is a non-empty string.
     if (typeof article.content !== 'string' || article.content.trim() === '') {
         toast({
             variant: 'destructive',
@@ -157,7 +156,7 @@ export default function NewsArticlePage() {
                         ) : article.summary ? (
                              <p className="text-muted-foreground">{article.summary}</p>
                         ): (
-                            <p className="text-sm text-muted-foreground italic">Noch keine Zusammenfassung vorhanden. Klicken Sie auf "Generieren", um eine zu erstellen.</p>
+                            <p className="text-sm text-muted-foreground italic">Für diesen Artikel wurde noch keine KI-Zusammenfassung erstellt. Klicken Sie auf "Generieren", um den Artikel jetzt zusammenfassen zu lassen.</p>
                         )}
                     </CardContent>
                 </Card>
