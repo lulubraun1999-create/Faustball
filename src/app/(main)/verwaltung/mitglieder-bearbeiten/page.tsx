@@ -7,6 +7,7 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
+  useUser,
 } from '@/firebase';
 import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
 import type { MemberProfile, UserProfile, Group } from '@/lib/types';
@@ -52,19 +53,20 @@ type MemberWithRoleAndTeams = UserProfile &
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
 
   const usersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
+    [firestore, isAdmin]
   );
   const membersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
   );
   const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
   );
 
   const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
