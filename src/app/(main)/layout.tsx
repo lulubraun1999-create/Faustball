@@ -45,9 +45,11 @@ export default function MainAppLayout({
           const userData = userDocSnap.data() as UserProfile;
           const memberDocSnap = await getDoc(memberDocRef);
           
+          const batch = writeBatch(firestore);
+          let writeNeeded = false;
+
           if (!memberDocSnap.exists()) {
             console.log("Member document missing for user. Creating it now.", authUser.uid);
-            const batch = writeBatch(firestore);
             
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
@@ -63,17 +65,16 @@ export default function MainAppLayout({
               gender: undefined,
             };
             batch.set(memberDocRef, newMemberData);
+            writeNeeded = true;
+          }
 
-            if (userData.firstLoginComplete === false) {
-                batch.update(userDocRef, { firstLoginComplete: true });
-            }
-            
+          if (userData.firstLoginComplete === false) {
+              batch.update(userDocRef, { firstLoginComplete: true });
+              writeNeeded = true;
+          }
+          
+          if (writeNeeded) {
             console.log("Committing batch write for profile consistency.");
-            await batch.commit();
-          } else if (userData.firstLoginComplete === false) {
-            // If member doc exists, but first login is not complete
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { firstLoginComplete: true });
             await batch.commit();
           }
 
