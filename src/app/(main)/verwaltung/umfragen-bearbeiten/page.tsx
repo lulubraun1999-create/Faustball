@@ -46,9 +46,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+    useCollection,
+    useFirestore,
+    useMemoFirebase,
+} from '@/firebase';
+import type { Group } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
+import { collection } from 'firebase/firestore';
 import {
   CalendarIcon,
   Loader2,
@@ -56,9 +63,11 @@ import {
   Trash2,
   Vote,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const pollSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
@@ -78,6 +87,17 @@ type PollFormValues = z.infer<typeof pollSchema>;
 
 function AdminUmfragenPageContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const firestore = useFirestore();
+
+  const groupsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
+  );
+  const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
+  const teams = useMemo(() => {
+    return groupsData?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [];
+  }, [groupsData]);
 
   const form = useForm<PollFormValues>({
     resolver: zodResolver(pollSchema),
@@ -302,12 +322,40 @@ function AdminUmfragenPageContent() {
                   <FormField
                     control={form.control}
                     name="visibleTeamIds"
-                    render={() => (
+                    render={({ field }) => (
                       <FormItem>
                          <FormLabel>Mannschaften auswählen</FormLabel>
-                         <div className="p-4 border rounded-md max-h-48 overflow-y-auto">
-                            <p className="text-muted-foreground text-center">Mannschaftsauswahl wird in Kürze implementiert.</p>
-                         </div>
+                         <ScrollArea className="h-40 rounded-md border p-4">
+                            {isLoadingGroups ? (
+                                <div className="flex items-center justify-center h-full">
+                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                </div>
+                            ) : teams.length > 0 ? (
+                                <div className="space-y-2">
+                                {teams.map((team) => (
+                                    <div key={team.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`team-${team.id}`}
+                                            checked={field.value?.includes(team.id)}
+                                            onCheckedChange={(checked) => {
+                                                const newValue = checked
+                                                ? [...(field.value || []), team.id]
+                                                : (field.value || []).filter(
+                                                    (id) => id !== team.id
+                                                );
+                                                field.onChange(newValue);
+                                            }}
+                                        />
+                                        <label htmlFor={`team-${team.id}`} className="text-sm font-medium leading-none">
+                                            {team.name}
+                                        </label>
+                                    </div>
+                                ))}
+                                </div>
+                            ) : (
+                                <p className="text-muted-foreground text-center">Keine Mannschaften gefunden.</p>
+                            )}
+                         </ScrollArea>
                         <FormMessage />
                       </FormItem>
                     )}
