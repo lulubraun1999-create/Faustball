@@ -226,10 +226,16 @@ function AdminMitgliederPageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Mannschaften</TableHead>
+                    <TableHead>Nachname</TableHead>
+                    <TableHead>Vorname</TableHead>
+                    <TableHead>Mannschaft</TableHead>
                     <TableHead>Rolle</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Geschlecht</TableHead>
+                    <TableHead>Geburtstag</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Telefon</TableHead>
+                    <TableHead>Wohnort</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -237,10 +243,16 @@ function AdminMitgliederPageContent() {
                   {sortedMembers.length > 0 ? (
                     sortedMembers.map((member) => (
                       <TableRow key={member.userId}>
-                        <TableCell className="font-medium">{member.lastName}, {member.firstName}</TableCell>
+                        <TableCell className="font-medium">{member.lastName}</TableCell>
+                        <TableCell>{member.firstName}</TableCell>
                         <TableCell>{getTeamNamesForDisplay(member.teams)}</TableCell>
                         <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
+                        <TableCell>{member.gender || 'N/A'}</TableCell>
+                        <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : 'N/A'}</TableCell>
                         <TableCell>{member.email}</TableCell>
+                        <TableCell>{member.phone || 'N/A'}</TableCell>
+                        <TableCell>{member.location || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             {/* Action 1: Assign Teams */}
@@ -352,7 +364,7 @@ function AdminMitgliederPageContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center">
+                      <TableCell colSpan={11} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>
