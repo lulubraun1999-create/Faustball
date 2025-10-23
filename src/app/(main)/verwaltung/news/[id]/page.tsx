@@ -38,7 +38,14 @@ export default function NewsArticlePage() {
   const { data: article, isLoading } = useDoc<NewsArticle>(articleRef);
 
   const handleGenerateSummary = async () => {
-    if (!firestore || !article || !article.id) return;
+    if (!firestore || !article || !article.id || !article.content) {
+        toast({
+            variant: 'destructive',
+            title: 'Fehler',
+            description: 'Der Artikel-Inhalt fehlt und kann nicht zusammengefasst werden.',
+        });
+        return;
+    };
 
     setIsGeneratingSummary(true);
 
