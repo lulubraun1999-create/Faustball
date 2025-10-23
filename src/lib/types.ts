@@ -61,7 +61,7 @@ export interface Poll {
 export interface NewsArticle {
   id?: string;
   title: string;
-  content: string;
+  content?: string;
   summary: string;
   imageUrls: string[];
   createdAt: any; // Firestore Timestamp

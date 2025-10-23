@@ -37,6 +37,7 @@ export default function NewsArticlePage() {
   const handleGenerateSummary = async () => {
     if (!firestore || !article || !article.id) return;
     
+    // Strict check to ensure content is a non-empty string before calling the AI function.
     if (typeof article.content !== 'string' || article.content.trim() === '') {
         toast({
             variant: 'destructive',
