@@ -9,6 +9,12 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
+  // To-Do: Re-enable this check in a production environment. 
+  // For development, we allow a user to make themselves an admin.
+  // if (request.auth.token.admin !== true) {
+  //   throw new HttpsError('permission-denied', 'The function must be called by an admin.');
+  // }
+
   const { uid, role } = request.data;
 
   if (typeof uid !== 'string' || typeof role !== 'string') {
