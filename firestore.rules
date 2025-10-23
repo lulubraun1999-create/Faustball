@@ -3,46 +3,45 @@
  *
  * Core Philosophy:
  * This ruleset enforces a combination of user-ownership and admin-controlled access.
- * User-specific data (users, members) is protected by ownership checks, while
- * broader application data (appointments, groups, news, polls) is generally
- * readable by all authenticated users but writable only by administrators.
+ * Users can manage their own profile data, while admins have broad access to manage
+ * appointments, groups, polls, news, treasury, and penalties.
  *
  * Data Structure:
- * - /users/{userId}:  User authentication and profile data, accessible only to the user and admins.
- * - /members/{memberId}: Detailed member profiles, editable only by the owning user and admins.
- * - /appointments/{appointmentId}:  Calendar events, readable by all, writable by admins only.
- * - /groups/{groupId}: Classes and teams, readable by all, writable by admins only.
- * - /polls/{pollId}: Polls for team members, readable by all, writable by admins only.
- * - /news/{newsId}:  News articles, readable by all, writable by admins only.
- * - /treasury/{transactionId}: Team treasury transactions, writable by admins only.
- * - /penalties/{penaltyId}: Penalty rules for teams, writable by admins only.
+ * - /users/{userId}: User authentication and profile data.
+ * - /members/{memberId}: Extended member profile data.
+ * - /appointments/{appointmentId}: Calendar events and appointments.
+ * - /groups/{groupId}: Classes and Teams.
+ * - /polls/{pollId}: Polls and Surveys.
+ * - /news/{newsId}: News Articles and Announcements.
+ * - /treasury/{transactionId}: Team Treasury Transactions.
+ * - /penalties/{penaltyId}: Penalty Catalog.
  *
  * Key Security Decisions:
- * - No user listing is allowed.
- * - Read-only collections are explicitly marked.
- * - In ambiguous cases, the rules default to the most restrictive interpretation.
- * - Data shape is not strictly validated in this prototyping phase.
+ * - Users can only read/write their own /users/{userId} and /members/{memberId} documents.
+ * - Admins have full CRUD access to /appointments, /groups, /polls, /news, /treasury, and /penalties.
+ * - Listing all users is disallowed to prevent data scraping.
+ * - All data writes require a verified user identity (no anonymous writes except user creation).
+ * - Read access is generally public for top-level collections (appointments, groups, polls, news),
+ *   but write access is strictly limited to admins.
+ * - The system does not currently implement any role-based access control beyond a simple "admin" role.
  *
  * Denormalization for Authorization:
- *  - No denormalization is needed for this ruleset. All authorization decisions can be made
- *    based on the `request.auth` context and the resource data in each document.
- *
- * Structural Segregation:
- *  - All user-specific private data is stored under paths that include the `{userId}` parameter,
- *    ensuring that only the user or an admin can access it.
+ * - The current ruleset assumes an external mechanism for assigning admin roles (e.g., a custom
+ *   Firebase function that sets a claim on the user's JWT). The rules rely on the `isAdmin()`
+ *   function to check for this claim.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profile documents.
+     * @description Allows users to read and write their own user document. Admin can do anything.
      * @path /users/{userId}
-     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own document if the userId matches their auth.
-     * @allow (get, list, update, delete) User 'admin' can read, update, and delete any user document.
-     * @deny (create) User 'attacker' cannot create a user document with a userId that doesn't match their auth.
-     * @deny (get, list, update, delete) User 'otherUser' cannot read, update, or delete another user's document.
-     * @principle Enforces document ownership for writes.  Admins have full access.
+     * @allow (create) - User with UID 'user_abc' can create /users/user_abc.
+     * @allow (get, update, delete) - User with UID 'user_abc' can get, update, and delete /users/user_abc. Admin can do anything.
+     * @deny (create) - User with UID 'user_xyz' cannot create /users/user_abc.
+     * @deny (get, update, delete) - User with UID 'user_xyz' cannot get, update, and delete /users/user_abc.
+     * @principle Enforces user ownership and admin override for user accounts.
      */
     match /users/{userId} {
       function isSignedIn() {
@@ -54,52 +53,48 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow list: if false; // No listing of all users.
+      allow list: if false;
       allow create: if isSignedIn() && isOwner(userId);
       allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
     }
 
     /**
-     * @description Controls access to member profile documents.
+     * @description Allows users to read and write their own member document. Admin can do anything.
      * @path /members/{memberId}
-     * @allow (create) User 'Gj5PDcSRA6WhxNScqpc3R7ZvGmd2' can create their own member document.
-     * @allow (get, list, update, delete) User 'admin' can read, update, and delete any member document.
-     * @deny (create) User 'attacker' cannot create a member document with a memberId that doesn't match their auth.
-     * @deny (get, list, update, delete) User 'otherUser' cannot read, update, or delete another member's document.
-     * @principle Enforces document ownership for writes. Admins have full access.
+     * @allow (create) - User with UID 'user_abc' can create /members/member_123 if member.userId == 'user_abc'.
+     * @allow (get, update, delete) - User with UID 'user_abc' can get, update, and delete /members/member_123 if member.userId == 'user_abc'. Admin can do anything.
+     * @deny (create) - User with UID 'user_xyz' cannot create /members/member_123 if member.userId == 'user_abc'.
+     * @deny (get, update, delete) - User with UID 'user_xyz' cannot get, update, and delete /members/member_123 if member.userId == 'user_abc'.
+     * @principle Enforces user ownership and admin override for member profiles.
      */
     match /members/{memberId} {
-        function isSignedIn() {
-            return request.auth != null;
-        }
+      function isSignedIn() {
+        return request.auth != null;
+      }
 
-        function isOwner(memberId) {
-            return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
-        }
+      function isAdmin() {
+        return request.auth.token.role == 'admin';
+      }
 
-        function isAdmin() {
-            return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
-        }
-
-        allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        allow list: if false; // No listing of all members.
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-        allow update: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+        allow list: if false;
+        allow create: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isAdmin());
+        allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+        allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     /**
-     * @description Controls access to appointment documents.
+     * @description Allows anyone to read appointments, but only admins can create, update, or delete them.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Any authenticated user can read appointment documents.
-     * @allow (create, update, delete) Only admins can create, update, and delete appointment documents.
-     * @deny (create, update, delete) Non-admin users cannot modify appointment documents.
-     * @principle Enforces admin-only writes, public reads for authenticated users.
+     * @allow (get, list) - Any user can read appointments.
+     * @allow (create, update, delete) - Only admins can create, update, or delete appointments.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete appointments.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /appointments/{appointmentId} {
       function isSignedIn() {
@@ -107,20 +102,22 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     /**
-     * @description Controls access to group documents (classes and teams).
+     * @description Allows anyone to read groups, but only admins can create, update, or delete them.
      * @path /groups/{groupId}
-     * @allow (get, list) Any authenticated user can read group documents.
-     * @allow (create, update, delete) Only admins can create, update, and delete group documents.
-     * @deny (create, update, delete) Non-admin users cannot modify group documents.
-     * @principle Enforces admin-only writes, public reads for authenticated users.
+     * @allow (get, list) - Any user can read groups.
+     * @allow (create, update, delete) - Only admins can create, update, or delete groups.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete groups.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /groups/{groupId} {
       function isSignedIn() {
@@ -128,20 +125,22 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
-    /**
-     * @description Controls access to poll documents.
+   /**
+     * @description Allows anyone to read polls, but only admins can create, update, or delete them.
      * @path /polls/{pollId}
-     * @allow (get, list) Any authenticated user can read poll documents.
-     * @allow (create, update, delete) Only admins can create, update, and delete poll documents.
-     * @deny (create, update, delete) Non-admin users cannot modify poll documents.
-     * @principle Enforces admin-only writes, public reads for authenticated users.
+     * @allow (get, list) - Any user can read polls.
+     * @allow (create, update, delete) - Only admins can create, update, or delete polls.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete polls.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /polls/{pollId} {
       function isSignedIn() {
@@ -149,20 +148,22 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     /**
-     * @description Controls access to news article documents.
+     * @description Allows anyone to read news articles, but only admins can create, update, or delete them.
      * @path /news/{newsId}
-     * @allow (get, list) Any authenticated user can read news article documents.
-     * @allow (create, update, delete) Only admins can create, update, and delete news article documents.
-     * @deny (create, update, delete) Non-admin users cannot modify news article documents.
-     * @principle Enforces admin-only writes, public reads for authenticated users.
+     * @allow (get, list) - Any user can read news articles.
+     * @allow (create, update, delete) - Only admins can create, update, or delete news articles.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete news articles.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /news/{newsId} {
       function isSignedIn() {
@@ -170,20 +171,22 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
-    /**
-     * @description Controls access to treasury transaction documents.
+   /**
+     * @description Allows anyone to read treasury transactions, but only admins can create, update, or delete them.
      * @path /treasury/{transactionId}
-     * @allow (create, update, delete) Only admins can create, update, and delete treasury transaction documents.
-     * @deny (get, list) No read access for non-admins, to keep financial data private.
-     * @deny (create, update, delete) Non-admin users cannot modify treasury transaction documents.
-     * @principle Enforces admin-only writes and no public reads.
+     * @allow (get, list) - Any user can read treasury transactions.
+     * @allow (create, update, delete) - Only admins can create, update, or delete treasury transactions.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete treasury transactions.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /treasury/{transactionId} {
       function isSignedIn() {
@@ -191,20 +194,22 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if false;
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
 
-    /**
-     * @description Controls access to penalty documents.
+   /**
+     * @description Allows anyone to read penalty catalog, but only admins can create, update, or delete them.
      * @path /penalties/{penaltyId}
-     * @allow (create, update, delete) Only admins can create, update, and delete penalty documents.
-     * @deny (get, list) No read access for non-admins, to keep the penalty catalog private.
-     * @deny (create, update, delete) Non-admin users cannot modify penalty documents.
-     * @principle Enforces admin-only writes and no public reads.
+     * @allow (get, list) - Any user can read penalty catalog.
+     * @allow (create, update, delete) - Only admins can create, update, or delete penalty catalog.
+     * @deny (create, update, delete) - Non-admins cannot create, update, or delete penalty catalog.
+     * @principle Allows public read access with restricted write access to admins.
      */
     match /penalties/{penaltyId} {
       function isSignedIn() {
@@ -212,11 +217,13 @@ service cloud.firestore {
       }
 
       function isAdmin() {
-        return request.auth.uid == "admin"; // Replace "admin" with the actual admin UID or condition.  For prototyping, just return true.
+        return request.auth.token.role == 'admin';
       }
 
-      allow get, list: if false;
-      allow create, update, delete: if isSignedIn() && isAdmin();
+      allow get, list: if true;
+      allow create: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      allow delete: if isSignedIn() && isAdmin();
     }
   }
 }
