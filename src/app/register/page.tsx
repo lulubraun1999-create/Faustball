@@ -91,6 +91,7 @@ export default function RegisterPage() {
           firstName: data.firstName,
           lastName: data.lastName,
           email: data.email,
+          teams: [],
       };
       batch.set(memberDocRef, memberData);
       
