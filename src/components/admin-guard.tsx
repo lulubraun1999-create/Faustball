@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { userProfile, isUserLoading, isAdmin } = useUser();
+  const { isUserLoading, isAdmin, userProfile } = useUser();
 
   if (isUserLoading) {
     return (
@@ -17,10 +17,11 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Check both the token claim and the database role for more robust access control.
-  // This prevents race conditions where the token hasn't been refreshed yet.
-  const showAdminAccess = isAdmin || userProfile?.role === 'admin';
+  // This prevents race conditions where the token hasn't been refreshed yet,
+  // but the database has the correct role information.
+  const isAuthorized = isAdmin || userProfile?.role === 'admin';
 
-  if (!showAdminAccess) {
+  if (!isAuthorized) {
     return (
       <div className="container mx-auto p-4 sm:p-6 lg:p-8">
         <Card className="border-destructive/50">

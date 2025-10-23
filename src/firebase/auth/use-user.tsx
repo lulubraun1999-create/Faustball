@@ -55,12 +55,13 @@ export const useUser = (): AdminAwareUserHookResult => {
     }
   }, [refreshAuthToken]);
 
-  const isUserReallyLoading = isAuthLoading || (user != null && isProfileLoading);
+  // The final loading state is true if auth is loading OR if we have a user but are still waiting for their profile.
+  const isUserLoading = isAuthLoading || (user != null && isProfileLoading);
 
   return { 
     user, 
     userProfile, 
-    isUserLoading: isUserReallyLoading, 
+    isUserLoading, 
     isAdmin, 
     forceRefresh 
   };
