@@ -191,7 +191,10 @@ export default function ProfileEditPage() {
         // Force a refresh of the user's ID token to get the new custom claim.
         await forceRefresh(); 
         
-        toast({ title: "Admin-Rolle zugewiesen", description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt auf Admin-Bereiche zugreifen." });
+        toast({ 
+          title: "Admin-Rolle zugewiesen", 
+          description: "Ihre Berechtigungen wurden aktualisiert. Navigieren Sie zu einer Admin-Seite, um die Änderungen zu sehen." 
+        });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });
     } finally {
@@ -787,3 +790,5 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
