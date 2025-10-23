@@ -77,6 +77,7 @@ const profileFormSchema = z.object({
   gender: z
     .enum(['männlich', 'weiblich', 'divers (Damenteam)', 'divers (Herrenteam)'])
     .optional(),
+  role: z.enum(['user', 'admin']).optional(),
 });
 
 const passwordFormSchema = z
@@ -136,6 +137,7 @@ export default function ProfileEditPage() {
       birthday: '',
       position: [],
       gender: undefined,
+      role: 'user',
     },
   });
 
@@ -166,12 +168,13 @@ export default function ProfileEditPage() {
         birthday: member?.birthday || '',
         position: member?.position || [],
         gender: member?.gender,
+        role: user?.role || 'user',
       });
     }
   }, [user, member, profileForm]);
 
   const onProfileSubmit = async (data: ProfileFormValues) => {
-    if (!memberDocRef || !authUser) return;
+    if (!memberDocRef || !userDocRef || !authUser) return;
 
     const memberData: MemberProfile = {
       userId: authUser.uid,
@@ -181,14 +184,12 @@ export default function ProfileEditPage() {
       position: data.position,
       gender: data.gender,
     };
+    
+    const userUpdateData: Partial<UserProfile> = {
+      role: data.role,
+    };
 
-    setDoc(memberDocRef, memberData, { merge: true })
-      .then(() => {
-        toast({
-          title: 'Profil aktualisiert',
-          description: 'Ihre Informationen wurden erfolgreich gespeichert.',
-        });
-      })
+    const p1 = setDoc(memberDocRef, memberData, { merge: true })
       .catch(() => {
         const permissionError = new FirestorePermissionError({
           path: memberDocRef.path,
@@ -197,6 +198,23 @@ export default function ProfileEditPage() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
+
+    const p2 = setDoc(userDocRef, userUpdateData, { merge: true })
+      .catch(() => {
+        const permissionError = new FirestorePermissionError({
+          path: userDocRef.path,
+          operation: 'update',
+          requestResourceData: userUpdateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+      
+    Promise.all([p1, p2]).then(() => {
+       toast({
+        title: 'Profil aktualisiert',
+        description: 'Ihre Informationen wurden erfolgreich gespeichert.',
+      });
+    });
   };
 
   const reauthenticate = async (password: string) => {
@@ -674,16 +692,27 @@ export default function ProfileEditPage() {
                   )}
                 />
 
-                <FormItem>
-                  <FormLabel>Rolle</FormLabel>
-                  <FormControl>
-                    <Input
-                      readOnly
-                      value={user?.role || 'user'}
-                      className="bg-muted/50"
-                    />
-                  </FormControl>
-                </FormItem>
+                <FormField
+                  control={profileForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rolle</FormLabel>
+                       <Select onValueChange={field.onChange} defaultValue={field.value} key={user?.role}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Rolle auswählen" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="user">user</SelectItem>
+                          <SelectItem value="admin">admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormItem>
                   <FormLabel>E-Mail</FormLabel>
