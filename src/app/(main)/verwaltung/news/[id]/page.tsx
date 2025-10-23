@@ -157,7 +157,7 @@ export default function NewsArticlePage() {
 
 
             <div className="prose prose-lg dark:prose-invert max-w-none mx-auto break-words">
-                <p>{article.content}</p>
+                <p className="whitespace-pre-wrap">{article.content}</p>
             </div>
 
              {article.imageUrls && article.imageUrls.length > 1 && (
