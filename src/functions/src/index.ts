@@ -7,14 +7,14 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
+/**
+ * Sets a user's role to 'admin' by adding a custom claim and updating Firestore.
+ * In a real-world app, you'd add security checks here to ensure only authorized
+ * users can call this function. For this app, any authenticated user can make themselves an admin.
+ */
 export const setAdminRole = onCall(async (request) => {
-  // A user can make themselves an admin. 
-  // In a real-world app, you'd want to secure this. For example:
-  // if (request.auth.token.admin !== true) {
-  //   throw new HttpsError('permission-denied', 'Only admins can set other admins.');
-  // }
-  
   if (!request.auth) {
+    // This function must be called by an authenticated user.
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
@@ -26,18 +26,22 @@ export const setAdminRole = onCall(async (request) => {
   }
 
   try {
-    // Set custom user claims on the target user
+    // 1. Set the custom claim on the user's auth token.
+    // This is the source of truth for security rules.
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
     
-    // Also update the user's role in the Firestore 'users' collection for UI consistency
+    // 2. Update the user's document in Firestore for UI consistency.
+    // This makes the UI update faster without waiting for a token refresh.
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
     await userDocRef.set({ role: 'admin' }, { merge: true });
 
+    console.log(`Successfully set user ${targetUid} as an admin.`);
     return {
+      status: 'success',
       message: `Success! User ${targetUid} has been made an admin.`,
     };
   } catch (error: any) {
-    console.error('Error setting custom claims and Firestore role:', error);
+    console.error(`Error setting admin role for UID: ${targetUid}`, error);
     throw new HttpsError('internal', 'An internal error occurred while trying to set the admin role.', error.message);
   }
 });
