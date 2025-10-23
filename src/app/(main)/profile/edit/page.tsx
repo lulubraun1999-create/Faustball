@@ -174,7 +174,7 @@ export default function ProfileEditPage() {
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !authUser) return;
 
-    const memberData: Omit<MemberProfile, 'userId'| 'firstName' | 'lastName' | 'email'> = {
+    const memberData: Omit<MemberProfile, 'userId'| 'firstName' | 'lastName' | 'email'| 'role'> = {
       phone: data.phone,
       location: data.location,
       birthday: data.birthday,
@@ -285,7 +285,10 @@ export default function ProfileEditPage() {
       const functions = getFunctions(firebaseApp);
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
-      await setAdminRole({ uid: authUser.uid });
+      // For becoming the first admin, we don't need to pass a UID.
+      // The function will use the caller's UID.
+      await setAdminRole();
+
       await forceRefresh(); // Force a refresh of the user's token to get the new claim
       toast({
         title: 'Admin-Status erteilt',
@@ -754,3 +757,5 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
