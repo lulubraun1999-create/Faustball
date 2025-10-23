@@ -51,9 +51,8 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container relative flex h-16 items-center justify-between">
-        
-        <div className="flex items-center">
+      <div className="container flex h-16 items-center">
+        <div className="flex-1">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <span className="font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
@@ -61,7 +60,7 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <nav className="flex flex-1 items-center justify-center">
           <div className="flex items-center space-x-6 text-sm font-medium">
             <Link
               href="/dashboard"
@@ -79,7 +78,7 @@ export function MainHeader() {
           </div>
         </nav>
         
-        <div className="flex items-center justify-end space-x-2">
+        <div className="flex flex-1 items-center justify-end space-x-2">
           <a
             href="https://www.instagram.com"
             target="_blank"
@@ -132,7 +131,6 @@ export function MainHeader() {
             </DropdownMenu>
           )}
         </div>
-        
       </div>
     </header>
   );
