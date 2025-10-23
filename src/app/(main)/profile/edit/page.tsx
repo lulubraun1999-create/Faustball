@@ -31,6 +31,7 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
+  useFirebaseApp,
 } from '@/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
@@ -41,6 +42,7 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { UserProfile, MemberProfile } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -107,10 +109,12 @@ export default function ProfileEditPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const auth = useAuth();
+  const firebaseApp = useFirebaseApp();
   const { user: authUser, isUserLoading: isAuthLoading } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [isSettingAdmin, setIsSettingAdmin] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
@@ -172,6 +176,28 @@ export default function ProfileEditPage() {
       });
     }
   }, [user, member, profileForm]);
+
+  const handleSetAdmin = async () => {
+    if (!firebaseApp || !authUser) {
+        toast({ variant: "destructive", title: "Fehler", description: "Firebase nicht initialisiert." });
+        return;
+    }
+    setIsSettingAdmin(true);
+    try {
+        const functions = getFunctions(firebaseApp);
+        const setAdminRole = httpsCallable(functions, 'setAdminRole');
+        await setAdminRole({ uid: authUser.uid, role: 'admin' });
+        
+        await authUser.getIdToken(true); // Force refresh of the ID token
+        
+        toast({ title: "Admin-Rolle zugewiesen", description: "Bitte laden Sie die Seite neu, damit die Änderungen wirksam werden." });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });
+    } finally {
+        setIsSettingAdmin(false);
+    }
+  };
+
 
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !userDocRef || !authUser) return;
@@ -512,6 +538,24 @@ export default function ProfileEditPage() {
               Logout
             </Button>
           </nav>
+
+          <div className="mt-8 rounded-lg border border-border p-4">
+             <h3 className="font-semibold">Admin Status</h3>
+             <p className="mt-2 text-sm text-muted-foreground">
+               Klicken Sie hier, um sich selbst Administratorrechte zu geben.
+               Sie müssen die Seite danach neu laden.
+             </p>
+             <Button
+                variant="outline"
+                className="mt-4 w-full"
+                onClick={handleSetAdmin}
+                disabled={isSettingAdmin}
+              >
+                {isSettingAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Mich zum Admin machen
+              </Button>
+          </div>
+
           <div className="mt-8 rounded-lg border border-destructive/50 p-4">
             <h3 className="font-semibold">Konto löschen</h3>
             <p className="mt-2 text-sm text-muted-foreground">
