@@ -17,13 +17,14 @@ export const setAdminRole = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  // 2. Validate input data
+  // 2. Validate input data - the UID to modify is passed in the data payload
   const targetUid = request.data.uid;
   if (typeof targetUid !== 'string') {
-    throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+    throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument in the data payload.');
   }
   
   // In a real-world scenario, you would add a check here to ensure the CALLER is already an admin.
+  // For this demo app, we allow any authenticated user to make themselves an admin.
   // if (request.auth.token.admin !== true) {
   //   throw new HttpsError('permission-denied', 'Only an admin can set other users as admins.');
   // }
@@ -35,6 +36,11 @@ export const setAdminRole = onCall(async (request) => {
     // 4. Update the user's document in Firestore for UI consistency.
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
     await userDocRef.set({ role: 'admin' }, { merge: true });
+
+    // Also update the members collection for consistency
+    const memberDocRef = admin.firestore().collection('members').doc(targetUid);
+    await memberDocRef.set({ role: 'admin' }, { merge: true });
+
 
     console.log(`Successfully set user ${targetUid} as an admin.`);
     return {
@@ -69,6 +75,10 @@ export const revokeAdminRole = onCall(async (request) => {
     // 4. Update the user's document in Firestore to 'user'.
     const userDocRef = admin.firestore().collection('users').doc(targetUid);
     await userDocRef.set({ role: 'user' }, { merge: true });
+
+    // Also update the members collection for consistency
+    const memberDocRef = admin.firestore().collection('members').doc(targetUid);
+    await memberDocRef.set({ role: 'user' }, { merge: true });
 
     console.log(`Successfully revoked admin role for user ${targetUid}.`);
     return {

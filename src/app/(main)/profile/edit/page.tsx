@@ -178,20 +178,18 @@ export default function ProfileEditPage() {
       const functions = getFunctions(firebaseApp);
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
-      // The cloud function now handles both setting the claim and updating the DB.
-      await setAdminRole({ uid: authUser.uid, role: 'admin' });
+      // Call the function with the user's UID in the data payload
+      await setAdminRole({ uid: authUser.uid });
       
       toast({
         title: 'Admin-Rolle wird zugewiesen',
         description: 'Ihre Berechtigungen werden aktualisiert. Die Seite wird in Kürze neu geladen.',
       });
 
-      // Crucial: Force a refresh of the ID token to get the new custom claim
-      // This is now handled by the onIdTokenChanged listener in the provider,
-      // but an explicit call can speed it up.
+      // Force a refresh of the ID token to get the new custom claim
       await forceRefresh?.();
 
-      // Give a moment for the user to see the toast, then reload to ensure all components get the new state.
+      // Reload the page to ensure all components get the new state
       setTimeout(() => window.location.reload(), 3000);
 
     } catch (error: any) {
@@ -763,5 +761,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
