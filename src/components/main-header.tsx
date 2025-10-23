@@ -83,7 +83,7 @@ export function MainHeader() {
         {/* Right Section */}
         <div className="flex items-center justify-self-end space-x-2">
           <a
-            href="https://www.faustball.com"
+            href="https://www.faustball.com/#/club/460/info"
             target="_blank"
             rel="noopener noreferrer"
           >
