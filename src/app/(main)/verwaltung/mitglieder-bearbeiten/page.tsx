@@ -5,7 +5,6 @@ import {
   useFirestore,
   useCollection,
   useMemoFirebase,
-  useUser,
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { MemberProfile } from '@/lib/types';
@@ -30,20 +29,22 @@ import { AdminGuard } from '@/components/admin-guard';
 
 function AdminMitgliederPageContent() {
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
 
   const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
+    () => (firestore ? collection(firestore, 'members') : null),
+    [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const sortedMembers = useMemo<MemberProfile[]>(() => {
+  const sortedMembers = useMemo(() => {
     if (!membersData) return [];
-    return [...membersData].sort((a, b) =>
-      (a.lastName || '').localeCompare(b.lastName || '')
-    );
+    // Ensure all properties are strings before comparing
+    return [...membersData].sort((a, b) => {
+        const lastNameA = a.lastName || '';
+        const lastNameB = b.lastName || '';
+        return lastNameA.localeCompare(lastNameB);
+    });
   }, [membersData]);
 
 
@@ -69,11 +70,10 @@ function AdminMitgliederPageContent() {
                     <TableHeader>
                         <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead>E-Mail</TableHead>
                         <TableHead>Geschlecht</TableHead>
                         <TableHead>Position</TableHead>
-                        <TableHead>Rolle</TableHead>
                         <TableHead>Geburtstag</TableHead>
-                        <TableHead>E-Mail</TableHead>
                         <TableHead>Telefonnummer</TableHead>
                         <TableHead>Wohnort</TableHead>
                         </TableRow>
@@ -83,26 +83,19 @@ function AdminMitgliederPageContent() {
                         sortedMembers.map((profile) => (
                             <TableRow key={profile.userId}>
                             <TableCell className="font-medium">{`${profile.firstName || ''} ${profile.lastName || ''}`}</TableCell>
+                            <TableCell>{profile.email || 'N/A'}</TableCell>
                             <TableCell>{profile.gender || 'N/A'}</TableCell>
                             <TableCell>{profile.position?.join(', ') || 'N/A'}</TableCell>
                             <TableCell>
-                                {profile.role === 'admin' ? (
-                                    <Badge>Admin</Badge>
-                                ) : (
-                                    'User'
-                                )}
-                            </TableCell>
-                            <TableCell>
                                 {profile.birthday ? new Date(profile.birthday).toLocaleDateString('de-DE') : 'N/A'}
                             </TableCell>
-                            <TableCell>{profile.email || 'N/A'}</TableCell>
                             <TableCell>{profile.phone || 'N/A'}</TableCell>
                             <TableCell>{profile.location || 'N/A'}</TableCell>
                             </TableRow>
                         ))
                         ) : (
                         <TableRow>
-                            <TableCell colSpan={8} className="h-24 text-center">
+                            <TableCell colSpan={7} className="h-24 text-center">
                                 Keine Mitglieder gefunden.
                             </TableCell>
                         </TableRow>
