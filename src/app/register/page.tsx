@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 
 const registerSchema = z.object({
   firstName: z.string().min(1, { message: 'Vorname ist erforderlich.' }),
@@ -72,6 +72,8 @@ export default function RegisterPage() {
 
       await sendEmailVerification(user);
 
+      const batch = writeBatch(firestore);
+
       const userDocRef = doc(firestore, 'users', user.uid);
       const userData = {
         id: user.uid,
@@ -81,8 +83,16 @@ export default function RegisterPage() {
         role: 'user' as const,
         firstLoginComplete: false,
       };
+      batch.set(userDocRef, userData);
+      
+      const memberDocRef = doc(firestore, 'members', user.uid);
+      const memberData = {
+          userId: user.uid
+      };
+      batch.set(memberDocRef, memberData);
+      
+      await batch.commit();
 
-      await setDoc(userDocRef, userData);
 
       toast({
         title: 'Registrierung fast abgeschlossen',
