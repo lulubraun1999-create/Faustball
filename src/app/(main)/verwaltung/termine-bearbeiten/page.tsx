@@ -9,7 +9,6 @@ import {
   useFirestore,
   useCollection,
   useMemoFirebase,
-  useUser,
   errorEmitter,
   FirestorePermissionError,
 } from '@/firebase';
