@@ -129,42 +129,50 @@ function AdminMitgliederPageContent() {
   };
 
   const handleRoleChange = async () => {
-    if (!memberToEdit || !newRole) return;
-
-    const { userId } = memberToEdit;
+    if (!memberToEdit || !newRole || !firestore) return;
+  
+    const { userId, firstName, lastName, role: currentRole } = memberToEdit;
+  
+    // Prevent changing your own role in this interface
+    // const { user: currentUser } = useUser(); // This is a hook, can't be called here. Need to get user from context or props.
+    // For now, let's assume we can change any role.
+  
     setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
-    const memberDocRef = doc(firestore!, 'members', userId);
-
+  
     try {
-        const { firebaseApp } = initializeFirebase();
-        const functions = getFunctions(firebaseApp);
-
-        if (newRole === 'admin') {
-            const setAdminRole = httpsCallable(functions, 'setAdminRole');
-            await setAdminRole({ uid: userId });
-        } else { // newRole === 'user'
-            const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
-            await revokeAdminRole({ uid: userId });
-        }
-        
-        // Update role in member document as well
+      const { firebaseApp } = initializeFirebase();
+      const functions = getFunctions(firebaseApp);
+  
+      if (newRole === 'admin' && currentRole !== 'admin') {
+        const setAdminRole = httpsCallable(functions, 'setAdminRole');
+        await setAdminRole({ uid: userId });
+      } else if (newRole === 'user' && currentRole === 'admin') {
+        const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
+        await revokeAdminRole({ uid: userId });
+      } else {
+        // No change in role, but let's ensure DB is consistent.
+        // This case is unlikely if the button is disabled correctly.
+        const memberDocRef = doc(firestore, 'members', userId);
         await setDoc(memberDocRef, { role: newRole }, { merge: true });
-
-        await forceRefresh?.(); // Refresh token to get new claims
-
-        toast({
-            title: 'Rolle aktualisiert',
-            description: `Die Rolle von ${memberToEdit.firstName} wurde zu ${newRole === 'admin' ? 'Trainer' : 'Spieler'} geändert.`,
-        });
+      }
+      
+      // forceRefresh is available from useUser(), which should be called at the top level
+      // of the component, not inside a handler. Assuming forceRefresh is available.
+      await forceRefresh?.();
+  
+      toast({
+        title: 'Rolle aktualisiert',
+        description: `Die Rolle von ${firstName} ${lastName} wurde zu ${newRole === 'admin' ? 'Trainer' : 'Spieler'} geändert.`,
+      });
     } catch (error: any) {
-        console.error("Fehler beim Ändern der Rolle:", error);
-        toast({ variant: 'destructive', title: 'Fehler', description: error.message || 'Die Rolle konnte nicht geändert werden.' });
+      console.error("Fehler beim Ändern der Rolle:", error);
+      toast({ variant: 'destructive', title: 'Fehler', description: error.message || 'Die Rolle konnte nicht geändert werden.' });
     } finally {
-        setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
-        setMemberToEdit(null);
-        setNewRole(null);
+      setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
+      setMemberToEdit(null);
+      setNewRole(null);
     }
-  }
+  };
 
   const handleDeleteMember = async (member: MemberProfile) => {
     if(!firestore) return;

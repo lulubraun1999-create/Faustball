@@ -178,7 +178,6 @@ export default function ProfileEditPage() {
       const functions = getFunctions(firebaseApp);
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
-      // Call the function with the user's UID in the data payload
       await setAdminRole({ uid: authUser.uid });
       
       toast({
