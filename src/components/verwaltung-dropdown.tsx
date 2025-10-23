@@ -17,7 +17,11 @@ import { useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
 
 export function VerwaltungDropdown() {
-  const { isAdmin, isUserLoading } = useUser();
+  const { isAdmin, isUserLoading, userProfile } = useUser();
+
+  // Show admin menu if the token claim is true OR if the profile role from DB is 'admin'.
+  // This creates a more robust check that is less prone to timing issues with token propagation.
+  const showAdminMenu = isAdmin || userProfile?.role === 'admin';
 
   return (
     <DropdownMenu>
@@ -62,7 +66,7 @@ export function VerwaltungDropdown() {
               <span>Lade Admin-Status...</span>
             </DropdownMenuItem>
           </>
-        ) : isAdmin ? (
+        ) : showAdminMenu ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
