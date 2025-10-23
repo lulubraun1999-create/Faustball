@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useFirebase, useMemoFirebase } from '../provider';
+import { useFirebase, useMemoFirebase } from '@/firebase/provider';
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { useCallback, useMemo } from 'react';
 import type { User } from 'firebase/auth';
@@ -41,10 +41,11 @@ export const useUser = (): AdminAwareUserHookResult => {
 
   // Function to force a refresh of the user's auth token.
   const forceRefresh = useCallback(async () => {
-    if (refreshIdToken) {
-      await refreshIdToken();
+    if (user) {
+      // This will trigger onIdTokenChanged in the provider
+      await user.getIdToken(true);
     }
-  }, [refreshIdToken]);
+  }, [user]);
 
   const isUserReallyLoading = isAuthLoading || (user != null && isProfileLoading);
 

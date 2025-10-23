@@ -1,3 +1,4 @@
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
@@ -23,7 +24,7 @@ export const setAdminRole = onCall(async (request) => {
   }
   
   try {
-    // Set the custom claim for Firebase Auth
+    // Set the custom claim for Firebase Auth for immediate client-side checks if needed
     if (role === 'admin') {
       await admin.auth().setCustomUserClaims(uid, { admin: true });
     } else {
@@ -31,7 +32,7 @@ export const setAdminRole = onCall(async (request) => {
     }
 
     // Also write the role to the user's document in Firestore.
-    // This makes the role immediately available for security rules and client-side checks.
+    // This makes the role immediately available for security rules and reliable client-side checks.
     const userDocRef = admin.firestore().collection('users').doc(uid);
     await userDocRef.set({ role: role }, { merge: true });
     

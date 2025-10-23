@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { DependencyList, createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onIdTokenChanged } from 'firebase/auth';
@@ -25,35 +26,22 @@ interface UserAuthState {
   user: UserWithClaims | null;
   isUserLoading: boolean;
   userError: Error | null;
+  forceRefresh: (() => Promise<void>) | null; // Add forceRefresh to state
 }
 
 // Combined state for the Firebase context
-export interface FirebaseContextState {
+export interface FirebaseContextState extends UserAuthState {
   areServicesAvailable: boolean; // True if core services (app, firestore, auth instance) are provided
   firebaseApp: FirebaseApp | null;
   firestore: Firestore | null;
   auth: Auth | null; // The Auth service instance
-  // User authentication state
-  user: UserWithClaims | null;
-  isUserLoading: boolean; // True during initial auth check
-  userError: Error | null; // Error from auth listener
 }
 
 // Return type for useFirebase()
-export interface FirebaseServicesAndUser {
+export interface FirebaseServicesAndUser extends UserAuthState {
   firebaseApp: FirebaseApp;
   firestore: Firestore;
   auth: Auth;
-  user: UserWithClaims | null;
-  isUserLoading: boolean;
-  userError: Error | null;
-}
-
-// Return type for useUser() - specific to user auth state
-export interface UserHookResult { 
-  user: UserWithClaims | null;
-  isUserLoading: boolean;
-  userError: Error | null;
 }
 
 // React Context
@@ -72,16 +60,17 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     user: null,
     isUserLoading: true, // Start loading until first auth event
     userError: null,
+    forceRefresh: null,
   });
 
   // Effect to subscribe to Firebase auth state changes, including token changes
   useEffect(() => {
     if (!auth) { 
-      setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
+      setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided."), forceRefresh: null });
       return;
     }
 
-    setUserAuthState({ user: null, isUserLoading: true, userError: null }); 
+    setUserAuthState(current => ({ ...current, isUserLoading: true })); 
 
     const unsubscribe = onIdTokenChanged(
       auth,
@@ -92,14 +81,19 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
                 ...firebaseUser,
                 customClaims: (tokenResult.claims as { admin?: boolean }) ?? {},
             };
-            setUserAuthState({ user: userWithClaims, isUserLoading: false, userError: null });
+            setUserAuthState({ 
+              user: userWithClaims, 
+              isUserLoading: false, 
+              userError: null,
+              forceRefresh: () => firebaseUser.getIdToken(true)
+            });
         } else {
-            setUserAuthState({ user: null, isUserLoading: false, userError: null });
+            setUserAuthState({ user: null, isUserLoading: false, userError: null, forceRefresh: null });
         }
       },
       (error) => {
         console.error("FirebaseProvider: onIdTokenChanged error:", error);
-        setUserAuthState({ user: null, isUserLoading: false, userError: error });
+        setUserAuthState({ user: null, isUserLoading: false, userError: error, forceRefresh: null });
       }
     );
     return () => unsubscribe(); // Cleanup
@@ -113,9 +107,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       firebaseApp: servicesAvailable ? firebaseApp : null,
       firestore: servicesAvailable ? firestore : null,
       auth: servicesAvailable ? auth : null,
-      user: userAuthState.user,
-      isUserLoading: userAuthState.isUserLoading,
-      userError: userAuthState.userError,
+      ...userAuthState,
     };
   }, [firebaseApp, firestore, auth, userAuthState]);
 
@@ -149,6 +141,7 @@ export const useFirebase = (): FirebaseServicesAndUser => {
     user: context.user,
     isUserLoading: context.isUserLoading,
     userError: context.userError,
+    forceRefresh: context.forceRefresh,
   };
 };
 
@@ -170,13 +163,20 @@ export const useFirebaseApp = (): FirebaseApp => {
   return firebaseApp;
 };
 
-type MemoFirebase <T> = T & {__memo?: boolean};
-
-export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | (MemoFirebase<T>) {
+// This is not a hook, so it doesn't use 'use' prefix.
+// It's a tagged template literal for memoizing Firestore queries/refs.
+export function useMemoFirebase<T>(factory: () => T, deps: React.DependencyList): T {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const memoized = useMemo(factory, deps);
   
-  if(typeof memoized !== 'object' || memoized === null) return memoized;
-  (memoized as MemoFirebase<T>).__memo = true;
+  if (typeof memoized === 'object' && memoized !== null) {
+    // Add a non-enumerable property to mark it as memoized.
+    Object.defineProperty(memoized, '__memo', {
+      value: true,
+      writable: false,
+      enumerable: false,
+    });
+  }
   
   return memoized;
 }
