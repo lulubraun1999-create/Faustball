@@ -10,7 +10,7 @@ import {
   useUser,
 } from '@/firebase';
 import { collection, doc, setDoc } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile, UserProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -37,6 +37,7 @@ import { useMemo, useState } from 'react';
 import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 
+
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -47,32 +48,43 @@ function AdminMitgliederPageContent() {
     () => (firestore ? collection(firestore, 'members') : null),
     [firestore]
   );
+    const usersRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'users') : null),
+    [firestore]
+  );
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
     [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
+  const combinedData = useMemo(() => {
+    if (!membersData || !usersData) return [];
+    
+    const usersMap = new Map(usersData.map(user => [user.id, user]));
+    
+    return membersData.map(member => ({
+      ...member,
+      role: usersMap.get(member.userId)?.role || 'user',
+    }));
+  }, [membersData, usersData]);
 
   const sortedMembers = useMemo(() => {
-    if (!membersData) return [];
-    // Sort by lastName, then firstName. Handle cases where they might be undefined.
-    return [...membersData].sort((a, b) => {
+    if (!combinedData) return [];
+    return [...combinedData].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
-      const firstNameA = a.firstName || '';
-      const firstNameB = b.firstName || '';
-
       if (lastNameA.localeCompare(lastNameB) !== 0) {
         return lastNameA.localeCompare(lastNameB);
       }
-      return firstNameA.localeCompare(firstNameB);
+      return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData]);
+  }, [combinedData]);
 
+  const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
 
   const handleTeamsChange = async (userId: string, newTeams: string[]) => {
     if (!firestore) return;
@@ -94,16 +106,23 @@ function AdminMitgliederPageContent() {
     }
   };
 
-  const getTeamNames = (teamIds: string[]) => {
-    if (!teamIds || teamIds.length === 0) return 'Keine';
+  const getTeamNamesForEdit = (teamIds?: string[]) => {
+    if (!teamIds || teamIds.length === 0) return 'Mannschaft auswählen';
+    if (!teams) return 'Laden...';
     return teamIds
       .map(id => teams.find(t => t.id === id)?.name)
       .filter(Boolean)
       .join(', ');
   };
 
+    const getTeamNamesForDisplay = (teamIds?: string[]) => {
+    if (!teamIds || teamIds.length === 0) return 'N/A';
+     if (!teams) return 'Laden...';
+    return teamIds.map(id => teams.find(t => t.id === id)?.name || id).join(', ');
+  };
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+
+  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -124,19 +143,35 @@ function AdminMitgliederPageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>E-Mail</TableHead>
-                    <TableHead>Mannschaften</TableHead>
+                    <TableHead>Mannschaft</TableHead>
+                    <TableHead>Vorname</TableHead>
+                    <TableHead>Nachname</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Rolle</TableHead>
+                    <TableHead>Geschlecht</TableHead>
+                    <TableHead>Geburtstag</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Telefon</TableHead>
+                    <TableHead>Wohnort</TableHead>
+                    <TableHead className="text-right">Aktion</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedMembers.length > 0 ? (
                     sortedMembers.map((member) => (
                       <TableRow key={member.userId}>
-                        <TableCell className="font-medium">{`${member.firstName || ''} ${member.lastName || ''}`}</TableCell>
+                        <TableCell>{getTeamNamesForDisplay(member.teams)}</TableCell>
+                        <TableCell>{member.firstName || 'N/A'}</TableCell>
+                        <TableCell>{member.lastName || 'N/A'}</TableCell>
+                        <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
+                        <TableCell className="capitalize">{member.role}</TableCell>
+                        <TableCell>{member.gender || 'N/A'}</TableCell>
+                        <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : 'N/A'}</TableCell>
                         <TableCell>{member.email || 'N/A'}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
+                        <TableCell>{member.phone || 'N/A'}</TableCell>
+                        <TableCell>{member.location || 'N/A'}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
                              {updatingStates[`teams-${member.userId}`] ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
@@ -149,7 +184,7 @@ function AdminMitgliederPageContent() {
                                     disabled={!firestore || !isAdmin}
                                 >
                                     <span className="truncate">
-                                    {getTeamNames(member.teams || [])}
+                                    {getTeamNamesForEdit(member.teams)}
                                     </span>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -186,7 +221,7 @@ function AdminMitgliederPageContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="h-24 text-center">
+                      <TableCell colSpan={11} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>
