@@ -5,7 +5,6 @@ import {
   useDoc,
   useFirestore,
   useMemoFirebase,
-  useUser,
   errorEmitter,
   FirestorePermissionError,
 } from '@/firebase';
@@ -13,18 +12,16 @@ import type { NewsArticle } from '@/lib/types';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Loader2, Wand2, Newspaper } from 'lucide-react';
+import { Loader2, Wand2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { summarize } from '@/ai/flows/summarize-flow';
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 
 export default function NewsArticlePage() {
   const { id } = useParams();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
   const { toast } = useToast();
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
@@ -54,7 +51,15 @@ export default function NewsArticlePage() {
     try {
       const result = await summarize(article.content);
       const docRef = doc(firestore, 'news', article.id);
-      await updateDoc(docRef, { summary: result });
+      
+      updateDoc(docRef, { summary: result }).catch((e) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+              path: docRef.path,
+              operation: 'update',
+              requestResourceData: { summary: result }
+          }));
+      });
+
       toast({
         title: 'Zusammenfassung erstellt',
         description: 'Die KI-Zusammenfassung wurde für den Artikel gespeichert.',
@@ -90,7 +95,7 @@ export default function NewsArticlePage() {
     );
   }
 
-  const canGenerateSummary = isAdmin && !article.summary;
+  const canGenerateSummary = !article.summary;
 
   return (
     <div className="container mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
@@ -100,8 +105,8 @@ export default function NewsArticlePage() {
                 <Image
                     src={article.imageUrls[0]}
                     alt={article.title}
-                    layout="fill"
-                    objectFit="cover"
+                    fill
+                    style={{objectFit: "cover"}}
                     className="bg-muted"
                 />
                 </div>
@@ -151,7 +156,7 @@ export default function NewsArticlePage() {
                         ) : article.summary ? (
                              <p className="text-muted-foreground">{article.summary}</p>
                         ): (
-                            <p className="text-sm text-muted-foreground italic">Noch keine Zusammenfassung vorhanden. Ein Admin kann eine erstellen.</p>
+                            <p className="text-sm text-muted-foreground italic">Noch keine Zusammenfassung vorhanden. Klicken Sie auf "Generieren", um eine zu erstellen.</p>
                         )}
                     </CardContent>
                 </Card>
@@ -171,8 +176,8 @@ export default function NewsArticlePage() {
                                 <Image
                                     src={url}
                                     alt={`${article.title} - Bild ${index + 2}`}
-                                    layout="fill"
-                                    objectFit="cover"
+                                    fill
+                                    style={{objectFit: "cover"}}
                                     className="bg-muted"
                                 />
                             </div>
