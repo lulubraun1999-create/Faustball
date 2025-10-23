@@ -76,17 +76,17 @@ function AdminMitgliederPageContent() {
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
 
   const combinedData = useMemo(() => {
-    if (!usersData || !membersData) return [];
+    if (!usersData) return [];
 
-    const memberMap = new Map(membersData.map(m => [m.userId, m]));
+    const memberMap = new Map(membersData?.map(m => [m.userId, m]));
 
     const combined: MemberWithRoleAndTeams[] = usersData.map(user => {
       const memberProfile = memberMap.get(user.id);
       return {
-        ...user,
-        ...memberProfile,
-        userId: user.id,
-        teams: memberProfile?.teams || [],
+        ...user, // Base user data (firstName, lastName, email, role)
+        ...memberProfile, // Optional member data (phone, location, etc.)
+        userId: user.id, // Ensure userId is always the user's ID
+        teams: memberProfile?.teams || [], // Default to empty array if no member profile or teams
       };
     });
 
@@ -118,7 +118,7 @@ function AdminMitgliederPageContent() {
     setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
     const memberDocRef = doc(firestore, 'members', userId);
     try {
-      await setDoc(memberDocRef, { teams: newTeams }, { merge: true });
+      await setDoc(memberDocRef, { userId: userId, teams: newTeams }, { merge: true });
       toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
     } catch (error) {
        const permissionError = new FirestorePermissionError({
