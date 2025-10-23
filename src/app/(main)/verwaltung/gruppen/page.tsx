@@ -13,11 +13,9 @@ import {
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { Group } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 
 export default function VerwaltungGruppenPage() {
   const firestore = useFirestore();
-  const router = useRouter();
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
 
   const groupsRef = useMemoFirebase(
@@ -40,6 +38,8 @@ export default function VerwaltungGruppenPage() {
         const updatedSelectedClass = classes.find(c => c.id === selectedClass.id);
         if(!updatedSelectedClass && classes.length > 0) {
             setSelectedClass(classes[0]);
+        } else if (!updatedSelectedClass && classes.length === 0) {
+            setSelectedClass(null);
         }
     }
   }, [groups, classes, selectedClass]);

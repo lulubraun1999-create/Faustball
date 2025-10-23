@@ -25,11 +25,25 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel
 } from '@/components/ui/select';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogFooter,
+    DialogClose,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import {
   Users,
   Loader2,
+  Users2,
+  Settings,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -68,7 +82,7 @@ type GroupManagementValues = z.infer<typeof groupManagementSchema>;
 function AdminGruppenBearbeitenPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingOpen, setIsEditingOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
 
   const groupsRef = useMemoFirebase(
@@ -210,16 +224,181 @@ function AdminGruppenBearbeitenPageContent() {
 
   const getDeletableItems = () => {
     if (watchType === 'class') {
-      return classes;
+        return classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>);
     }
-    if (watchType === 'team' && watchParentId) {
-      return groups?.filter((g) => g.parentId === watchParentId) || [];
+    if (watchType === 'team') {
+        return classes.map(c => {
+            const teamsOfClass = groups?.filter(g => g.type === 'team' && g.parentId === c.id);
+            if (!teamsOfClass || teamsOfClass.length === 0) return null;
+            return (
+                <SelectGroup key={c.id}>
+                    <SelectLabel>{c.name}</SelectLabel>
+                    {teamsOfClass.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                </SelectGroup>
+            )
+        })
     }
     return [];
   };
 
-  const renderDisplayView = () => (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+  return (
+    <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex items-center justify-between">
+        <h1 className="flex items-center gap-3 text-3xl font-bold">
+            <Users2 className="h-8 w-8 text-primary" />
+            <span className="font-headline">Mannschaften bearbeiten</span>
+        </h1>
+        <Dialog open={isEditingOpen} onOpenChange={setIsEditingOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="icon">
+                <Settings className="h-5 w-5" />
+                <span className="sr-only">Mannschaften verwalten</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+                <DialogTitle>Mannschaften verwalten</DialogTitle>
+                <DialogDescription>
+                  Füge neue Mannschaften hinzu, bearbeite oder lösche bestehende.
+                </DialogDescription>
+            </DialogHeader>
+             <Form {...form}>
+                <form
+                    onSubmit={form.handleSubmit(onManagementSubmit)}
+                    className="space-y-6 pt-4"
+                >
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                        control={form.control}
+                        name="action"
+                        render={({ field }) => (
+                        <FormItem>
+                            <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            >
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Aktion auswählen" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <SelectItem value="add">Hinzufügen</SelectItem>
+                                <SelectItem value="delete">Löschen</SelectItem>
+                            </SelectContent>
+                            </Select>
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="type"
+                        render={({ field }) => (
+                        <FormItem>
+                            <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            >
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Typ auswählen" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <SelectItem value="class">Obergruppe</SelectItem>
+                                <SelectItem value="team">Untergruppe</SelectItem>
+                            </SelectContent>
+                            </Select>
+                        </FormItem>
+                        )}
+                    />
+                    </div>
+                    
+                    {watchAction === 'add' ? (
+                    <>
+                        {watchType === 'team' && (
+                        <FormField
+                            control={form.control}
+                            name="parentId"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Obergruppe wählen...</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ''}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Obergruppe für neue Mannschaft auswählen" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        )}
+                        <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Name für neues Element...</FormLabel>
+                            <FormControl>
+                                <Input placeholder={`Name für neue ${watchType === 'class' ? 'Obergruppe' : 'Mannschaft'}`} {...field} value={field.value || ''}/>
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </>
+                    ) : (
+                        <>
+                        <FormField
+                            control={form.control}
+                            name="deleteId"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Zu löschendes Element</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ''}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Element zum Löschen auswählen" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {getDeletableItems()}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        </>
+                    )}
+
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                            Schließen
+                            </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={form.formState.isSubmitting}>
+                            {form.formState.isSubmitting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                            'Aktion ausführen'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       <div className="md:col-span-1">
         <Card>
           <CardHeader>
@@ -232,7 +411,7 @@ function AdminGruppenBearbeitenPageContent() {
               </div>
             ) : (
               <nav className="flex flex-col space-y-1">
-                {classes.map((category) => (
+                {classes.length > 0 ? classes.map((category) => (
                   <Button
                     key={category.id}
                     variant="ghost"
@@ -245,7 +424,9 @@ function AdminGruppenBearbeitenPageContent() {
                   >
                     {category.name}
                   </Button>
-                ))}
+                )) : (
+                    <p className="text-sm text-muted-foreground p-4 text-center">Noch keine Obergruppen erstellt.</p>
+                )}
               </nav>
             )}
           </CardContent>
@@ -255,7 +436,7 @@ function AdminGruppenBearbeitenPageContent() {
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">
-              {selectedClass ? selectedClass.name : 'Keine Obergruppe ausgewählt'}
+              {selectedClass ? selectedClass.name : (isLoading ? 'Laden...' : 'Keine Obergruppe ausgewählt')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -278,7 +459,7 @@ function AdminGruppenBearbeitenPageContent() {
               <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
                 <Users className="h-10 w-10 text-muted-foreground" />
                 <p className="mt-4 text-muted-foreground">
-                  Keine Mannschaften in dieser Obergruppe.
+                  {selectedClass ? 'Keine Mannschaften in dieser Obergruppe.' : 'Bitte eine Obergruppe auswählen.'}
                 </p>
               </div>
             )}
@@ -286,180 +467,6 @@ function AdminGruppenBearbeitenPageContent() {
         </Card>
       </div>
     </div>
-  );
-
-  const renderEditingView = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle>Mannschaften verwalten</CardTitle>
-        <CardDescription>
-          Füge neue Mannschaften hinzu, bearbeite oder lösche bestehende.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onManagementSubmit)}
-            className="space-y-6"
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="action"
-                render={({ field }) => (
-                  <FormItem>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Aktion auswählen" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="add">Hinzufügen</SelectItem>
-                        <SelectItem value="delete">Löschen</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Typ auswählen" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="class">Obergruppe</SelectItem>
-                        <SelectItem value="team">Untergruppe</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-            </div>
-            
-            {watchAction === 'add' ? (
-              <>
-                {watchType === 'team' && (
-                   <FormField
-                    control={form.control}
-                    name="parentId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Obergruppe wählen...</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                            <FormControl>
-                                <SelectTrigger>
-                                <SelectValue placeholder="Obergruppe für neue Mannschaft auswählen" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name für neues Element...</FormLabel>
-                      <FormControl>
-                        <Input placeholder={`Name für neue ${watchType === 'class' ? 'Obergruppe' : 'Mannschaft'}`} {...field} value={field.value || ''}/>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </>
-            ) : (
-                 <>
-                {watchType === 'team' && (
-                   <FormField
-                    control={form.control}
-                    name="parentId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Obergruppe der zu löschenden Mannschaft</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                            <FormControl>
-                                <SelectTrigger>
-                                <SelectValue placeholder="Obergruppe auswählen" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                 <FormField
-                    control={form.control}
-                    name="deleteId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Zu löschendes Element</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={watchType === 'team' && !watchParentId}>
-                            <FormControl>
-                                <SelectTrigger>
-                                <SelectValue placeholder="Element zum Löschen auswählen" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {getDeletableItems().map(item => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  </>
-            )}
-
-
-            <div className="flex justify-end">
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  'Aktion ausführen'
-                )}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
-  );
-
-  return (
-    <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Mannschaften</h1>
-        <Button onClick={() => setIsEditing(!isEditing)}>
-          {isEditing ? 'Schließen' : 'Mannschaften bearbeiten'}
-        </Button>
-      </div>
-
-      {isEditing ? renderEditingView() : renderDisplayView()}
     </div>
   );
 }
