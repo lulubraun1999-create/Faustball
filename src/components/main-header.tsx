@@ -60,7 +60,7 @@ export function MainHeader() {
           </Link>
         </div>
 
-        <nav className="flex flex-1 items-center justify-center">
+        <nav className="flex-1 flex justify-center">
           <div className="flex items-center space-x-6 text-sm font-medium">
             <Link
               href="/dashboard"
