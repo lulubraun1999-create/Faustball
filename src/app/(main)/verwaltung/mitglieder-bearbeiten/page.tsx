@@ -9,8 +9,8 @@ import {
   FirestorePermissionError,
   useUser,
 } from '@/firebase';
-import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
-import type { MemberProfile, UserProfile, Group } from '@/lib/types';
+import { collection, doc, setDoc } from 'firebase/firestore';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -26,13 +26,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -44,22 +37,12 @@ import { useMemo, useState } from 'react';
 import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 
-type MemberWithRoleAndTeams = UserProfile &
-  Partial<Omit<MemberProfile, 'userId'>> & {
-    userId: string;
-    teams?: string[];
-  };
-
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { isAdmin } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
 
-  const usersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
-    [firestore, isAdmin]
-  );
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -69,59 +52,25 @@ function AdminMitgliederPageContent() {
     [firestore, isAdmin]
   );
 
-  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
 
-  const combinedData = useMemo(() => {
-    if (!usersData) return [];
+  const sortedMembers = useMemo(() => {
+    return membersData
+      ? [...membersData].sort((a, b) => 
+          (a.lastName || '').localeCompare(b.lastName || ''))
+      : [];
+  }, [membersData]);
 
-    const memberMap = new Map(membersData?.map(m => [m.userId, m]));
-
-    const combined: MemberWithRoleAndTeams[] = usersData.map(user => {
-      const memberProfile = memberMap.get(user.id);
-      return {
-        ...user,
-        ...memberProfile,
-        userId: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        teams: memberProfile?.teams || [],
-      };
-    });
-
-    return combined.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
-  }, [usersData, membersData]);
-
-  const handleRoleChange = async (userId: string, newRole: 'user' | 'admin') => {
-    if (!firestore) return;
-    setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
-    const userDocRef = doc(firestore, 'users', userId);
-    try {
-      await updateDoc(userDocRef, { role: newRole });
-      toast({ title: 'Rolle aktualisiert', description: 'Die Benutzerrolle wurde erfolgreich geändert.' });
-    } catch (error) {
-       const permissionError = new FirestorePermissionError({
-          path: userDocRef.path,
-          operation: 'update',
-          requestResourceData: { role: newRole },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Die Rolle konnte nicht geändert werden.' });
-    } finally {
-      setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
-    }
-  };
 
   const handleTeamsChange = async (userId: string, newTeams: string[]) => {
     if (!firestore) return;
     setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
     const memberDocRef = doc(firestore, 'members', userId);
     try {
+      // Use setDoc with merge to create or update the document.
       await setDoc(memberDocRef, { userId: userId, teams: newTeams }, { merge: true });
       toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
     } catch (error) {
@@ -146,7 +95,7 @@ function AdminMitgliederPageContent() {
   };
 
 
-  const isLoading = isLoadingUsers || isLoadingMembers || isLoadingGroups;
+  const isLoading = isLoadingMembers || isLoadingGroups;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -169,39 +118,18 @@ function AdminMitgliederPageContent() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>E-Mail</TableHead>
-                    <TableHead>Rolle</TableHead>
                     <TableHead>Mannschaften</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {combinedData.length > 0 ? (
-                    combinedData.map((profile) => (
-                      <TableRow key={profile.userId}>
-                        <TableCell className="font-medium">{`${profile.firstName || ''} ${profile.lastName || ''}`}</TableCell>
-                        <TableCell>{profile.email || 'N/A'}</TableCell>
-                        <TableCell>
-                           <div className="flex items-center gap-2">
-                            {updatingStates[`role-${profile.userId}`] ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                                <Select
-                                value={profile.role}
-                                onValueChange={(value: 'user' | 'admin') => handleRoleChange(profile.userId, value)}
-                                >
-                                <SelectTrigger className="w-[120px]">
-                                    <SelectValue placeholder="Rolle wählen" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="user">User</SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                                </Select>
-                            )}
-                          </div>
-                        </TableCell>
+                  {sortedMembers.length > 0 ? (
+                    sortedMembers.map((member) => (
+                      <TableRow key={member.userId}>
+                        <TableCell className="font-medium">{`${member.firstName || ''} ${member.lastName || ''}`}</TableCell>
+                        <TableCell>{member.email || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                             {updatingStates[`teams-${profile.userId}`] ? (
+                             {updatingStates[`teams-${member.userId}`] ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                             <Popover>
@@ -212,7 +140,7 @@ function AdminMitgliederPageContent() {
                                     className="w-[200px] justify-between"
                                 >
                                     <span className="truncate">
-                                    {getTeamNames(profile.teams || [])}
+                                    {getTeamNames(member.teams || [])}
                                     </span>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -221,18 +149,18 @@ function AdminMitgliederPageContent() {
                                    {teams.map(team => (
                                         <div key={team.id} className="flex items-center space-x-2 p-2">
                                             <Checkbox
-                                                id={`team-${profile.userId}-${team.id}`}
-                                                checked={profile.teams?.includes(team.id)}
+                                                id={`team-${member.userId}-${team.id}`}
+                                                checked={member.teams?.includes(team.id)}
                                                 onCheckedChange={(checked) => {
-                                                    const currentTeams = profile.teams || [];
+                                                    const currentTeams = member.teams || [];
                                                     const newTeams = checked
                                                         ? [...currentTeams, team.id]
                                                         : currentTeams.filter(id => id !== team.id);
-                                                    handleTeamsChange(profile.userId, newTeams);
+                                                    handleTeamsChange(member.userId, newTeams);
                                                 }}
                                             />
                                             <label
-                                                htmlFor={`team-${profile.userId}-${team.id}`}
+                                                htmlFor={`team-${member.userId}-${team.id}`}
                                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                                 >
                                                 {team.name}
@@ -249,7 +177,7 @@ function AdminMitgliederPageContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center">
+                      <TableCell colSpan={3} className="h-24 text-center">
                         Keine Mitglieder gefunden.
                       </TableCell>
                     </TableRow>
