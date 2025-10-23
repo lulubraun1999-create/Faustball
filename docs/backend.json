@@ -230,10 +230,6 @@
           "type": "string",
           "description": "The full content of the news article in markdown or plain text."
         },
-        "summary": {
-          "type": "string",
-          "description": "A short, AI-generated summary of the content."
-        },
         "imageUrls": {
           "type": "array",
           "description": "A list of URLs for images associated with the article.",
@@ -248,7 +244,66 @@
           "format": "date-time"
         }
       },
-      "required": ["title", "content", "createdAt"]
+      "required": ["title", "createdAt"]
+    },
+    "TreasuryTransaction": {
+      "title": "Treasury Transaction",
+      "type": "object",
+      "description": "Represents a single financial transaction for a team's treasury.",
+      "properties": {
+        "teamId": {
+          "type": "string",
+          "description": "The ID of the team this transaction belongs to."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction (e.g., 'Team dinner', 'Penalty: Late for training')."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The transaction amount. Positive for income, negative for expenses/penalties."
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the transaction occurred."
+        },
+        "type": {
+            "type": "string",
+            "description": "The type of transaction",
+            "enum": ["income", "expense", "penalty"]
+        },
+        "memberId": {
+          "type": "string",
+          "description": "Optional ID of the member associated with this transaction (especially for penalties)."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the transaction, primarily for penalties.",
+          "enum": ["paid", "unpaid"]
+        }
+      },
+      "required": ["teamId", "description", "amount", "date", "type", "status"]
+    },
+    "Penalty": {
+      "title": "Penalty",
+      "type": "object",
+      "description": "Defines a rule in a team's penalty catalog.",
+      "properties": {
+        "teamId": {
+          "type": "string",
+          "description": "The ID of the team this penalty rule belongs to."
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the penalty (e.g., 'Late for training')."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The cost of the penalty (should be a positive number)."
+        }
+      },
+      "required": ["teamId", "description", "amount"]
     }
   },
   "auth": {
@@ -293,8 +348,18 @@
         "$ref": "#/backend/entities/NewsArticle"
       },
       "description": "Stores all news articles. Writable only by admins, readable by all users."
+    },
+    "/treasury/{transactionId}": {
+      "schema": {
+        "$ref": "#/backend/entities/TreasuryTransaction"
+      },
+      "description": "Stores all financial transactions for all teams. Writable only by admins."
+    },
+    "/penalties/{penaltyId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Penalty"
+      },
+      "description": "Stores the penalty catalog rules for all teams. Writable only by admins."
     }
   }
 }
-
-    

@@ -66,4 +66,20 @@ export interface NewsArticle {
   createdAt: any; // Firestore Timestamp
 }
 
-    
+export interface Penalty {
+    id: string;
+    teamId: string;
+    description: string;
+    amount: number;
+}
+
+export interface TreasuryTransaction {
+    id: string;
+    teamId: string;
+    description: string;
+    amount: number; // Can be positive or negative
+    date: any; // Firestore Timestamp
+    type: 'income' | 'expense' | 'penalty';
+    memberId?: string; // For penalties
+    status: 'paid' | 'unpaid';
+}
