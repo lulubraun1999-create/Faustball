@@ -4,8 +4,8 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const summarizeInputSchema = z.string();
-export const summarizeOutputSchema = z.string();
+const summarizeInputSchema = z.string();
+const summarizeOutputSchema = z.string();
 
 export async function summarize(text: string): Promise<string> {
     return summarizeFlow(text);
@@ -36,5 +36,3 @@ const summarizeFlow = ai.defineFlow(
     return output!;
   }
 );
-
-    
