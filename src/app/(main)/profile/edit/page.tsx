@@ -178,6 +178,7 @@ export default function ProfileEditPage() {
       const functions = getFunctions(firebaseApp);
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
+      // The cloud function now handles both setting the claim and updating the DB.
       await setAdminRole({ uid: authUser.uid, role: 'admin' });
       
       toast({
@@ -186,9 +187,9 @@ export default function ProfileEditPage() {
       });
 
       // Crucial: Force a refresh of the ID token to get the new custom claim
-      if (forceRefresh) {
-        await forceRefresh();
-      }
+      // This is now handled by the onIdTokenChanged listener in the provider,
+      // but an explicit call can speed it up.
+      await forceRefresh?.();
 
       // Give a moment for the user to see the toast, then reload to ensure all components get the new state.
       setTimeout(() => window.location.reload(), 3000);
@@ -198,7 +199,7 @@ export default function ProfileEditPage() {
       toast({
         variant: 'destructive',
         title: 'Fehler bei der Rollenzuweisung',
-        description: error.message || 'Die Admin-Rolle konnte nicht zugewiesen werden.',
+        description: error.message || 'Die Admin-Rolle konnte nicht zugewiesen werden. Versuchen Sie es später erneut.',
       });
        setIsSettingAdmin(false);
     }
@@ -226,7 +227,7 @@ export default function ProfileEditPage() {
       .catch(() => {
         const permissionError = new FirestorePermissionError({
           path: memberDocRef.path,
-          operation: 'write',
+          operation: 'update',
           requestResourceData: memberData,
         });
         errorEmitter.emit('permission-error', permissionError);
