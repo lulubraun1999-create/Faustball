@@ -110,7 +110,7 @@ export default function ProfileEditPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const firebaseApp = useFirebaseApp();
-  const { user: authUser, isUserLoading: isAuthLoading, forceRefresh } = useUser();
+  const { user: authUser, isUserLoading: isAuthLoading, forceRefresh, isAdmin } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
@@ -188,12 +188,13 @@ export default function ProfileEditPage() {
         const setAdminRole = httpsCallable(functions, 'setAdminRole');
         await setAdminRole({ uid: authUser.uid, role: 'admin' });
         
-        // Force a refresh of the user's ID token to get the new custom claim.
+        // Force a refresh of the user's ID token.
+        // The onIdTokenChanged listener in FirebaseProvider will pick this up.
         await forceRefresh(); 
         
         toast({ 
           title: "Admin-Rolle zugewiesen", 
-          description: "Ihre Berechtigungen wurden aktualisiert. Navigieren Sie zu einer Admin-Seite, um die Änderungen zu sehen." 
+          description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt zu Admin-Seiten navigieren." 
         });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });
@@ -545,16 +546,16 @@ export default function ProfileEditPage() {
           <div className="mt-8 rounded-lg border border-border p-4">
              <h3 className="font-semibold">Admin Status</h3>
              <p className="mt-2 text-sm text-muted-foreground">
-               Klicken Sie hier, um sich selbst Administratorrechte zu geben.
+              {isAdmin ? "Sie haben bereits Administratorrechte." : "Klicken Sie hier, um sich selbst Administratorrechte zu geben."}
              </p>
              <Button
                 variant="outline"
                 className="mt-4 w-full"
                 onClick={handleSetAdmin}
-                disabled={isSettingAdmin}
+                disabled={isSettingAdmin || isAdmin}
               >
                 {isSettingAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Mich zum Admin machen
+                {isAdmin ? "Admin bereits zugewiesen" : "Mich zum Admin machen"}
               </Button>
           </div>
 

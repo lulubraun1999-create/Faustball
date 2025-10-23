@@ -17,15 +17,12 @@ export interface AdminAwareUserHookResult {
 export const useUser = (): AdminAwareUserHookResult => {
   const { user, isUserLoading } = useFirebase();
 
-  // Custom claims are on the idTokenResult, not the user object directly.
-  // We can't get this directly in a hook, so we rely on the provider to get it.
-  // For now, we assume role is part of a profile or we need to adjust the provider.
-  // Let's assume the provider will be updated to expose claims or a profile.
-  // For the purpose of this fix, let's derive it, assuming the token is fresh.
-
-  const isAdmin = !!(user as any)?.customClaims?.admin;
+  // The admin claim is now reliably populated by the FirebaseProvider's onIdTokenChanged listener.
+  const isAdmin = !!user?.customClaims?.admin;
 
   const forceRefresh = useCallback(async () => {
+    // Calling getIdToken(true) forces a token refresh.
+    // The onIdTokenChanged listener in FirebaseProvider will automatically pick up the new token and claims.
     if (user) {
       await user.getIdToken(true);
     }
