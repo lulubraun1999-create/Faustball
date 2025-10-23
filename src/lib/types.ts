@@ -1,5 +1,6 @@
 
 
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -19,6 +20,7 @@ export interface MemberProfile {
   position?: string[];
   birthday?: string;
   gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
+  teams?: string[];
 }
 
 export interface FullUserProfile extends UserProfile, Omit<MemberProfile, 'userId'> {}
