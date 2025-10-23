@@ -52,9 +52,9 @@ export function MainLayoutClient({
             
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
-              firstName: userData.firstName, // Use data from user doc
-              lastName: userData.lastName,   // Use data from user doc
-              email: userData.email,         // Use data from user doc
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+              email: userData.email,
               teams: [], // Ensure 'teams' array exists and is initialized
               // Initialize other optional fields to avoid undefined issues
               phone: '',
@@ -67,7 +67,7 @@ export function MainLayoutClient({
             writeNeeded = true;
           }
 
-          // Mark first login as complete
+          // Mark first login as complete if it's false
           if (userData.firstLoginComplete === false) {
               batch.update(userDocRef, { firstLoginComplete: true });
               writeNeeded = true;

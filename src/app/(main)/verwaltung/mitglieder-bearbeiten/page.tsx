@@ -59,10 +59,19 @@ function AdminMitgliederPageContent() {
 
   const sortedMembers = useMemo(() => {
     if (!membersData) return [];
-    return [...membersData].sort((a, b) => 
-          (a.lastName || '').localeCompare(b.lastName || ''))
-      .sort((a, b) =>
-          (a.firstName || '').localeCompare(b.firstName || ''));
+    // Sort by lastName, then firstName. Handle cases where they might be undefined.
+    return [...membersData].sort((a, b) => {
+      const lastNameA = a.lastName || '';
+      const lastNameB = b.lastName || '';
+      const firstNameA = a.firstName || '';
+      const firstNameB = b.firstName || '';
+
+      if (lastNameA < lastNameB) return -1;
+      if (lastNameA > lastNameB) return 1;
+      if (firstNameA < firstNameB) return -1;
+      if (firstNameA > firstNameB) return 1;
+      return 0;
+    });
   }, [membersData]);
 
 
