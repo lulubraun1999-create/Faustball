@@ -14,33 +14,22 @@ export const setAdminRole = onCall(async (request) => {
   if (typeof uid !== 'string' || typeof role !== 'string') {
     throw new HttpsError('invalid-argument', 'The function must be called with a "uid" and "role" argument.');
   }
-
-  // Only existing admins can set other admins (except for self-assignment)
-  const callingUserDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
-  const isCallerAdmin = callingUserDoc.data()?.role === 'admin';
-
-  if (!isCallerAdmin && request.auth.uid !== uid) {
-    throw new HttpsError('permission-denied', 'Only admins can set roles for other users.');
-  }
   
   try {
-    // Set the custom claim for Firebase Auth for immediate client-side checks if needed
-    if (role === 'admin') {
-      await admin.auth().setCustomUserClaims(uid, { admin: true });
-    } else {
-      await admin.auth().setCustomUserClaims(uid, { admin: false });
-    }
+    // Set the custom claim for Firebase Auth. This is useful for client-side checks
+    // that need immediate feedback without a Firestore read, but can be slightly delayed.
+    await admin.auth().setCustomUserClaims(uid, { admin: role === 'admin' });
 
     // Also write the role to the user's document in Firestore.
-    // This makes the role immediately available for security rules and reliable client-side checks.
+    // This makes the role immediately available for security rules and is the source of truth.
     const userDocRef = admin.firestore().collection('users').doc(uid);
     await userDocRef.set({ role: role }, { merge: true });
     
     return {
-      message: `Success! User ${uid} has been made an ${role}. Please refresh the page for the changes to take effect.`,
+      message: `Success! User ${uid} has been made an ${role}.`,
     };
   } catch (error) {
     console.error('Error setting custom claims and Firestore role:', error);
-    throw new HttpsError('internal', 'An internal error occurred.');
+    throw new HttpsError('internal', 'An internal error occurred while setting the user role.');
   }
 });

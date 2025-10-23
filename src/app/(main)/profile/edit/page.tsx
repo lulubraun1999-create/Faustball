@@ -178,13 +178,12 @@ export default function ProfileEditPage() {
         const setAdminRole = httpsCallable(functions, 'setAdminRole');
         await setAdminRole({ uid: authUser.uid, role: 'admin' });
         
-        // Force a refresh of the user's ID token. This will trigger onIdTokenChanged listener
-        // in the provider, which will in turn update the user's role in Firestore and globally.
+        // Force a refresh of the user's ID token and user profile data
         await forceRefresh(); 
         
         toast({ 
           title: "Admin-Rolle zugewiesen", 
-          description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt zu Admin-Seiten navigieren." 
+          description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt auf Admin-Seiten zugreifen." 
         });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Fehler beim Zuweisen der Admin-Rolle", description: error.message });

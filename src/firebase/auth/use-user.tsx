@@ -22,7 +22,7 @@ export interface AdminAwareUserHookResult {
  * The admin status is now derived from the Firestore document for reliability.
  */
 export const useUser = (): AdminAwareUserHookResult => {
-  const { user, isUserLoading: isAuthLoading, firebaseApp, forceRefresh: refreshIdToken } = useFirebase();
+  const { user, isUserLoading: isAuthLoading, firebaseApp } = useFirebase();
 
   // Memoize Firestore instance to prevent re-renders
   const firestore = useMemo(() => firebaseApp ? getFirestore(firebaseApp) : null, [firebaseApp]);
@@ -39,10 +39,10 @@ export const useUser = (): AdminAwareUserHookResult => {
   // The isAdmin flag is now reliably sourced from the real-time user profile data.
   const isAdmin = !!userProfile?.role && userProfile.role === 'admin';
 
-  // Function to force a refresh of the user's auth token.
+  // Function to force a refresh of the user's auth token. This will also trigger the onIdTokenChanged
+  // listener in the provider, which can be used to refresh other state if needed.
   const forceRefresh = useCallback(async () => {
     if (user) {
-      // This will trigger onIdTokenChanged in the provider
       await user.getIdToken(true);
     }
   }, [user]);
