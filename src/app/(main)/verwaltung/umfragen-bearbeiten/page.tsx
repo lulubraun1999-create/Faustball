@@ -299,7 +299,7 @@ function AdminUmfragenPageContent() {
                               )}
                             >
                               {field.value ? (
-                                format(field.value, 'PPP', { timeZone: 'Europe/Berlin' })
+                                format(field.value, 'PPP')
                               ) : (
                                 <span>Datum auswählen</span>
                               )}
@@ -308,17 +308,19 @@ function AdminUmfragenPageContent() {
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => {
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0); // Set time to beginning of the day
-                                return date < today;
-                            }}
-                            initialFocus
-                          />
+                          <Card>
+                            <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                disabled={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0); 
+                                    return date < today;
+                                }}
+                                initialFocus
+                            />
+                          </Card>
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
