@@ -110,7 +110,7 @@ export default function ProfileEditPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const firebaseApp = useFirebaseApp();
-  const { user: authUser, isUserLoading: isAuthLoading } = useUser();
+  const { user: authUser, isUserLoading: isAuthLoading, forceRefresh } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
@@ -189,7 +189,7 @@ export default function ProfileEditPage() {
         await setAdminRole({ uid: authUser.uid, role: 'admin' });
         
         // Force a refresh of the user's ID token to get the new custom claim.
-        await authUser.getIdToken(true); 
+        await forceRefresh(); 
         
         toast({ title: "Admin-Rolle zugewiesen", description: "Ihre Berechtigungen wurden aktualisiert. Sie können jetzt auf Admin-Bereiche zugreifen." });
     } catch (error: any) {
@@ -787,5 +787,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    

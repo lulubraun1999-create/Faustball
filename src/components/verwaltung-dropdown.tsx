@@ -14,13 +14,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
 import type { UserProfile } from "@/lib/types";
+import { useUser } from "@/firebase";
 
 interface VerwaltungDropdownProps {
   userProfile: UserProfile | null | undefined;
 }
 
 export function VerwaltungDropdown({ userProfile }: VerwaltungDropdownProps) {
-  const isAdmin = userProfile?.role === 'admin';
+  const { isAdmin } = useUser();
 
   return (
     <DropdownMenu>
