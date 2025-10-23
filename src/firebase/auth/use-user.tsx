@@ -2,9 +2,17 @@
 
 import { useFirebase } from '../provider';
 import { useCallback } from 'react';
+import type { User } from 'firebase/auth';
+
+// Define a user type that can have custom claims.
+interface UserWithClaims extends User {
+  customClaims?: {
+    admin?: boolean;
+  };
+}
 
 export interface AdminAwareUserHookResult {
-  user: ReturnType<typeof useFirebase>['user'];
+  user: UserWithClaims | null; // Use the more specific user type
   isUserLoading: boolean;
   isAdmin: boolean;
   forceRefresh: () => Promise<void>;
