@@ -1,4 +1,5 @@
 
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -16,6 +17,8 @@ export interface MemberProfile {
   birthday?: string;
   gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
 }
+
+export interface FullUserProfile extends UserProfile, Omit<MemberProfile, 'userId'> {}
 
 export interface Appointment {
   id?: string;
