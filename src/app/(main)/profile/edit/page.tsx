@@ -31,9 +31,8 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
-  useFirebaseApp,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -42,7 +41,6 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -108,7 +106,6 @@ export default function ProfileEditPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const auth = useAuth();
-  const firebaseApp = useFirebaseApp();
   const { user: authUser, userProfile, isUserLoading, isAdmin, forceRefresh } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
@@ -168,32 +165,33 @@ export default function ProfileEditPage() {
   }, [userProfile, member, profileForm]);
 
   const handleSetAdmin = async () => {
-    if (!firebaseApp || !authUser) {
+    if (!firestore || !authUser) {
         toast({ variant: "destructive", title: "Fehler", description: "Firebase nicht initialisiert." });
         return;
     }
     setIsSettingAdmin(true);
-    try {
-        const functions = getFunctions(firebaseApp);
-        const setAdminRole = httpsCallable(functions, 'setAdminRole');
-        await setAdminRole({ uid: authUser.uid, role: 'admin' });
-        
+    const userDocRef = doc(firestore, "users", authUser.uid);
+    updateDoc(userDocRef, { role: 'admin' })
+      .then(async () => {
+        // This is crucial: force a refresh of the ID token to get the new custom claim
         await forceRefresh(); 
-        
         toast({ 
           title: "Admin-Rolle zugewiesen", 
-          description: "Ihre Berechtigungen wurden aktualisiert. Die Änderungen werden möglicherweise erst nach einem Neuladen der Seite vollständig wirksam." 
+          description: "Ihre Berechtigungen wurden aktualisiert." 
         });
-    } catch (error: any) {
+      })
+      .catch((error: any) => {
         console.error("Detaillierter Fehler beim Zuweisen der Admin-Rolle:", error);
-        toast({ 
-            variant: "destructive", 
-            title: "Fehler beim Zuweisen der Admin-Rolle", 
-            description: error.message || "Ein unbekannter Fehler ist aufgetreten." 
+        const permissionError = new FirestorePermissionError({
+          path: `users/${authUser.uid}`,
+          operation: 'update',
+          requestResourceData: { role: 'admin' },
         });
-    } finally {
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
         setIsSettingAdmin(false);
-    }
+      });
   };
 
 
@@ -352,6 +350,10 @@ export default function ProfileEditPage() {
       </div>
     );
   }
+  
+  // Use the database role as the primary indicator for the button, but the token for actual access control
+  const isConsideredAdmin = isAdmin || userProfile?.role === 'admin';
+
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -527,9 +529,9 @@ export default function ProfileEditPage() {
           <div className="mt-8 rounded-lg border border-border p-4">
              <h3 className="font-semibold">Admin Status</h3>
              <p className="mt-2 text-sm text-muted-foreground">
-              {isAdmin ? "Sie haben bereits Administratorrechte." : "Klicken Sie hier, um sich selbst Administratorrechte zu geben."}
+              {isConsideredAdmin ? "Sie haben bereits Administratorrechte." : "Klicken Sie hier, um sich selbst Administratorrechte zu geben."}
              </p>
-             {!isAdmin && (
+             {!isConsideredAdmin && (
                 <Button
                     variant="outline"
                     className="mt-4 w-full"
