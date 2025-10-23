@@ -50,7 +50,7 @@ export default function VerwaltungGruppenPage() {
        <div className="flex items-center justify-between">
         <h1 className="flex items-center gap-3 text-3xl font-bold">
             <Users2 className="h-8 w-8 text-primary" />
-            <span className="font-headline">Gruppen</span>
+            <span className="font-headline">Mannschaften</span>
         </h1>
       </div>
       

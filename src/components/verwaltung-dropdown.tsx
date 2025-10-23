@@ -37,7 +37,7 @@ export function VerwaltungDropdown({ userProfile }: VerwaltungDropdownProps) {
           <Link href="/verwaltung/termine">Termine</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/verwaltung/gruppen">Gruppen</Link>
+          <Link href="/verwaltung/gruppen">Mannschaften</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/verwaltung/mitglieder">Mitglieder</Link>
@@ -68,7 +68,7 @@ export function VerwaltungDropdown({ userProfile }: VerwaltungDropdownProps) {
                   <Link href="/verwaltung/termine-bearbeiten">Termine bearbeiten</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/verwaltung/gruppen-bearbeiten">Gruppen bearbeiten</Link>
+                  <Link href="/verwaltung/gruppen-bearbeiten">Mannschaften bearbeiten</Link>
                 </DropdownMenuItem>
                  <DropdownMenuItem asChild>
                   <Link href="/verwaltung/mitglieder-bearbeiten">Mitglieder bearbeiten</Link>

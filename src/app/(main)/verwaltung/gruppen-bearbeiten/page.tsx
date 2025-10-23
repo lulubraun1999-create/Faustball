@@ -114,8 +114,9 @@ export default function AdminGruppenBearbeitenPage() {
   const watchParentId = form.watch('parentId');
 
   useEffect(() => {
+      const currentValues = form.getValues();
       form.reset({
-          ...form.getValues(),
+          ...currentValues,
           deleteId: '',
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,6 +125,8 @@ export default function AdminGruppenBearbeitenPage() {
 
   const onManagementSubmit = async (data: GroupManagementValues) => {
     if (!firestore || !groupsRef) return;
+
+    const currentFormValues = form.getValues();
 
     if (data.action === 'add') {
       if (!data.name || data.name.trim() === '') {
@@ -149,7 +152,7 @@ export default function AdminGruppenBearbeitenPage() {
       try {
         await addDoc(groupsRef, newGroup);
         toast({ title: 'Gruppe erfolgreich erstellt.' });
-        form.reset({ ...data, name: '', deleteId: '' });
+        form.reset({ ...currentFormValues, name: '', deleteId: '' });
       } catch (error) {
         const permissionError = new FirestorePermissionError({
           path: 'groups',
@@ -185,7 +188,7 @@ export default function AdminGruppenBearbeitenPage() {
             await deleteDoc(docRef);
             toast({ title: 'Gruppe erfolgreich gelöscht.' });
         }
-        form.reset({ ...data, name: '', deleteId: '' });
+        form.reset({ ...currentFormValues, name: '', deleteId: '' });
       } catch (error) {
          const permissionError = new FirestorePermissionError({
           path: `groups/${data.deleteId}`,
@@ -279,9 +282,9 @@ export default function AdminGruppenBearbeitenPage() {
   const renderEditingView = () => (
     <Card>
       <CardHeader>
-        <CardTitle>Gruppen verwalten</CardTitle>
+        <CardTitle>Mannschaften verwalten</CardTitle>
         <CardDescription>
-          Füge neue Gruppen hinzu, bearbeite oder lösche bestehende.
+          Füge neue Mannschaften hinzu, bearbeite oder lösche bestehende.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -441,9 +444,9 @@ export default function AdminGruppenBearbeitenPage() {
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Gruppen</h1>
+        <h1 className="text-3xl font-bold">Mannschaften</h1>
         <Button onClick={() => setIsEditing(!isEditing)}>
-          {isEditing ? 'Schließen' : 'Gruppen bearbeiten'}
+          {isEditing ? 'Schließen' : 'Mannschaften bearbeiten'}
         </Button>
       </div>
 
