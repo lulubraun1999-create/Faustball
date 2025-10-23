@@ -38,7 +38,9 @@ export default function NewsArticlePage() {
   const { data: article, isLoading } = useDoc<NewsArticle>(articleRef);
 
   const handleGenerateSummary = async () => {
-    if (!firestore || !article || !article.id || !article.content || article.content.trim() === '') {
+    if (!firestore || !article || !article.id) return;
+    
+    if (!article.content || article.content.trim() === '') {
         toast({
             variant: 'destructive',
             title: 'Fehler',
