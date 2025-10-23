@@ -529,15 +529,17 @@ export default function ProfileEditPage() {
              <p className="mt-2 text-sm text-muted-foreground">
               {isAdmin ? "Sie haben bereits Administratorrechte." : "Klicken Sie hier, um sich selbst Administratorrechte zu geben."}
              </p>
-             <Button
-                variant="outline"
-                className="mt-4 w-full"
-                onClick={handleSetAdmin}
-                disabled={isSettingAdmin || isAdmin}
-              >
-                {isSettingAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isAdmin ? "Admin bereits zugewiesen" : "Mich zum Admin machen"}
-              </Button>
+             {!isAdmin && (
+                <Button
+                    variant="outline"
+                    className="mt-4 w-full"
+                    onClick={handleSetAdmin}
+                    disabled={isSettingAdmin}
+                >
+                    {isSettingAdmin ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Mich zum Admin machen
+                </Button>
+             )}
           </div>
 
           <div className="mt-8 rounded-lg border border-destructive/50 p-4">
@@ -719,14 +721,6 @@ export default function ProfileEditPage() {
                     </FormItem>
                   )}
                 />
-
-                <FormItem>
-                  <FormLabel>Rolle</FormLabel>
-                  <FormControl>
-                      <Input readOnly value={userProfile?.role || 'user'} className="bg-muted/50" />
-                  </FormControl>
-                </FormItem>
-
                 <FormItem>
                   <FormLabel>E-Mail</FormLabel>
                   <FormControl>
