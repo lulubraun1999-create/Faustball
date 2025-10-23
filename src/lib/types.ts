@@ -1,6 +1,4 @@
 
-
-
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -21,6 +19,7 @@ export interface MemberProfile {
   birthday?: string;
   gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
   teams?: string[];
+  role?: 'user' | 'admin'; // Add role to member profile
 }
 
 export interface FullUserProfile extends UserProfile, Omit<MemberProfile, 'userId'> {}
@@ -40,5 +39,3 @@ export interface Group {
   type: 'class' | 'team';
   parentId?: string;
 }
-
-    

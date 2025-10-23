@@ -1,123 +1,96 @@
+
 "use client";
 
-// Notwendige Imports beibehalten oder hinzufügen
 import { useUser, useFirestore, useMemoFirebase, useDoc } from "@/firebase";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { doc, getDoc, writeBatch } from "firebase/firestore";
-import type { UserProfile, MemberProfile } from "@/lib/types";
-
-// ❗ useCollection wird nicht mehr benötigt, wenn es nur für 'users' war
-// import { useCollection } from "@/firebase/firestore/use-collection";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import type { MemberProfile } from "@/lib/types";
 
 export function MainLayoutClient({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // useUser liefert authUser (Firebase Auth) und userProfile (/users/{uid} Daten)
-  const { user: authUser, userProfile, isUserLoading: isAuthLoading } = useUser();
+  const { user: authUser, isUserLoading: isAuthLoading } = useUser();
   const router = useRouter();
   const firestore = useFirestore();
-  const [isCheckingFirstLogin, setIsCheckingFirstLogin] = useState(true);
+  const [isCheckingConsistency, setIsCheckingConsistency] = useState(true);
 
-  // --- KEIN useCollection('users') Aufruf mehr ---
-
-  // Lade optional das Member-Profil (/members/{uid} Daten)
   const memberDocRef = useMemoFirebase(() => {
      if (!firestore || !authUser) return null;
      return doc(firestore, 'members', authUser.uid);
   }, [firestore, authUser]);
-  const { data: memberProfile, isLoading: isMemberLoading } = useDoc<MemberProfile>(memberDocRef);
+  const { isLoading: isMemberLoading } = useDoc<MemberProfile>(memberDocRef);
 
 
   useEffect(() => {
-    // Wenn Auth noch lädt, warte ab
     if (isAuthLoading) {
       return;
     }
 
-    // Wenn kein Benutzer angemeldet ist, leite zum Login weiter
     if (!authUser) {
       router.replace("/login");
       return;
     }
 
-    // Wenn Firestore noch nicht bereit ist (sollte nicht passieren, aber sicher ist sicher)
     if (!firestore) {
-      setIsCheckingFirstLogin(false);
+      setIsCheckingConsistency(false);
       return;
     }
 
-    // Funktion zur Sicherstellung der Profilkonsistenz (User- und Member-Dokument)
     const ensureProfileConsistency = async () => {
-      const userDocRef = doc(firestore, "users", authUser.uid);
+      // No user, no work to do.
+      if (!authUser || !authUser.email) {
+          setIsCheckingConsistency(false);
+          return;
+      }
+
       const memberDocRef = doc(firestore, "members", authUser.uid);
 
       try {
-        const userDocSnap = await getDoc(userDocRef);
         const memberDocSnap = await getDoc(memberDocRef);
 
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data() as UserProfile;
-          const batch = writeBatch(firestore);
-          let writeNeeded = false;
+        // If the member document doesn't exist, create it.
+        // This can happen for users created before the 'members' collection was standard.
+        if (!memberDocSnap.exists()) {
+          console.log("Member document missing for user. Creating it now.", authUser.uid);
+          // We might not have firstName/lastName here if the user object is not fresh.
+          // The registration process guarantees this data, but this is a fallback.
+          const displayName = authUser.displayName || "New User";
+          const [firstName, ...lastNameParts] = displayName.split(' ');
+          const lastName = lastNameParts.join(' ');
 
-          // Heile fehlendes Member-Dokument
-          if (!memberDocSnap.exists()) {
-            console.log("Member document missing for user. Creating it now.", authUser.uid);
-            const newMemberData: MemberProfile = {
-              userId: authUser.uid,
-              firstName: userData.firstName,
-              lastName: userData.lastName,
-              email: userData.email,
-              teams: [], // Standardwert für Teams
-              // Initialisiere optionale Felder, um undefined zu vermeiden
-              phone: '',
-              location: '',
-              position: [],
-              birthday: '',
-              gender: undefined,
-            };
-            batch.set(memberDocRef, newMemberData);
-            writeNeeded = true;
-          }
-
-          // Markiere ersten Login als abgeschlossen, falls nötig
-          if (userData.firstLoginComplete === false) {
-              batch.update(userDocRef, { firstLoginComplete: true });
-              writeNeeded = true;
-          }
-
-          // Führe Batch-Schreibvorgang aus, wenn Änderungen nötig waren
-          if (writeNeeded) {
-            console.log("Committing batch write for profile consistency.");
-            await batch.commit();
-          }
-
-        } else {
-            // Dies sollte nach der Registrierung nicht passieren, aber logge eine Warnung
-            console.warn("User document does not exist for authenticated user:", authUser.uid);
+          const newMemberData: MemberProfile = {
+            userId: authUser.uid,
+            email: authUser.email,
+            firstName: firstName,
+            lastName: lastName || '', // Ensure lastName is not undefined
+            role: 'user', // Default to 'user'
+            teams: [],
+            phone: '',
+            location: '',
+            position: [],
+            birthday: '',
+            gender: undefined,
+          };
+          // Use setDoc instead of a batch since it's a single operation
+          await setDoc(memberDocRef, newMemberData);
         }
       } catch (error) {
         console.error("Error ensuring profile consistency:", error);
       } finally {
-        // Setze den Ladezustand für die Konsistenzprüfung zurück
-        setIsCheckingFirstLogin(false);
+        setIsCheckingConsistency(false);
       }
     };
 
-    // Führe die Konsistenzprüfung aus
     ensureProfileConsistency();
 
-  // Abhängigkeiten des useEffect-Hooks
   }, [authUser, isAuthLoading, router, firestore]);
 
-  // Gesamtladezustand: Auth lädt ODER Konsistenzprüfung läuft ODER Member-Profil lädt (falls Benutzer vorhanden)
-  const isLoading = isAuthLoading || isCheckingFirstLogin || (authUser != null && isMemberLoading);
+  const isLoading = isAuthLoading || isCheckingConsistency || (authUser != null && isMemberLoading);
 
-  // Zeige Ladeindikator, solange Daten geladen werden
   if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -126,6 +99,5 @@ export function MainLayoutClient({
     );
   }
 
-  // Wenn alles geladen ist und der Benutzer authentifiziert ist, rendere die Kinderkomponenten
   return <main className="flex-1">{children}</main>;
 }

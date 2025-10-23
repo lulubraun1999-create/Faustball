@@ -7,7 +7,7 @@ import {
   useMemoFirebase,
 } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -32,32 +32,18 @@ export default function VerwaltungMitgliederPage() {
     () => (firestore ? collection(firestore, 'members') : null),
     [firestore]
   );
-  const usersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
     [firestore]
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-
-  const combinedUsers = useMemo(() => {
-    if (!membersData || !usersData) return [];
+  const sortedMembers = useMemo(() => {
+    if (!membersData) return [];
     
-    const usersMap = new Map(usersData.map(u => [u.id, u]));
-
-    return membersData.map(member => {
-        const user = usersMap.get(member.userId);
-        return {
-            ...member,
-            role: user?.role || 'user',
-        };
-    }).sort((a, b) => {
+    return [...membersData].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -65,7 +51,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData, usersData]);
+  }, [membersData]);
 
   const teamsMap = useMemo(() => {
     if (!groupsData) return new Map();
@@ -78,7 +64,7 @@ export default function VerwaltungMitgliederPage() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
+  const isLoading = isLoadingMembers || isLoadingGroups;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -112,8 +98,8 @@ export default function VerwaltungMitgliederPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {combinedUsers.length > 0 ? (
-                    combinedUsers.map((member) => (
+                  {sortedMembers.length > 0 ? (
+                    sortedMembers.map((member) => (
                       <TableRow key={member.userId}>
                         <TableCell>{getTeamNames(member.teams)}</TableCell>
                         <TableCell>{member.firstName || 'N/A'}</TableCell>

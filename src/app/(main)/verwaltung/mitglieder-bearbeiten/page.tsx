@@ -12,7 +12,7 @@ import {
 import { collection, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { initializeFirebase } from '@/firebase';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -56,7 +56,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -68,15 +68,11 @@ function AdminMitgliederPageContent() {
   const firestore = useFirestore();
   const { forceRefresh } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
-  const [memberToEdit, setMemberToEdit] = useState<MemberProfile | null>(null);
+  const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
   const membersRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
-  );
-  const usersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
     [firestore]
   );
   const groupsRef = useMemoFirebase(
@@ -85,21 +81,11 @@ function AdminMitgliederPageContent() {
   );
 
   const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  const { data: usersData, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const combinedUsers = useMemo(() => {
-    if (!membersData || !usersData) return [];
-    
-    const usersMap = new Map(usersData.map(u => [u.id, u]));
-
-    return membersData.map(member => {
-        const user = usersMap.get(member.userId);
-        return {
-            ...member,
-            role: user?.role || 'user',
-        };
-    }).sort((a, b) => {
+  const sortedMembers = useMemo(() => {
+    if (!membersData) return [];
+    return membersData.sort((a, b) => {
         const lastNameA = a.lastName || '';
         const lastNameB = b.lastName || '';
         if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -107,7 +93,7 @@ function AdminMitgliederPageContent() {
         }
         return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData, usersData]);
+  }, [membersData]);
 
   const { classes, teams, groupedTeams } = useMemo(() => {
     const allGroups = groupsData || [];
@@ -147,6 +133,8 @@ function AdminMitgliederPageContent() {
 
     const { userId } = memberToEdit;
     setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
+    const memberDocRef = doc(firestore!, 'members', userId);
+
     try {
         const { firebaseApp } = initializeFirebase();
         const functions = getFunctions(firebaseApp);
@@ -159,6 +147,9 @@ function AdminMitgliederPageContent() {
             await revokeAdminRole({ uid: userId });
         }
         
+        // Update role in member document as well
+        await setDoc(memberDocRef, { role: newRole }, { merge: true });
+
         await forceRefresh?.(); // Refresh token to get new claims
 
         toast({
@@ -195,9 +186,8 @@ function AdminMitgliederPageContent() {
         });
     } catch (error: any) {
          console.error("Fehler beim Löschen des Mitglieds:", error);
-        // We can't be sure which delete failed, so we emit a generic one for the collection
         const permissionError = new FirestorePermissionError({
-          path: `members/${userId}`, // or users/
+          path: `members/${userId}`,
           operation: 'delete',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -215,7 +205,7 @@ function AdminMitgliederPageContent() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups || isLoadingUsers;
+  const isLoading = isLoadingMembers || isLoadingGroups;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -244,8 +234,8 @@ function AdminMitgliederPageContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {combinedUsers.length > 0 ? (
-                    combinedUsers.map((member) => (
+                  {sortedMembers.length > 0 ? (
+                    sortedMembers.map((member) => (
                       <TableRow key={member.userId}>
                         <TableCell className="font-medium">{member.lastName}, {member.firstName}</TableCell>
                         <TableCell>{getTeamNamesForDisplay(member.teams)}</TableCell>
