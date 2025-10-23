@@ -189,7 +189,7 @@ export default function ProfileEditPage() {
         toast({ 
             variant: "destructive", 
             title: "Fehler beim Zuweisen der Admin-Rolle", 
-            description: error.details?.message || error.message || "Ein unbekannter Fehler ist aufgetreten." 
+            description: error.message || "Ein unbekannter Fehler ist aufgetreten." 
         });
     } finally {
         setIsSettingAdmin(false);
