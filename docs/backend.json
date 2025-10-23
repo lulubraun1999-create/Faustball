@@ -150,6 +150,76 @@
         }
       },
       "required": ["name", "type"]
+    },
+    "Poll": {
+      "title": "Poll",
+      "type": "object",
+      "description": "Represents a survey or poll for team members.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the poll."
+        },
+        "options": {
+          "type": "array",
+          "description": "The predefined answer options for the poll.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "text": {"type": "string"}
+            },
+            "required": ["id", "text"]
+          }
+        },
+        "allowCustomAnswers": {
+          "type": "boolean",
+          "description": "Whether users can add their own answers."
+        },
+        "isAnonymous": {
+          "type": "boolean",
+          "description": "Whether the votes are anonymous."
+        },
+        "endDate": {
+          "type": "string",
+          "description": "The date and time when the poll closes.",
+          "format": "date-time"
+        },
+        "visibility": {
+          "type": "object",
+          "description": "Defines who can see and vote in the poll.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["all", "specificTeams"]
+            },
+            "teamIds": {
+              "type": "array",
+              "description": "List of team IDs if visibility is specific.",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "votes": {
+          "type": "array",
+          "description": "List of votes cast by users.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": {"type": "string"},
+              "optionId": {"type": "string"},
+              "customAnswer": {"type": "string"}
+            },
+            "required": ["userId", "optionId"]
+          }
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the poll was created."
+        }
+      },
+      "required": ["title", "options", "endDate", "createdAt"]
     }
   },
   "auth": {
@@ -182,6 +252,12 @@
         "$ref": "#/backend/entities/Group"
       },
       "description": "Stores all groups (classes and teams). Writable only by admins, readable by all users."
+    },
+    "/polls/{pollId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Poll"
+      },
+      "description": "Stores all polls. Writable only by admins, readable by designated users."
     }
   }
 }
