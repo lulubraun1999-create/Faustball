@@ -2,40 +2,34 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user profiles and
- * allows public read access with admin-only writes for appointments and groups.
+ * This ruleset enforces a combination of user-ownership and role-based access control.
+ * User data is secured using an ownership model, where users can only access their own data.
+ * Administrative access is granted through the 'admin' role.
+ * Public read access is allowed for some collections (appointments, groups), but writes are restricted to admins.
  *
  * Data Structure:
- * - /users/{userId}:  Stores core user data. Accessible only by the user themselves or admins.
- * - /members/{memberId}: Stores detailed user profile information. Accessible only by the user themselves or admins.
- * - /appointments/{appointmentId}: Stores appointment data. Publicly readable, only admins can write.
- * - /groups/{groupId}: Stores group data. Publicly readable, only admins can write.
+ * - /users/{userId}: Stores core user data, accessible only by the user or admins.
+ * - /members/{memberId}: Stores profile data, accessible only by the user or admins.
+ * - /appointments/{appointmentId}: Stores appointment data, publicly readable but writable only by admins.
+ * - /groups/{groupId}: Stores group data, publicly readable but writable only by admins.
  *
  * Key Security Decisions:
- * - Listing of all users is explicitly denied to prevent information disclosure.
- * - All write operations require authentication.
- * - Data validation is minimal in the prototyping phase, focusing on authorization.
- *
- * Denormalization for Authorization:
- *  - The security rules avoid `get()` calls by relying on the `request.auth.uid` for user identification and,
- *    where necessary, admin role checks.  Admin status should ideally be denormalized onto the User document
- *    for optimal performance, but is not required in this version.
- * Structural Segregation:
- *  - The app uses separate collections for user profiles (/users/{userId}) and public data (appointments, groups)
- *    to ensure that private user data is never accidentally exposed.
+ * - Users can only list their own data, not all users.
+ * - Read-only collections for public data (appointments, groups) are explicitly marked as such.
+ * - The rules strictly enforce the separation of concerns between user authentication data and profile data.
+ * - List operation for `/users` collection is denied because listing all users is not permitted.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Protects core user data.
+     * @description Secures user authentication data.
      * @path /users/{userId}
-     * @allow (create) User with matching UID can create their own document.
-     * @allow (get, update, delete) User with matching UID can access their own document.
+     * @allow (create) Signed-in user with matching userId in the document.
+     * @allow (get, update, delete) Signed-in user with matching userId or an admin.
      * @deny (list) Listing all users is not permitted.
-     * @deny (create, get, update, delete) Non-authenticated users cannot access user data.
-     * @principle Enforces document ownership for writes.
+     * @principle Enforces document ownership for writes and restricts reads to the owner or admins.
      */
     match /users/{userId} {
       function isSignedIn() {
@@ -46,25 +40,35 @@ service cloud.firestore {
         return request.auth.uid == userId;
       }
 
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isOwner(userId);
-      allow list: if false;
+      // Allow the user to create their own document, enforcing the userId in the
+      // document to match their auth UID.
       allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+
+      // Allow the user to read, update, and delete their own document, or if the user has the admin role.
+      allow get: if isOwner(userId) || isAdmin();
+      allow update: if isExistingOwner(userId) || isAdmin();
+      allow delete: if isExistingOwner(userId) || isAdmin();
+
+      // Do not allow listing all users in the database.
+      allow list: if false;
     }
 
     /**
-     * @description Protects editable user profile data.
+     * @description Secures editable user profile data.
      * @path /members/{memberId}
-     * @allow (create) Authenticated user can create a member profile with a matching userId.
-     * @allow (get, update, delete) Authenticated user can access and modify their own profile.
-     * @deny (list) Listing all members is not permitted.
-     * @deny (create, get, update, delete) Non-authenticated users cannot access member profiles.
-     * @principle Enforces document ownership for writes.
+     * @allow (create) Signed-in user with matching userId in the document.
+     * @allow (get, update, delete) Signed-in user with matching userId or an admin.
+     * @allow (list) Signed-in user with matching userId.
+     * @deny (create, update, delete) If the signed-in user does not match the userId in the document and is not an admin.
+     * @principle Enforces document ownership for writes and restricts reads to the owner or admins.
      */
     match /members/{memberId} {
       function isSignedIn() {
@@ -75,22 +79,38 @@ service cloud.firestore {
         return request.auth.uid == userId;
       }
 
+       // helper function to check if the user is the document owner based on the userId field
+      function isDocumentOwner() {
+        return request.auth.uid == request.resource.data.userId;
+      }
+
+      function isAdmin() {
+        return isSignedIn() && request.auth.token.role == 'admin';
+      }
+
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isSignedIn() && isOwner(resource.data.userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
-      allow update: if isExistingOwner(resource.data.userId);
-      allow delete: if isExistingOwner(resource.data.userId);
+      // Allow the user to create their own document, enforcing the userId in the
+      // document to match their auth UID.
+      allow create: if isSignedIn() && isDocumentOwner();
+
+      // Allow the user to read, update, and delete their own document, or if the user has the admin role.
+      allow get: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isExistingOwner(resource.data.userId) || isAdmin();
+      allow delete: if isExistingOwner(resource.data.userId) || isAdmin();
+
+      // Allow the owner to list their own documents.
+      allow list: if isSignedIn() && isOwner(request.auth.uid);
     }
 
     /**
-     * @description Allows public read access to appointments, write access restricted to admins.
+     * @description Secures appointment data. Publicly readable, writable only by admins.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Any user can read appointments.
-     * @deny (create, update, delete) Non-admin users cannot modify appointments.
+     * @allow (get, list) Public read access.
+     * @allow (create, update, delete) Only admins can write.
+     * @deny (create, update, delete) If the user is not an admin.
      * @principle Public read access with owner-only writes.
      */
     match /appointments/{appointmentId} {
@@ -98,22 +118,23 @@ service cloud.firestore {
         return request.auth != null;
       }
 
-      // TODO: Replace with actual admin role check. This is a placeholder.
       function isAdmin() {
-        return false;
+        return isSignedIn() && request.auth.token.role == 'admin';
       }
 
+      // Allow public read access.
       allow get, list: if true;
-      allow create: if isSignedIn() && isAdmin();
-      allow update: if isSignedIn() && isAdmin() && resource != null;
-      allow delete: if isSignedIn() && isAdmin() && resource != null;
+
+      // Allow only admins to create, update, and delete appointments.
+      allow create, update, delete: if isAdmin();
     }
 
     /**
-     * @description Allows public read access to groups, write access restricted to admins.
+     * @description Secures group data. Publicly readable, writable only by admins.
      * @path /groups/{groupId}
-     * @allow (get, list) Any user can read groups.
-     * @deny (create, update, delete) Non-admin users cannot modify groups.
+     * @allow (get, list) Public read access.
+     * @allow (create, update, delete) Only admins can write.
+     * @deny (create, update, delete) If the user is not an admin.
      * @principle Public read access with owner-only writes.
      */
     match /groups/{groupId} {
@@ -121,15 +142,15 @@ service cloud.firestore {
         return request.auth != null;
       }
 
-      // TODO: Replace with actual admin role check. This is a placeholder.
       function isAdmin() {
-        return false;
+        return isSignedIn() && request.auth.token.role == 'admin';
       }
 
+      // Allow public read access.
       allow get, list: if true;
-      allow create: if isSignedIn() && isAdmin();
-      allow update: if isSignedIn() && isAdmin() && resource != null;
-      allow delete: if isSignedIn() && isAdmin() && resource != null;
+
+      // Allow only admins to create, update, and delete groups.
+      allow create, update, delete: if isAdmin();
     }
   }
 }
