@@ -25,8 +25,9 @@ import {
 import { Loader2, Edit, Users } from 'lucide-react';
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { AdminGuard } from '@/components/admin-guard';
 
-export default function AdminMitgliederPage() {
+function AdminMitgliederPageContent() {
   const firestore = useFirestore();
 
   const usersRef = useMemoFirebase(
@@ -52,7 +53,7 @@ export default function AdminMitgliederPage() {
         ...user,
         ...memberData,
       };
-    });
+    }).sort((a, b) => a.lastName.localeCompare(b.lastName));
   }, [users, members]);
 
 
@@ -124,4 +125,12 @@ export default function AdminMitgliederPage() {
       </Card>
     </div>
   );
+}
+
+export default function AdminMitgliederPage() {
+  return (
+    <AdminGuard>
+      <AdminMitgliederPageContent />
+    </AdminGuard>
+  )
 }

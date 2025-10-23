@@ -68,6 +68,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, ListTodo, Loader2 } from 'lucide-react';
 import type { Appointment } from '@/lib/types';
+import { AdminGuard } from '@/components/admin-guard';
 
 const appointmentSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
@@ -79,10 +80,9 @@ const appointmentSchema = z.object({
 
 type AppointmentFormValues = z.infer<typeof appointmentSchema>;
 
-export default function AdminTerminePage() {
+function AdminTerminePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user } = useUser();
 
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
@@ -179,14 +179,6 @@ export default function AdminTerminePage() {
     form.reset();
     setSelectedAppointment(null);
   };
-
-  if (!user) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -393,4 +385,12 @@ export default function AdminTerminePage() {
       </div>
     </div>
   );
+}
+
+export default function AdminTerminePage() {
+  return (
+    <AdminGuard>
+      <AdminTerminePageContent />
+    </AdminGuard>
+  )
 }

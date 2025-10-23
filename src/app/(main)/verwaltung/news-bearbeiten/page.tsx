@@ -1,7 +1,9 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Edit } from "lucide-react";
+import { AdminGuard } from "@/components/admin-guard";
 
-export default function AdminNewsPage() {
+function AdminNewsPageContent() {
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Card>
@@ -22,4 +24,12 @@ export default function AdminNewsPage() {
       </Card>
     </div>
   );
+}
+
+export default function AdminNewsPage() {
+  return (
+    <AdminGuard>
+      <AdminNewsPageContent />
+    </AdminGuard>
+  )
 }

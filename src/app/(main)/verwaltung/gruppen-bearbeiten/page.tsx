@@ -53,6 +53,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Group } from '@/lib/types';
+import { AdminGuard } from '@/components/admin-guard';
 
 const groupManagementSchema = z.object({
   action: z.enum(['add', 'delete']),
@@ -64,7 +65,7 @@ const groupManagementSchema = z.object({
 
 type GroupManagementValues = z.infer<typeof groupManagementSchema>;
 
-export default function AdminGruppenBearbeitenPage() {
+function AdminGruppenBearbeitenPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const [isEditing, setIsEditing] = useState(false);
@@ -455,4 +456,10 @@ export default function AdminGruppenBearbeitenPage() {
   );
 }
 
-    
+export default function AdminGruppenBearbeitenPage() {
+  return (
+    <AdminGuard>
+      <AdminGruppenBearbeitenPageContent />
+    </AdminGuard>
+  )
+}
