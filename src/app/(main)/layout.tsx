@@ -39,7 +39,6 @@ export default function MainAppLayout({
       const memberDocRef = doc(firestore, "members", authUser.uid);
       
       try {
-        // Fetch both documents concurrently
         const [userDocSnap, memberDocSnap] = await Promise.all([
           getDoc(userDocRef),
           getDoc(memberDocRef)
@@ -50,29 +49,38 @@ export default function MainAppLayout({
           const batch = writeBatch(firestore);
           let writeNeeded = false;
 
-          // Self-healing: If the user exists but the member document is missing, create it.
-          // This is the definitive fix for accounts created with faulty registration logic.
+          // Self-healing: If the member document is missing, create it correctly.
           if (!memberDocSnap.exists()) {
+            console.log("Member document missing for user. Creating it now.", authUser.uid);
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
               firstName: userData.firstName,
               lastName: userData.lastName,
               email: userData.email,
-              teams: [], // Ensure 'teams' array exists
+              teams: [], // Ensure 'teams' array exists and is initialized
+              // Initialize other optional fields to avoid undefined issues
+              phone: '',
+              location: '',
+              position: [],
+              birthday: '',
+              gender: undefined,
             };
             batch.set(memberDocRef, newMemberData);
             writeNeeded = true;
           }
 
-          // Handle first login flag if it's explicitly false
+          // Handle first login flag
           if (userData.firstLoginComplete === false) {
             batch.update(userDocRef, { firstLoginComplete: true });
             writeNeeded = true;
           }
 
           if (writeNeeded) {
+            console.log("Committing batch write for profile consistency.");
             await batch.commit();
           }
+        } else {
+            console.warn("User document does not exist for authenticated user:", authUser.uid);
         }
       } catch (error) {
         console.error("Error ensuring profile consistency:", error);

@@ -58,10 +58,11 @@ function AdminMitgliederPageContent() {
   const teams = useMemo(() => groupsData?.filter(g => g.type === 'team') || [], [groupsData]);
 
   const sortedMembers = useMemo(() => {
-    return membersData
-      ? [...membersData].sort((a, b) => 
+    if (!membersData) return [];
+    return [...membersData].sort((a, b) => 
           (a.lastName || '').localeCompare(b.lastName || ''))
-      : [];
+      .sort((a, b) =>
+          (a.firstName || '').localeCompare(b.firstName || ''));
   }, [membersData]);
 
 
@@ -70,8 +71,7 @@ function AdminMitgliederPageContent() {
     setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
     const memberDocRef = doc(firestore, 'members', userId);
     try {
-      // Use setDoc with merge to create or update the document.
-      await setDoc(memberDocRef, { userId: userId, teams: newTeams }, { merge: true });
+      await setDoc(memberDocRef, { teams: newTeams }, { merge: true });
       toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
     } catch (error) {
        const permissionError = new FirestorePermissionError({
@@ -138,6 +138,7 @@ function AdminMitgliederPageContent() {
                                     variant="outline"
                                     role="combobox"
                                     className="w-[200px] justify-between"
+                                    disabled={!firestore || !isAdmin}
                                 >
                                     <span className="truncate">
                                     {getTeamNames(member.teams || [])}
