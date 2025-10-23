@@ -15,9 +15,15 @@ import {
 import { Button } from "./ui/button";
 import { useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function VerwaltungDropdown() {
   const { isAdmin, isUserLoading, userProfile } = useUser();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Show admin menu if the token claim is true OR if the profile role from DB is 'admin'.
   // This creates a more robust check that is less prone to timing issues with token propagation.
@@ -58,7 +64,7 @@ export function VerwaltungDropdown() {
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
         
-        {isUserLoading ? (
+        {(isUserLoading || !isClient) ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>
