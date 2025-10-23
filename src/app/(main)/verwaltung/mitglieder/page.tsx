@@ -26,8 +26,9 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { AdminGuard } from '@/components/admin-guard';
 
-export default function VerwaltungMitgliederPage() {
+function VerwaltungMitgliederPageContent() {
   const firestore = useFirestore();
 
   const membersRef = useMemoFirebase(
@@ -153,4 +154,12 @@ export default function VerwaltungMitgliederPage() {
       </Card>
     </div>
   );
+}
+
+export default function VerwaltungMitgliederPage() {
+    return (
+        <AdminGuard>
+            <VerwaltungMitgliederPageContent />
+        </AdminGuard>
+    )
 }
