@@ -45,17 +45,17 @@ function AdminMitgliederPageContent() {
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
   const fullUserProfiles = useMemo<FullUserProfile[]>(() => {
-    if (!users || !members) return [];
+    if (!users) return [];
 
-    const membersMap = new Map(members.map((member) => [member.userId, member]));
+    const membersMap = new Map(members?.map((member) => [member.userId, member]));
 
     return users.map((user) => {
-      const memberData = membersMap.get(user.id);
+      const memberData = membersMap.get(user.id) || {};
       return {
         ...user,
         ...memberData,
       };
-    }).sort((a, b) => a.lastName.localeCompare(b.lastName));
+    }).sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
   }, [users, members]);
 
 
@@ -94,7 +94,7 @@ function AdminMitgliederPageContent() {
                         {fullUserProfiles.length > 0 ? (
                         fullUserProfiles.map((profile) => (
                             <TableRow key={profile.id}>
-                            <TableCell className="font-medium">{`${profile.firstName} ${profile.lastName}`}</TableCell>
+                            <TableCell className="font-medium">{`${profile.firstName || ''} ${profile.lastName || ''}`}</TableCell>
                             <TableCell>{profile.gender || 'N/A'}</TableCell>
                             <TableCell>{profile.position?.join(', ') || 'N/A'}</TableCell>
                             <TableCell>
