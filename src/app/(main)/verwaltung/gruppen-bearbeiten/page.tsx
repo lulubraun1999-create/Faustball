@@ -98,7 +98,7 @@ export default function AdminGruppenBearbeitenPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups]);
-
+  
   const form = useForm<GroupManagementValues>({
     resolver: zodResolver(groupManagementSchema),
     defaultValues: {
@@ -111,6 +111,16 @@ export default function AdminGruppenBearbeitenPage() {
   });
   const watchAction = form.watch('action');
   const watchType = form.watch('type');
+  const watchParentId = form.watch('parentId');
+
+  useEffect(() => {
+      form.reset({
+          ...form.getValues(),
+          deleteId: '',
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchParentId, watchType, watchAction]);
+
 
   const onManagementSubmit = async (data: GroupManagementValues) => {
     if (!firestore || !groupsRef) return;
@@ -137,9 +147,9 @@ export default function AdminGruppenBearbeitenPage() {
       };
       
       try {
-        const docRef = await addDoc(groupsRef, newGroup);
+        await addDoc(groupsRef, newGroup);
         toast({ title: 'Gruppe erfolgreich erstellt.' });
-        form.reset({ action: 'add', type: 'class', name: '', parentId: '', deleteId: '' });
+        form.reset({ ...data, name: '', deleteId: '' });
       } catch (error) {
         const permissionError = new FirestorePermissionError({
           path: 'groups',
@@ -175,7 +185,7 @@ export default function AdminGruppenBearbeitenPage() {
             await deleteDoc(docRef);
             toast({ title: 'Gruppe erfolgreich gelöscht.' });
         }
-        form.reset({ action: 'add', type: 'class', name: '', parentId: '', deleteId: '' });
+        form.reset({ ...data, name: '', deleteId: '' });
       } catch (error) {
          const permissionError = new FirestorePermissionError({
           path: `groups/${data.deleteId}`,
@@ -190,8 +200,8 @@ export default function AdminGruppenBearbeitenPage() {
     if (watchType === 'class') {
       return classes;
     }
-    if (watchType === 'team' && form.watch('parentId')) {
-      return groups?.filter((g) => g.parentId === form.watch('parentId')) || [];
+    if (watchType === 'team' && watchParentId) {
+      return groups?.filter((g) => g.parentId === watchParentId) || [];
     }
     return [];
   };
@@ -336,7 +346,7 @@ export default function AdminGruppenBearbeitenPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Obergruppe wählen...</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Obergruppe für neue Mannschaft auswählen" />
@@ -374,7 +384,7 @@ export default function AdminGruppenBearbeitenPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Obergruppe der zu löschenden Mannschaft</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Obergruppe auswählen" />
@@ -395,7 +405,7 @@ export default function AdminGruppenBearbeitenPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Zu löschendes Element</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={watchType === 'team' && !form.watch('parentId')}>
+                        <Select onValueChange={field.onChange} value={field.value || ''} disabled={watchType === 'team' && !watchParentId}>
                             <FormControl>
                                 <SelectTrigger>
                                 <SelectValue placeholder="Element zum Löschen auswählen" />
