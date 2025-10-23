@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/table';
 import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
 
 export default function VerwaltungMitgliederPage() {
   const firestore = useFirestore();
@@ -58,9 +60,9 @@ export default function VerwaltungMitgliederPage() {
     return new Map(groupsData.filter(g => g.type === 'team').map(team => [team.id, team.name]));
   }, [groupsData]);
 
-  const getTeamNames = (teamIds?: string[]) => {
-    if (!teamIds || teamIds.length === 0) return 'N/A';
-    return teamIds.map(id => teamsMap.get(id) || id).join(', ');
+  const getTeamNames = (teamIds?: string[]): string[] => {
+    if (!teamIds || teamIds.length === 0) return [];
+    return teamIds.map(id => teamsMap.get(id) || id);
   };
 
 
@@ -99,9 +101,31 @@ export default function VerwaltungMitgliederPage() {
                 </TableHeader>
                 <TableBody>
                   {sortedMembers.length > 0 ? (
-                    sortedMembers.map((member) => (
+                    sortedMembers.map((member) => {
+                      const memberTeams = getTeamNames(member.teams);
+                      return (
                       <TableRow key={member.userId}>
-                        <TableCell>{getTeamNames(member.teams)}</TableCell>
+                        <TableCell>
+                          {memberTeams.length > 0 ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="link" className="p-0 h-auto font-normal text-foreground">
+                                   {memberTeams[0]}
+                                   {memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}
+                                </Button>
+                              </PopoverTrigger>
+                               {memberTeams.length > 1 && (
+                                <PopoverContent className="w-auto p-2">
+                                  <ul className="space-y-1 list-disc list-inside">
+                                    {memberTeams.map(team => <li key={team}>{team}</li>)}
+                                  </ul>
+                                </PopoverContent>
+                               )}
+                            </Popover>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
                         <TableCell>{member.firstName || 'N/A'}</TableCell>
                         <TableCell>{member.lastName || 'N/A'}</TableCell>
                         <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
@@ -112,7 +136,8 @@ export default function VerwaltungMitgliederPage() {
                         <TableCell>{member.phone || 'N/A'}</TableCell>
                         <TableCell>{member.location || 'N/A'}</TableCell>
                       </TableRow>
-                    ))
+                      )
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={10} className="h-24 text-center">

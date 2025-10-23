@@ -198,10 +198,9 @@ function AdminMitgliederPageContent() {
   }
 
 
-  const getTeamNamesForDisplay = (teamIds?: string[]) => {
-    if (!teamIds || teamIds.length === 0) return 'N/A';
-    if (!teams) return 'Laden...';
-    return teamIds.map(id => teams.find(t => t.id === id)?.name || id).join(', ');
+  const getTeamNamesForDisplay = (teamIds?: string[]): string[] => {
+    if (!teamIds || teamIds.length === 0) return [];
+    return teamIds.map(id => teams.find(t => t.id === id)?.name || id)
   };
 
 
@@ -226,9 +225,9 @@ function AdminMitgliederPageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Mannschaft</TableHead>
                     <TableHead>Nachname</TableHead>
                     <TableHead>Vorname</TableHead>
-                    <TableHead>Mannschaft</TableHead>
                     <TableHead>Rolle</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Geschlecht</TableHead>
@@ -241,11 +240,33 @@ function AdminMitgliederPageContent() {
                 </TableHeader>
                 <TableBody>
                   {sortedMembers.length > 0 ? (
-                    sortedMembers.map((member) => (
+                    sortedMembers.map((member) => {
+                       const memberTeams = getTeamNamesForDisplay(member.teams);
+                       return (
                       <TableRow key={member.userId}>
+                        <TableCell>
+                          {memberTeams.length > 0 ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="link" className="p-0 h-auto font-normal text-foreground">
+                                   {memberTeams[0]}
+                                   {memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}
+                                </Button>
+                              </PopoverTrigger>
+                               {memberTeams.length > 1 && (
+                                <PopoverContent className="w-auto p-2">
+                                  <ul className="space-y-1 list-disc list-inside">
+                                    {memberTeams.map(team => <li key={team}>{team}</li>)}
+                                  </ul>
+                                </PopoverContent>
+                               )}
+                            </Popover>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
                         <TableCell className="font-medium">{member.lastName}</TableCell>
                         <TableCell>{member.firstName}</TableCell>
-                        <TableCell>{getTeamNamesForDisplay(member.teams)}</TableCell>
                         <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
                         <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
                         <TableCell>{member.gender || 'N/A'}</TableCell>
@@ -361,7 +382,8 @@ function AdminMitgliederPageContent() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                       )
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={11} className="h-24 text-center">
