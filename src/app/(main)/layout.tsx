@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from "@/firebase";
+import { useUser, useFirestore } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MainHeader } from "@/components/main-header";
 import { Loader2 } from "lucide-react";
-import { doc, getDoc, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, writeBatch } from "firebase/firestore";
 import type { UserProfile, MemberProfile } from "@/lib/types";
 
 export default function MainAppLayout({
@@ -39,28 +39,32 @@ export default function MainAppLayout({
       const memberDocRef = doc(firestore, "members", authUser.uid);
       
       try {
-        const userDocSnap = await getDoc(userDocRef);
-        const memberDocSnap = await getDoc(memberDocRef);
+        // Fetch both documents concurrently
+        const [userDocSnap, memberDocSnap] = await Promise.all([
+          getDoc(userDocRef),
+          getDoc(memberDocRef)
+        ]);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data() as UserProfile;
           const batch = writeBatch(firestore);
           let writeNeeded = false;
 
-          // Self-healing: Create member doc if it doesn't exist
+          // Self-healing: If the user exists but the member document is missing, create it.
+          // This fixes accounts created with the old, faulty registration logic.
           if (!memberDocSnap.exists()) {
             const newMemberData: MemberProfile = {
               userId: authUser.uid,
               firstName: userData.firstName,
               lastName: userData.lastName,
               email: userData.email,
-              teams: [],
+              teams: [], // Ensure 'teams' array exists
             };
             batch.set(memberDocRef, newMemberData);
             writeNeeded = true;
           }
 
-          // Handle first login flag
+          // Handle first login flag if it's explicitly false
           if (userData.firstLoginComplete === false) {
             batch.update(userDocRef, { firstLoginComplete: true });
             writeNeeded = true;
@@ -68,7 +72,6 @@ export default function MainAppLayout({
 
           if (writeNeeded) {
             await batch.commit();
-            // No navigation needed here anymore, just fix the data.
           }
         }
       } catch (error) {
