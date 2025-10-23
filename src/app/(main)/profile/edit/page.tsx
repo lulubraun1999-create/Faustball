@@ -182,14 +182,14 @@ export default function ProfileEditPage() {
         
         toast({ 
           title: "Admin-Rolle zugewiesen", 
-          description: "Ihre Berechtigungen wurden aktualisiert." 
+          description: "Ihre Berechtigungen wurden aktualisiert. Die Änderungen werden möglicherweise erst nach einem Neuladen der Seite vollständig wirksam." 
         });
     } catch (error: any) {
-        console.error("Detaillierter Fehler:", error);
+        console.error("Detaillierter Fehler beim Zuweisen der Admin-Rolle:", error);
         toast({ 
             variant: "destructive", 
             title: "Fehler beim Zuweisen der Admin-Rolle", 
-            description: error.message || "Ein unbekannter Fehler ist aufgetreten." 
+            description: error.details?.message || error.message || "Ein unbekannter Fehler ist aufgetreten." 
         });
     } finally {
         setIsSettingAdmin(false);
@@ -757,5 +757,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
