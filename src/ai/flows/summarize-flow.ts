@@ -1,3 +1,4 @@
+
 'use server';
 
 import { ai } from '@/ai/genkit';
@@ -18,7 +19,7 @@ export async function summarize(text: string): Promise<string> {
 const summarizePrompt = ai.definePrompt(
   {
     name: 'summarizePrompt',
-    // The prompt now correctly expects a simple string as input.
+    // The prompt correctly expects a simple string as input.
     input: { schema: summarizeInputSchema },
     output: { schema: summarizeOutputSchema },
     // The prompt template uses a special variable `prompt` to refer to the string input.
@@ -34,12 +35,12 @@ Zusammenfassung:`,
 const summarizeFlow = ai.defineFlow(
   {
     name: 'summarizeFlow',
-    // The flow's public interface is now also a simple string.
+    // The flow's public interface is also a simple string.
     inputSchema: summarizeInputSchema,
     outputSchema: summarizeOutputSchema,
   },
   async (text) => {
-    // The 'text' variable is now guaranteed to be a non-empty string.
+    // The 'text' variable is guaranteed to be a non-empty string due to the schema.
     // We can pass it directly to the prompt.
     const { output } = await summarizePrompt(text);
     return output!;
