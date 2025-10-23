@@ -37,7 +37,7 @@ const summarizeFlow = ai.defineFlow(
     outputSchema: summarizeOutputSchema,
   },
   async (input) => {
-    // **FIX:** Pass the input string wrapped in an object to match the prompt's schema.
+    // Pass the input string wrapped in an object to match the prompt's schema.
     const { output } = await summarizePrompt({ input });
     return output!;
   }
