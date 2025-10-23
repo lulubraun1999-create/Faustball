@@ -16,7 +16,10 @@ import { Button } from "./ui/button";
 import { useUser } from "@/firebase";
 
 export function VerwaltungDropdown() {
-  const { isAdmin } = useUser();
+  const { isAdmin, isUserLoading } = useUser();
+
+  // Do not render the admin sub-menu until the user's status is confirmed
+  const showAdminMenu = !isUserLoading && isAdmin;
 
   return (
     <DropdownMenu>
@@ -52,7 +55,7 @@ export function VerwaltungDropdown() {
          <DropdownMenuItem asChild>
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
-        {isAdmin && (
+        {showAdminMenu && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
