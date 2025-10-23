@@ -1,40 +1,58 @@
+
 'use client';
 
-import { useFirebase } from '../provider';
-import { useCallback } from 'react';
+import { useFirebase, useMemoFirebase } from '../provider';
+import { useDoc } from '@/firebase/firestore/use-doc';
+import { useCallback, useMemo } from 'react';
 import type { User } from 'firebase/auth';
+import type { UserProfile } from '@/lib/types';
+import { doc, getFirestore } from 'firebase/firestore';
 
-// Define a user type that can have custom claims.
-interface UserWithClaims extends User {
-  customClaims?: {
-    admin?: boolean;
-  };
-}
 
 export interface AdminAwareUserHookResult {
-  user: UserWithClaims | null; // Use the more specific user type
+  user: User | null; 
+  userProfile: UserProfile | null;
   isUserLoading: boolean;
   isAdmin: boolean;
   forceRefresh: () => Promise<void>;
 }
 
 /**
- * Hook specifically for accessing the authenticated user's state,
- * including a boolean for admin status based on custom claims.
+ * Hook for accessing the authenticated user, their profile, and admin status.
+ * The admin status is now derived from the Firestore document for reliability.
  */
 export const useUser = (): AdminAwareUserHookResult => {
-  const { user, isUserLoading } = useFirebase();
+  const { user, isUserLoading: isAuthLoading, firebaseApp, forceRefresh: refreshIdToken } = useFirebase();
 
-  // The admin claim is now reliably populated by the FirebaseProvider's onIdTokenChanged listener.
-  const isAdmin = !!user?.customClaims?.admin;
+  // Memoize Firestore instance to prevent re-renders
+  const firestore = useMemo(() => firebaseApp ? getFirestore(firebaseApp) : null, [firebaseApp]);
 
+  // Create a stable reference to the user's document
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+  
+  // Fetch the user's profile document in real-time
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+
+  // The isAdmin flag is now reliably sourced from the real-time user profile data.
+  const isAdmin = !!userProfile?.role && userProfile.role === 'admin';
+
+  // Function to force a refresh of the user's auth token.
   const forceRefresh = useCallback(async () => {
-    // Calling getIdToken(true) forces a token refresh.
-    // The onIdTokenChanged listener in FirebaseProvider will automatically pick up the new token and claims.
-    if (user) {
-      await user.getIdToken(true);
+    if (refreshIdToken) {
+      await refreshIdToken();
     }
-  }, [user]);
+  }, [refreshIdToken]);
 
-  return { user, isUserLoading, isAdmin, forceRefresh };
+  const isUserReallyLoading = isAuthLoading || (user != null && isProfileLoading);
+
+  return { 
+    user, 
+    userProfile, 
+    isUserLoading: isUserReallyLoading, 
+    isAdmin, 
+    forceRefresh 
+  };
 };

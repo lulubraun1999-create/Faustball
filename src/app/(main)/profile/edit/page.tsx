@@ -43,7 +43,7 @@ import {
   EmailAuthProvider,
 } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { UserProfile, MemberProfile } from '@/lib/types';
+import type { MemberProfile } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -79,7 +79,6 @@ const profileFormSchema = z.object({
   gender: z
     .enum(['männlich', 'weiblich', 'divers (Damenteam)', 'divers (Herrenteam)'])
     .optional(),
-  role: z.enum(['user', 'admin']).optional(),
 });
 
 const passwordFormSchema = z
@@ -110,24 +109,17 @@ export default function ProfileEditPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const firebaseApp = useFirebaseApp();
-  const { user: authUser, isUserLoading: isAuthLoading, forceRefresh, isAdmin } = useUser();
+  const { user: authUser, userProfile, isUserLoading, isAdmin, forceRefresh } = useUser();
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isSettingAdmin, setIsSettingAdmin] = useState(false);
-
-  const userDocRef = useMemoFirebase(() => {
-    if (!firestore || !authUser) return null;
-    return doc(firestore, 'users', authUser.uid);
-  }, [firestore, authUser]);
 
   const memberDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
     return doc(firestore, 'members', authUser.uid);
   }, [firestore, authUser]);
 
-  const { data: user, isLoading: isUserDocLoading } =
-    useDoc<UserProfile>(userDocRef);
   const { data: member, isLoading: isMemberDocLoading } =
     useDoc<MemberProfile>(memberDocRef);
 
@@ -141,7 +133,6 @@ export default function ProfileEditPage() {
       birthday: '',
       position: [],
       gender: undefined,
-      role: 'user',
     },
   });
 
@@ -163,19 +154,18 @@ export default function ProfileEditPage() {
   });
 
   useEffect(() => {
-    if (user || member) {
+    if (userProfile || member) {
       profileForm.reset({
-        firstName: user?.firstName || '',
-        lastName: user?.lastName || '',
+        firstName: userProfile?.firstName || '',
+        lastName: userProfile?.lastName || '',
         phone: member?.phone || '',
         location: member?.location || '',
         birthday: member?.birthday || '',
         position: member?.position || [],
         gender: member?.gender,
-        role: user?.role || 'user',
       });
     }
-  }, [user, member, profileForm]);
+  }, [userProfile, member, profileForm]);
 
   const handleSetAdmin = async () => {
     if (!firebaseApp || !authUser) {
@@ -188,8 +178,8 @@ export default function ProfileEditPage() {
         const setAdminRole = httpsCallable(functions, 'setAdminRole');
         await setAdminRole({ uid: authUser.uid, role: 'admin' });
         
-        // Force a refresh of the user's ID token.
-        // The onIdTokenChanged listener in FirebaseProvider will pick this up.
+        // Force a refresh of the user's ID token. This will trigger onIdTokenChanged listener
+        // in the provider, which will in turn update the user's role in Firestore and globally.
         await forceRefresh(); 
         
         toast({ 
@@ -205,7 +195,7 @@ export default function ProfileEditPage() {
 
 
   const onProfileSubmit = async (data: ProfileFormValues) => {
-    if (!memberDocRef || !userDocRef || !authUser) return;
+    if (!memberDocRef || !authUser) return;
 
     const memberData: Omit<MemberProfile, 'userId'> = {
       phone: data.phone,
@@ -215,11 +205,13 @@ export default function ProfileEditPage() {
       gender: data.gender,
     };
     
-    const userUpdateData: Partial<UserProfile> = {
-      role: data.role,
-    };
-
-    const p1 = setDoc(memberDocRef, { userId: authUser.uid, ...memberData }, { merge: true })
+    setDoc(memberDocRef, { userId: authUser.uid, ...memberData }, { merge: true })
+      .then(() => {
+        toast({
+          title: 'Profil aktualisiert',
+          description: 'Ihre Informationen wurden erfolgreich gespeichert.',
+        });
+      })
       .catch(() => {
         const permissionError = new FirestorePermissionError({
           path: memberDocRef.path,
@@ -228,23 +220,6 @@ export default function ProfileEditPage() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
-
-    const p2 = setDoc(userDocRef, userUpdateData, { merge: true })
-      .catch(() => {
-        const permissionError = new FirestorePermissionError({
-          path: userDocRef.path,
-          operation: 'update',
-          requestResourceData: userUpdateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-      
-    Promise.all([p1, p2]).then(() => {
-       toast({
-        title: 'Profil aktualisiert',
-        description: 'Ihre Informationen wurden erfolgreich gespeichert.',
-      });
-    });
   };
 
   const reauthenticate = async (password: string) => {
@@ -282,7 +257,9 @@ export default function ProfileEditPage() {
   };
 
   const onEmailChange = async (data: EmailFormValues) => {
+    const userDocRef = firestore ? doc(firestore, 'users', authUser!.uid) : null;
     if (!authUser || !userDocRef) return;
+
     try {
       await reauthenticate(data.currentPassword);
       await verifyBeforeUpdateEmail(authUser, data.newEmail);
@@ -325,6 +302,7 @@ export default function ProfileEditPage() {
 
   const handleDeleteAccount = async () => {
     if (!authUser || !firestore) return;
+    const userDocRef = doc(firestore, 'users', authUser.uid);
     try {
       if (memberDocRef) {
         deleteDoc(memberDocRef).catch(() => {
@@ -362,7 +340,7 @@ export default function ProfileEditPage() {
     }
   };
 
-  const isLoading = isAuthLoading || isUserDocLoading || isMemberDocLoading;
+  const isLoading = isUserLoading || isMemberDocLoading;
 
   if (isLoading) {
     return (
@@ -739,34 +717,19 @@ export default function ProfileEditPage() {
                   )}
                 />
 
-                <FormField
-                  control={profileForm.control}
-                  name="role"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Rolle</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value} key={user?.role}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Rolle auswählen" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="user">user</SelectItem>
-                          <SelectItem value="admin">admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormItem>
+                  <FormLabel>Rolle</FormLabel>
+                  <FormControl>
+                      <Input readOnly value={userProfile?.role || 'user'} className="bg-muted/50" />
+                  </FormControl>
+                </FormItem>
 
                 <FormItem>
                   <FormLabel>E-Mail</FormLabel>
                   <FormControl>
                     <Input
                       readOnly
-                      value={user?.email || ''}
+                      value={userProfile?.email || ''}
                       className="bg-muted/50"
                     />
                   </FormControl>
@@ -791,5 +754,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    

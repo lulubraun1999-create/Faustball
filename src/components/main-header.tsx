@@ -14,29 +14,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
-import type { UserProfile } from "@/lib/types";
-import { doc } from "firebase/firestore";
 
 const VerwaltungDropdown = dynamic(() => import('./verwaltung-dropdown').then(mod => mod.VerwaltungDropdown), { ssr: false });
 
 
 export function MainHeader() {
-  const { user: authUser } = useUser();
+  const { user: authUser, userProfile } = useUser();
   const auth = useAuth();
   const router = useRouter();
-  const firestore = useFirestore();
-
-  const userDocRef = useMemoFirebase(() => {
-    if (!firestore || !authUser) return null;
-    return doc(firestore, 'users', authUser.uid);
-  }, [firestore, authUser]);
-
-  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
-
 
   const handleLogout = async () => {
     if (auth) {
@@ -76,7 +65,7 @@ export function MainHeader() {
             >
               Chat
             </Link>
-            <VerwaltungDropdown userProfile={userProfile} />
+            <VerwaltungDropdown />
           </div>
         </nav>
         
