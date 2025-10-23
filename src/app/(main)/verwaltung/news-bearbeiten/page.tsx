@@ -8,7 +8,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from '@/components/ui/card';
 import {
   Dialog,
@@ -17,7 +16,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Form,
@@ -56,7 +54,6 @@ import {
   FirestorePermissionError,
 } from '@/firebase';
 import type { NewsArticle } from '@/lib/types';
-import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   collection,
@@ -74,12 +71,13 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { summarize } from '@/ai/flows/summarize-flow';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 
 const newsArticleSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
   content: z.string().min(1, 'Inhalt ist erforderlich.'),
-  imageUrls: z.string().optional(), // Raw string from textarea
-  summary: z.string().optional(), // AI summary, not directly in form
+  imageUrls: z.string().optional(),
 });
 
 type NewsArticleFormValues = z.infer<typeof newsArticleSchema>;
@@ -87,7 +85,7 @@ type NewsArticleFormValues = z.infer<typeof newsArticleSchema>;
 function AdminNewsPageContent() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState<Record<string, boolean>>({});
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const firestore = useFirestore();
 
@@ -104,7 +102,6 @@ function AdminNewsPageContent() {
       title: '',
       content: '',
       imageUrls: '',
-      summary: '',
     },
   });
 
@@ -127,28 +124,22 @@ function AdminNewsPageContent() {
       title: article.title,
       content: article.content,
       imageUrls: article.imageUrls.join('\n'),
-      summary: article.summary,
     });
     setIsDialogOpen(true);
   };
 
-  const handleGenerateSummary = async () => {
-    const content = form.getValues('content');
-    if (!content) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler',
-        description: 'Bitte geben Sie zuerst einen Inhalt ein.',
-      });
-      return;
-    }
-    setIsGeneratingSummary(true);
+  const handleGenerateSummary = async (article: NewsArticle) => {
+    if (!firestore || !article.id) return;
+    
+    setIsGeneratingSummary(prev => ({...prev, [article.id!]: true}));
+
     try {
-      const result = await summarize(content);
-      form.setValue('summary', result);
+      const result = await summarize(article.content);
+      const docRef = doc(firestore, 'news', article.id);
+      await updateDoc(docRef, { summary: result });
       toast({
         title: 'Zusammenfassung erstellt',
-        description: 'Die KI-Zusammenfassung wurde dem Formular hinzugefügt.',
+        description: 'Die KI-Zusammenfassung wurde für den Artikel gespeichert.',
       });
     } catch (error) {
       toast({
@@ -158,7 +149,7 @@ function AdminNewsPageContent() {
           'Die KI konnte keine Zusammenfassung erstellen. Bitte versuchen Sie es erneut.',
       });
     } finally {
-      setIsGeneratingSummary(false);
+      setIsGeneratingSummary(prev => ({...prev, [article.id!]: false}));
     }
   };
 
@@ -172,7 +163,6 @@ function AdminNewsPageContent() {
     const articleData = {
       title: data.title,
       content: data.content,
-      summary: data.summary || '',
       imageUrls: imageUrls,
     };
 
@@ -186,6 +176,7 @@ function AdminNewsPageContent() {
         // Create new article
         await addDoc(collection(firestore, 'news'), {
           ...articleData,
+          summary: '', // Initialize with empty summary
           createdAt: serverTimestamp(),
         });
         toast({ title: 'Neuer Artikel erfolgreich erstellt.' });
@@ -241,8 +232,7 @@ function AdminNewsPageContent() {
               {selectedArticle ? 'Artikel bearbeiten' : 'Neuen Artikel erstellen'}
             </DialogTitle>
             <DialogDescription>
-              Füllen Sie die Felder aus. Die KI kann Ihnen beim Erstellen einer
-              Zusammenfassung helfen.
+              Füllen Sie die Felder aus, um einen Artikel zu erstellen oder zu bearbeiten.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -297,42 +287,6 @@ function AdminNewsPageContent() {
                 )}
               />
 
-              <div className="rounded-lg border bg-muted/50 p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">KI-Zusammenfassung</h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateSummary}
-                    disabled={isGeneratingSummary}
-                  >
-                    {isGeneratingSummary ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="mr-2 h-4 w-4" />
-                    )}
-                    Generieren
-                  </Button>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="summary"
-                  render={({ field }) => (
-                    <FormItem className="mt-2">
-                      <FormControl>
-                        <Textarea
-                          placeholder="Die KI-Zusammenfassung wird hier angezeigt..."
-                          {...field}
-                          readOnly
-                          className="mt-2 min-h-[80px] bg-background"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-
               <DialogFooter>
                 <Button
                   type="button"
@@ -363,11 +317,13 @@ function AdminNewsPageContent() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
+            <TooltipProvider>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[100px]">Bild</TableHead>
                   <TableHead>Titel</TableHead>
+                  <TableHead>Zusammenfassung</TableHead>
                   <TableHead>Datum</TableHead>
                   <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
@@ -389,25 +345,63 @@ function AdminNewsPageContent() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium">{article.title}</TableCell>
+                      <TableCell className="max-w-xs truncate font-medium">{article.title}</TableCell>
+                      <TableCell className="max-w-sm text-sm text-muted-foreground">
+                        <p className='line-clamp-3'>{article.summary || '-'}</p>
+                      </TableCell>
                       <TableCell>
                         {article.createdAt instanceof Timestamp
                           ? article.createdAt.toDate().toLocaleDateString('de-DE')
                           : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(article)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        {!article.summary && (
+                           <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleGenerateSummary(article)}
+                                disabled={isGeneratingSummary[article.id!]}
+                              >
+                                {isGeneratingSummary[article.id!] ? (
+                                    <Loader2 className="h-4 w-4 animate-spin"/>
+                                ) : (
+                                    <Wand2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Zusammenfassung erstellen</p>
+                            </TooltipContent>
+                           </Tooltip>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(article)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                             <p>Artikel bearbeiten</p>
+                          </TooltipContent>
+                        </Tooltip>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                <p>Artikel löschen</p>
+                               </TooltipContent>
+                             </Tooltip>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
@@ -433,13 +427,14 @@ function AdminNewsPageContent() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
+                    <TableCell colSpan={5} className="h-24 text-center">
                       Noch keine Artikel erstellt.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>
@@ -454,5 +449,3 @@ export default function AdminNewsPage() {
     </AdminGuard>
   );
 }
-
-    
