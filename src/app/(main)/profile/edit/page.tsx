@@ -31,8 +31,9 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
+  initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -41,6 +42,7 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -165,40 +167,49 @@ export default function ProfileEditPage() {
   }, [userProfile, member, profileForm]);
 
   const handleSetAdmin = async () => {
-    if (!firestore || !authUser) {
-        toast({ variant: "destructive", title: "Fehler", description: "Firebase nicht initialisiert." });
-        return;
+    if (!authUser) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht angemeldet.' });
+      return;
     }
     setIsSettingAdmin(true);
-    const userDocRef = doc(firestore, "users", authUser.uid);
-    updateDoc(userDocRef, { role: 'admin' })
-      .then(async () => {
-        // This is crucial: force a refresh of the ID token to get the new custom claim
-        await forceRefresh(); 
-        toast({ 
-          title: "Admin-Rolle zugewiesen", 
-          description: "Ihre Berechtigungen wurden aktualisiert." 
-        });
-      })
-      .catch((error: any) => {
-        console.error("Detaillierter Fehler beim Zuweisen der Admin-Rolle:", error);
-        const permissionError = new FirestorePermissionError({
-          path: `users/${authUser.uid}`,
-          operation: 'update',
-          requestResourceData: { role: 'admin' },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsSettingAdmin(false);
+
+    try {
+      const { firebaseApp } = initializeFirebase();
+      const functions = getFunctions(firebaseApp);
+      const setAdminRole = httpsCallable(functions, 'setAdminRole');
+
+      await setAdminRole({ uid: authUser.uid, role: 'admin' });
+
+      // This is crucial: force a refresh of the ID token to get the new custom claim
+      if (forceRefresh) {
+        await forceRefresh();
+      }
+      
+      toast({
+        title: 'Admin-Rolle zugewiesen',
+        description: 'Ihre Berechtigungen wurden aktualisiert. Die Seite wird in Kürze neu geladen.',
       });
+
+      // Give a moment for the user to see the toast, then reload to ensure all components get the new state.
+      setTimeout(() => window.location.reload(), 2000);
+
+    } catch (error: any) {
+      console.error('Fehler beim Zuweisen der Admin-Rolle:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Fehler bei der Rollenzuweisung',
+        description: error.message || 'Die Admin-Rolle konnte nicht zugewiesen werden.',
+      });
+    } finally {
+      setIsSettingAdmin(false);
+    }
   };
 
 
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !authUser) return;
 
-    const memberData: Omit<MemberProfile, 'userId'> = {
+    const memberData: Omit<MemberProfile, 'userId'| 'firstName' | 'lastName' | 'email'> = {
       phone: data.phone,
       location: data.location,
       birthday: data.birthday,
@@ -206,7 +217,7 @@ export default function ProfileEditPage() {
       gender: data.gender,
     };
     
-    setDoc(memberDocRef, { userId: authUser.uid, ...memberData }, { merge: true })
+    setDoc(memberDocRef, memberData, { merge: true })
       .then(() => {
         toast({
           title: 'Profil aktualisiert',
@@ -351,7 +362,6 @@ export default function ProfileEditPage() {
     );
   }
   
-  // Use the database role as the primary indicator for the button, but the token for actual access control
   const isConsideredAdmin = isAdmin || userProfile?.role === 'admin';
 
 
