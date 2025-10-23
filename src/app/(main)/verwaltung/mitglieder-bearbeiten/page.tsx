@@ -83,19 +83,16 @@ function AdminMitgliederPageContent() {
     const combined: MemberWithRoleAndTeams[] = usersData.map(user => {
       const memberProfile = memberMap.get(user.id);
       return {
-        ...user, // Base user data (id, email, role, etc.)
-        // Overwrite with member data if it exists, otherwise use user data as fallback
-        firstName: memberProfile?.firstName || user.firstName,
-        lastName: memberProfile?.lastName || user.lastName,
-        email: memberProfile?.email || user.email,
-        phone: memberProfile?.phone,
-        location: memberProfile?.location,
-        position: memberProfile?.position,
-        birthday: memberProfile?.birthday,
-        gender: memberProfile?.gender,
-        // Always ensure userId is the user's ID
-        userId: user.id, 
-        // Ensure teams is always an array
+        // Start with the user data as a base
+        ...user,
+        // Overwrite with member data if it exists
+        ...memberProfile,
+        // Ensure the core fields are always present, falling back to user data
+        userId: user.id,
+        firstName: user.firstName, // Always take from user profile
+        lastName: user.lastName, // Always take from user profile
+        email: user.email, // Always take from user profile
+        // Get teams from member profile, or default to empty array
         teams: memberProfile?.teams || [],
       };
     });
