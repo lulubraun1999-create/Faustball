@@ -1,15 +1,36 @@
+/**
+ * @fileoverview Firestore Security Rules for FaustApp.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a user-ownership model for user profiles and admin-only
+ * access for managing appointments and groups. It prioritizes security by
+ * restricting access to sensitive data and preventing unauthorized modifications.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores core user data, accessible only by the user themselves or admins.
+ * - /members/{memberId}: Stores editable user profile details, accessible only by the user themselves or admins.
+ * - /appointments/{appointmentId}: Stores appointment data, writable only by admins, readable by all users.
+ * - /groups/{groupId}: Stores group data (classes and teams), writable only by admins, readable by all users.
+ *
+ * Key Security Decisions:
+ * - User listing is explicitly denied to prevent unauthorized data harvesting.
+ * - Clear separation between user-owned data and admin-managed data.
+ * - All write operations are protected by authentication and authorization checks.
+ * - Data shapes are not enforced to allow for rapid prototyping.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user documents.
+     * @description Controls access to user profiles.
      * @path /users/{userId}
-     * @allow (create) Authenticated user can create their own document.
-     * @allow (get, update, delete) Authenticated user can access their own document.
-     * @deny (list) User listing is not allowed.
-     * @deny (create, update, delete) Unauthorized users cannot create, update or delete user documents.
-     * @principle Enforces document ownership and prevents unauthorized modifications.
+     * @allow (create) - User with UID 'user123' can create their profile at /users/user123.
+     * @allow (get) - User with UID 'user123' can read their profile at /users/user123.
+     * @allow (update) - User with UID 'user123' can update their profile at /users/user123.
+     * @allow (delete) - User with UID 'user123' can delete their profile at /users/user123.
+     * @deny (create) - User with UID 'user456' cannot create a profile at /users/user123.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data.
      */
     match /users/{userId} {
       function isSignedIn() {
@@ -17,70 +38,96 @@ service cloud.firestore {
       }
 
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return isSignedIn() && request.auth.uid == userId;
       }
 
       function isExistingOwner(userId) {
         return isOwner(userId) && exists(resource);
       }
       allow get: if isOwner(userId);
-      allow list: if false;
+      allow list: if false; // Listing users is not permitted.
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to member documents.
+     * @description Controls access to member profiles.
      * @path /members/{memberId}
-     * @allow (get, update, delete) Authenticated user can access their own member document if userId matches.
-     * @allow (create) Authenticated user can create a member if userId matches.
-     * @deny (list) User listing is not allowed.
-     * @deny (create, update, delete) Unauthorized users cannot create, update or delete member documents.
-     * @principle Enforces document ownership and prevents unauthorized modifications.
+     * @allow (create) - User with UID 'user123' can create their member profile.
+     * @allow (get) - User with UID 'user123' can read their member profile.
+     * @allow (update) - User with UID 'user123' can update their member profile.
+     * @allow (delete) - User with UID 'user123' can delete their member profile.
+     * @deny (create) - User with UID 'user456' cannot create a member profile for user123.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data.
      */
     match /members/{memberId} {
       function isSignedIn() {
         return request.auth != null;
       }
 
-      function isOwner(userId) {
-        return request.auth.uid == userId;
+      function isOwner(memberId) {
+          return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
       }
 
-       function isExistingOwner(userId) {
-        return isOwner(resource.data.userId) && exists(resource);
+      function isExistingOwner(memberId) {
+        return isOwner(memberId) && exists(resource);
       }
 
-      allow get: if isSignedIn() && get(/databases/$(database)/documents/users/$(resource.data.userId)).data.uid == request.auth.uid;
-      allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && get(/databases/$(database)/documents/users/$(resource.data.userId)).data.uid == request.auth.uid;
-      allow delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(resource.data.userId)).data.uid == request.auth.uid;
+      allow get: if isOwner(memberId);
+      allow list: if false; // Listing members is not permitted.
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow update: if isExistingOwner(memberId);
+      allow delete: if isExistingOwner(memberId);
     }
 
     /**
-     * @description Controls access to appointment documents.
+     * @description Controls access to appointments.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Appointments are publicly readable.
-     * @deny (create, update, delete) Only admins can modify appointments.  Admin role not implemented.
-     * @principle Allows public read access but restricts write access.
+     * @allow (get) - Any authenticated user can read appointments.
+     * @allow (list) - Any authenticated user can list appointments.
+     * @deny (create) - Non-admin user cannot create appointments.
+     * @deny (update) - Non-admin user cannot update appointments.
+     * @principle Allows public read access but restricts writes to admins.
      */
     match /appointments/{appointmentId} {
-      allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add admin validation.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return request.auth.token.admin == true;
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     /**
-     * @description Controls access to group documents.
+     * @description Controls access to groups.
      * @path /groups/{groupId}
-     * @allow (get, list) Groups are publicly readable.
-     * @deny (create, update, delete) Only admins can modify groups. Admin role not implemented.
-     * @principle Allows public read access but restricts write access.
+     * @allow (get) - Any authenticated user can read groups.
+     * @allow (list) - Any authenticated user can list groups.
+     * @deny (create) - Non-admin user cannot create groups.
+     * @deny (update) - Non-admin user cannot update groups.
+     * @principle Allows public read access but restricts writes to admins.
      */
     match /groups/{groupId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;  // TODO: Add admin validation.
+     function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return request.auth.token.admin == true;
+      }
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }
