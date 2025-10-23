@@ -9,6 +9,7 @@ import {
   useUser,
   errorEmitter,
   FirestorePermissionError,
+  useDoc,
 } from '@/firebase';
 import { collection, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import type { Poll, MemberProfile } from '@/lib/types';
@@ -21,10 +22,11 @@ import { Loader2, Vote, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, isPast } from 'date-fns';
 import { de } from 'date-fns/locale';
+import type { User } from 'firebase/auth';
 
 export default function UmfragenPage() {
   const firestore = useFirestore();
-  const { user, isUserLoading, userProfile } = useUser();
+  const { user, isUserLoading } = useUser();
 
   const pollsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'polls') : null),
@@ -36,7 +38,7 @@ export default function UmfragenPage() {
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
-  const { data: member, isLoading: isLoadingMember } = useCollection<MemberProfile>(memberRef as any);
+  const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
@@ -61,13 +63,11 @@ export default function UmfragenPage() {
     voteOperations.push(arrayUnion(newVote));
     
     try {
-        await updateDoc(pollDocRef, {
-            votes: voteOperations[0] // Start with remove or add
-        });
         if (voteOperations.length > 1) {
-            await updateDoc(pollDocRef, {
-                votes: voteOperations[1]
-            });
+             await updateDoc(pollDocRef, { votes: voteOperations[0] });
+             await updateDoc(pollDocRef, { votes: voteOperations[1] });
+        } else {
+             await updateDoc(pollDocRef, { votes: voteOperations[0] });
         }
     } catch (e) {
       errorEmitter.emit(
@@ -115,7 +115,7 @@ export default function UmfragenPage() {
         if (!user || !member) return false;
         if (poll.visibility.type === 'all') return true;
         if (poll.visibility.type === 'specificTeams') {
-            const userTeams = (member as any)?.teams || [];
+            const userTeams = member.teams || [];
             return poll.visibility.teamIds.some(teamId => userTeams.includes(teamId));
         }
         return false;
@@ -264,5 +264,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
-
-    
