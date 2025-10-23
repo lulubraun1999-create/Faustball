@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Edit, Users } from 'lucide-react';
+import { Loader2, Edit } from 'lucide-react';
 import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { AdminGuard } from '@/components/admin-guard';

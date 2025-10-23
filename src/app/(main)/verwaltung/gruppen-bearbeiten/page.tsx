@@ -150,18 +150,18 @@ function AdminGruppenBearbeitenPageContent() {
         ...(data.type === 'team' && { parentId: data.parentId }),
       };
       
-      try {
-        await addDoc(groupsRef, newGroup);
+      addDoc(groupsRef, newGroup).then(() => {
         toast({ title: 'Gruppe erfolgreich erstellt.' });
         form.reset({ ...currentFormValues, name: '', deleteId: '' });
-      } catch (error) {
+      }).catch(() => {
         const permissionError = new FirestorePermissionError({
           path: 'groups',
           operation: 'create',
           requestResourceData: newGroup
         });
         errorEmitter.emit('permission-error', permissionError);
-      }
+      });
+
     } else if (data.action === 'delete') {
       if (!data.deleteId) {
         form.setError('deleteId', {
@@ -171,31 +171,39 @@ function AdminGruppenBearbeitenPageContent() {
         return;
       }
       
-      try {
-        const docRef = doc(firestore, 'groups', data.deleteId);
-        const itemToDelete = groups?.find(g => g.id === data.deleteId);
+      const docRef = doc(firestore, 'groups', data.deleteId);
+      const itemToDelete = groups?.find(g => g.id === data.deleteId);
 
-        if (itemToDelete?.type === 'class') {
-            const batch = writeBatch(firestore);
-            const teamQuery = query(collection(firestore, 'groups'), where('parentId', '==', data.deleteId));
-            const teamSnapshot = await getDocs(teamQuery);
+      if (itemToDelete?.type === 'class') {
+          const batch = writeBatch(firestore);
+          const teamQuery = query(collection(firestore, 'groups'), where('parentId', '==', data.deleteId));
+          getDocs(teamQuery).then(teamSnapshot => {
             teamSnapshot.forEach(doc => {
                 batch.delete(doc.ref);
             });
             batch.delete(docRef);
-            await batch.commit();
-             toast({ title: 'Obergruppe und alle zugehörigen Untergruppen gelöscht.' });
-        } else {
-            await deleteDoc(docRef);
+            return batch.commit();
+          }).then(() => {
+            toast({ title: 'Obergruppe und alle zugehörigen Untergruppen gelöscht.' });
+            form.reset({ ...currentFormValues, name: '', deleteId: '' });
+          }).catch(() => {
+            const permissionError = new FirestorePermissionError({
+              path: `groups/${data.deleteId}`,
+              operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
+      } else {
+          deleteDoc(docRef).then(() => {
             toast({ title: 'Gruppe erfolgreich gelöscht.' });
-        }
-        form.reset({ ...currentFormValues, name: '', deleteId: '' });
-      } catch (error) {
-         const permissionError = new FirestorePermissionError({
-          path: `groups/${data.deleteId}`,
-          operation: 'delete',
-        });
-        errorEmitter.emit('permission-error', permissionError);
+            form.reset({ ...currentFormValues, name: '', deleteId: '' });
+          }).catch(() => {
+            const permissionError = new FirestorePermissionError({
+              path: `groups/${data.deleteId}`,
+              operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
       }
     }
   };
@@ -323,7 +331,7 @@ function AdminGruppenBearbeitenPageContent() {
                 render={({ field }) => (
                   <FormItem>
                     <Select
-                      onValuechange={field.onChange}
+                      onValueChange={field.onChange}
                       defaultValue={field.value}
                     >
                       <FormControl>
