@@ -17,12 +17,20 @@ export interface AdminAwareUserHookResult {
   forceRefresh: () => Promise<void>;
 }
 
+// Augment the User type to include our custom claims if they exist
+interface UserWithClaims extends User {
+  customClaims?: {
+    admin?: boolean;
+  };
+}
+
 /**
  * Hook for accessing the authenticated user, their profile, and admin status.
- * The admin status is now derived from the Firestore document for reliability.
+ * The admin status is now derived from the custom token claim for reliability.
  */
 export const useUser = (): AdminAwareUserHookResult => {
   const { user, isUserLoading: isAuthLoading, firebaseApp, forceRefresh: refreshAuthToken } = useFirebase();
+  const typedUser = user as UserWithClaims | null;
 
   // Memoize Firestore instance to prevent re-renders
   const firestore = useMemo(() => firebaseApp ? getFirestore(firebaseApp) : null, [firebaseApp]);
@@ -36,8 +44,8 @@ export const useUser = (): AdminAwareUserHookResult => {
   // Fetch the user's profile document in real-time
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
-  // The isAdmin flag is now reliably sourced from the real-time user profile data.
-  const isAdmin = !!userProfile?.role && userProfile.role === 'admin';
+  // The isAdmin flag is now reliably sourced from the real-time auth token claims.
+  const isAdmin = !!typedUser?.customClaims?.admin;
 
   // Function to force a refresh of the user's auth token. This will also trigger the onIdTokenChanged
   // listener in the provider, which can be used to refresh other state if needed.

@@ -78,14 +78,14 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         if (firebaseUser) {
             const tokenResult = await firebaseUser.getIdTokenResult();
             const userWithClaims: UserWithClaims = {
-                ...firebaseUser,
+                ...(firebaseUser.toJSON() as User),
                 customClaims: (tokenResult.claims as { admin?: boolean }) ?? {},
             };
             setUserAuthState({ 
               user: userWithClaims, 
               isUserLoading: false, 
               userError: null,
-              forceRefresh: () => firebaseUser.getIdToken(true)
+              forceRefresh: () => firebaseUser.getIdToken(true).then(() => {})
             });
         } else {
             setUserAuthState({ user: null, isUserLoading: false, userError: null, forceRefresh: null });
