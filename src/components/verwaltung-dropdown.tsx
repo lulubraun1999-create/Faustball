@@ -53,6 +53,9 @@ export function VerwaltungDropdown({ userProfile }: VerwaltungDropdownProps) {
             Mannschaftskasse
           </Link>
         </DropdownMenuItem>
+         <DropdownMenuItem asChild>
+          <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
+        </DropdownMenuItem>
         {isAdmin && (
           <>
             <DropdownMenuSeparator />
