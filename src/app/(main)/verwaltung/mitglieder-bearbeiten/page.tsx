@@ -66,14 +66,14 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh } = useUser();
+  const { forceRefresh, isAdmin } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
   const membersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
   );
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
