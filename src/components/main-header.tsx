@@ -17,9 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import dynamic from 'next/dynamic';
-
-const VerwaltungDropdown = dynamic(() => import('./verwaltung-dropdown').then(mod => mod.VerwaltungDropdown), { ssr: false });
+import { VerwaltungDropdown } from './verwaltung-dropdown';
 
 
 export function MainHeader() {

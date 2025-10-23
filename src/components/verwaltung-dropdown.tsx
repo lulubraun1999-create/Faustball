@@ -14,12 +14,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "./ui/button";
 import { useUser } from "@/firebase";
+import { Loader2 } from "lucide-react";
 
 export function VerwaltungDropdown() {
   const { isAdmin, isUserLoading } = useUser();
-
-  // Do not render the admin sub-menu until the user's status is confirmed
-  const showAdminMenu = !isUserLoading && isAdmin;
 
   return (
     <DropdownMenu>
@@ -55,7 +53,18 @@ export function VerwaltungDropdown() {
          <DropdownMenuItem asChild>
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
-        {showAdminMenu && (
+        
+        {isUserLoading && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Lade Admin-Status...</span>
+            </DropdownMenuItem>
+          </>
+        )}
+        
+        {isAdmin && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
