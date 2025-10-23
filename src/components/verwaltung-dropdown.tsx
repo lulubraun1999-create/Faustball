@@ -54,7 +54,7 @@ export function VerwaltungDropdown() {
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
         
-        {isUserLoading && (
+        {isUserLoading ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>
@@ -62,9 +62,7 @@ export function VerwaltungDropdown() {
               <span>Lade Admin-Status...</span>
             </DropdownMenuItem>
           </>
-        )}
-        
-        {isAdmin && (
+        ) : isAdmin ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
@@ -93,7 +91,7 @@ export function VerwaltungDropdown() {
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>
-        )}
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
