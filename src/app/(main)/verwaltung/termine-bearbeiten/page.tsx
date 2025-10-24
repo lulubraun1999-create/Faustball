@@ -242,7 +242,7 @@ function AdminTerminePageContent() {
     const allEvents: UnrolledAppointment[] = [];
 
     appointments.forEach(app => {
-      if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
+      if (app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
         allEvents.push(app);
       } else {
         let currentDate = app.startDate.toDate();
@@ -550,95 +550,94 @@ function AdminTerminePageContent() {
                   <FormField control={appointmentForm.control} name="visibilityType" render={({ field }) => ( <FormItem><FormLabel>Sichtbar für</FormLabel><Select onValueChange={(value) => { field.onChange(value); if (value === 'all') appointmentForm.setValue('visibleTeamIds', []); }} value={field.value}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="all">Alle Mitglieder</SelectItem> <SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem> </SelectContent> </Select><FormMessage /></FormItem> )}/>
                   
                   {watchVisibilityType === 'specificTeams' && (
-                    <FormField
-                      control={appointmentForm.control}
-                      name="visibleTeamIds"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>Mannschaften auswählen</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between h-auto min-h-10 py-2",
-                                    !appointmentForm.getValues("visibleTeamIds")?.length && "text-muted-foreground"
-                                  )}
-                                >
-                                  <span className="flex flex-wrap gap-1">
-                                    {appointmentForm.getValues("visibleTeamIds")?.length > 0
-                                      ? appointmentForm.getValues("visibleTeamIds").map(id => (
-                                          <span key={id} className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">
-                                            {teamsMap.get(id) || id}
-                                          </span>
-                                        ))
-                                      : "Mannschaften auswählen"}
-                                  </span>
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-[--radix-popover-trigger-width] p-0"
-                                align="start"
-                              >
-                                <Controller
-                                  control={appointmentForm.control}
-                                  name="visibleTeamIds"
-                                  render={({ field }) => (
-                                    <ScrollArea className="h-48">
-                                      <div className="p-2 space-y-1">
-                                        {isLoadingGroups ? (
-                                          <p className="text-sm text-muted-foreground p-2">Lade...</p>
-                                        ) : groupedTeams.length > 0 ? (
-                                          groupedTeams.map((group) => (
-                                            <div key={group.id} className="mb-2">
-                                              <h4 className="font-semibold text-sm mb-1.5 px-2">{group.name}</h4>
-                                              <div className="flex flex-col space-y-1 pl-4">
-                                                {group.teams.map((team) => (
-                                                  <FormItem key={team.id} className="flex flex-row items-center space-x-2 space-y-0 px-2 py-1.5 rounded-sm hover:bg-accent">
-                                                    <FormControl>
-                                                      <Checkbox
-                                                        checked={field.value?.includes(team.id)}
-                                                        onCheckedChange={(checked) => {
-                                                          const newValue = checked
-                                                            ? [...(field.value || []), team.id]
-                                                            : (field.value || []).filter((id) => id !== team.id);
-                                                          field.onChange(newValue);
+                     <FormField
+                        control={appointmentForm.control}
+                        name="visibleTeamIds"
+                        render={() => (
+                           <FormItem>
+                              <FormLabel>Mannschaften auswählen</FormLabel>
+                               <Popover>
+                                 <PopoverTrigger asChild>
+                                   <FormControl>
+                                     <Button
+                                       variant="outline"
+                                       role="combobox"
+                                       className={cn(
+                                         "w-full justify-between h-auto min-h-10 py-2",
+                                         !appointmentForm.getValues("visibleTeamIds")?.length && "text-muted-foreground"
+                                       )}
+                                     >
+                                       <span className="flex flex-wrap gap-1">
+                                         {appointmentForm.getValues("visibleTeamIds")?.length > 0
+                                           ? appointmentForm.getValues("visibleTeamIds").map(id => (
+                                               <span key={id} className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">
+                                                 {teamsMap.get(id) || id}
+                                               </span>
+                                             ))
+                                           : "Mannschaften auswählen"}
+                                       </span>
+                                     </Button>
+                                   </FormControl>
+                                 </PopoverTrigger>
+                                 <PopoverContent
+                                    className="w-[--radix-popover-trigger-width] p-0"
+                                    align="start"
+                                  >
+                                    <Controller
+                                      control={appointmentForm.control}
+                                      name="visibleTeamIds"
+                                      render={({ field }) => (
+                                         <ScrollArea className="h-48">
+                                          <div className="p-2 space-y-1">
+                                            {isLoadingGroups ? (
+                                              <p className="p-2 text-sm text-muted-foreground">Lade...</p>
+                                            ) : groupedTeams.length > 0 ? (
+                                              groupedTeams.map((group) => (
+                                                <div key={group.id} className="mb-2">
+                                                  <h4 className="mb-1.5 border-b px-2 pb-1 text-sm font-semibold">{group.name}</h4>
+                                                  <div className="flex flex-col space-y-1 pl-2">
+                                                    {group.teams.map((team) => (
+                                                      <div
+                                                        key={team.id}
+                                                        className="flex cursor-pointer items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent"
+                                                        onClick={() => {
+                                                           const currentValues = field.value || [];
+                                                           const newValue = currentValues.includes(team.id)
+                                                             ? currentValues.filter(id => id !== team.id)
+                                                             : [...currentValues, team.id];
+                                                           field.onChange(newValue);
                                                         }}
-                                                      />
-                                                    </FormControl>
-                                                    <FormLabel
-                                                      className="text-sm font-normal cursor-pointer w-full"
-                                                      onClick={(e) => {
-                                                        e.preventDefault();
-                                                        const newValue = field.value?.includes(team.id)
-                                                          ? (field.value || []).filter(id => id !== team.id)
-                                                          : [...(field.value || []), team.id];
-                                                        field.onChange(newValue);
-                                                      }}
-                                                    >
-                                                      {team.name}
-                                                    </FormLabel>
-                                                  </FormItem>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          ))
-                                        ) : (
-                                          <p className="text-sm text-muted-foreground p-2 text-center">Keine Mannschaften erstellt.</p>
-                                        )}
-                                      </div>
-                                    </ScrollArea>
-                                  )}
-                                />
-                              </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                                                      >
+                                                        <Checkbox
+                                                          checked={field.value?.includes(team.id)}
+                                                          onCheckedChange={(checked) => {
+                                                            const currentValues = field.value || [];
+                                                            const newValue = checked
+                                                              ? [...currentValues, team.id]
+                                                              : currentValues.filter((id) => id !== team.id);
+                                                            field.onChange(newValue);
+                                                          }}
+                                                          onClick={(e) => e.stopPropagation()} // Verhindert, dass das Label-Klick-Event doppelt ausgelöst wird
+                                                        />
+                                                        <span className="w-full text-sm font-normal">{team.name}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              ))
+                                            ) : (
+                                              <p className="p-2 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>
+                                            )}
+                                          </div>
+                                        </ScrollArea>
+                                      )}
+                                    />
+                                  </PopoverContent>
+                               </Popover>
+                              <FormMessage />
+                           </FormItem>
+                        )}
+                      />
                   )}
 
                   <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Rückmeldung bis (optional)</FormLabel><FormControl><Input type={watchIsAllDay ? "date" : "datetime-local"} {...field} /></FormControl><FormMessage /></FormItem> )}/>
@@ -832,5 +831,7 @@ export default function AdminTerminePage() {
     if (!isAdmin) { return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><ListTodo className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen...</p></CardContent></Card></div> ); }
     return <AdminTerminePageContent />;
 }
+
+    
 
     
