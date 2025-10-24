@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -88,12 +89,19 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, MapPin, CalendarPlus } from 'lucide-react';
 import type { Appointment, AppointmentType, Location, Group } from '@/lib/types';
-import { format, formatISO, isValid as isDateValid } from 'date-fns';
+// *** NEUE IMPORTE für Wiederholungen ***
+import { format, formatISO, isValid as isDateValid, addDays, addWeeks, addMonths, differenceInMilliseconds, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 // Neuer Typ für die gruppierte Ansicht
 type GroupWithTeams = Group & { teams: Group[] };
+
+// *** NEU: Typ für entfaltete Termine ***
+type UnrolledAppointment = Appointment & {
+  virtualId?: string; // Die ID der originalen Termin-Serie
+  originalStartDate?: Timestamp; // Das Startdatum der *Serie*
+};
 
 // --- Zod Schemas ---
 const locationSchema = z.object({
@@ -135,11 +143,12 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
             message: "Bitte mindestens eine Mannschaft auswählen.",
             path: ["visibleTeamIds"],
         })
-        .refine(data => data.recurrence === 'none' || (data.recurrence !== 'none' && data.recurrenceEndDate), {
+        // *** KORRIGIERTE Validierung für Wiederholungs-Enddatum ***
+        .refine(data => data.recurrence === 'none' || (data.recurrence !== 'none' && !!data.recurrenceEndDate), {
             message: "Enddatum für Wiederholung ist erforderlich.",
             path: ["recurrenceEndDate"],
         })
-        .refine(data => !data.recurrenceEndDate || !data.startDate || data.recurrenceEndDate >= data.startDate, {
+        .refine(data => !data.recurrenceEndDate || !data.startDate || data.recurrenceEndDate >= data.startDate.split('T')[0], {
              message: "Ende der Wiederholung muss nach dem Startdatum liegen.",
              path: ["recurrenceEndDate"],
         })
@@ -232,17 +241,70 @@ function AdminTerminePageContent() {
   const watchRecurrence = appointmentForm.watch('recurrence');
   const sonstigeTypeId = useMemo(() => appointmentTypes?.find((t: AppointmentType) => t.name === 'Sonstiges')?.id, [appointmentTypes]);
 
+  // *** BEGINN NEUE LOGIK: Wiederholende Termine entfalten ***
+  const unrolledAppointments = useMemo(() => {
+    if (!appointments) return [];
+    const allEvents: UnrolledAppointment[] = [];
+
+    appointments.forEach(app => {
+      if (app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
+        allEvents.push(app);
+      } else {
+        let currentDate = app.startDate.toDate();
+        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1); // Bis einschließlich Enddatum
+        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
+
+        let iter = 0;
+        const MAX_ITERATIONS = 365; 
+
+        while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
+          const newStartDate = Timestamp.fromDate(currentDate);
+          const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
+          
+          allEvents.push({
+            ...app,
+            id: `${app.id}-${currentDate.toISOString()}`,
+            virtualId: app.id,
+            startDate: newStartDate,
+            endDate: newEndDate,
+            originalStartDate: app.startDate
+          });
+
+          switch (app.recurrence) {
+            case 'daily':
+              currentDate = addDays(currentDate, 1);
+              break;
+            case 'weekly':
+              currentDate = addWeeks(currentDate, 1);
+              break;
+            case 'bi-weekly':
+              currentDate = addWeeks(currentDate, 2);
+              break;
+            case 'monthly':
+              currentDate = addMonths(currentDate, 1);
+              break;
+            default:
+              currentDate = addDays(recurrenceEndDate, 1);
+              break;
+          }
+          iter++;
+        }
+      }
+    });
+    return allEvents;
+  }, [appointments]);
+  // *** ENDE NEUE LOGIK ***
+
   const filteredAppointments = useMemo(() => {
-      if (!appointments) return [];
-      // HINWEIS: Dies entfaltet die Termine noch nicht.
-      return appointments
+      return unrolledAppointments
         .filter(app => {
             const typeMatch = typeFilter === 'all' || app.appointmentTypeId === typeFilter;
             const teamMatch = teamFilter === 'all' || app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter);
             return typeMatch && teamMatch;
         })
         .sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-  }, [appointments, teamFilter, typeFilter]);
+  }, [unrolledAppointments, teamFilter, typeFilter]);
+
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !appointmentsRef) return;
@@ -273,16 +335,16 @@ function AdminTerminePageContent() {
     const startDateTimestamp = Timestamp.fromDate(startDate);
     const endDateTimestamp = endDate ? Timestamp.fromDate(endDate) : null;
     const rsvpDeadlineTimestamp = rsvpDeadline ? Timestamp.fromDate(rsvpDeadline) : null;
-    const recurrenceEndDateTimestamp = recurrenceEndDate ? Timestamp.fromDate(recurrenceEndDate) : null;
+    const recurrenceEndDateTimestamp = recurrenceEndDate ? Timestamp.fromDate(set(recurrenceEndDate, { hours: 23, minutes: 59, seconds: 59 })) : null;
 
-    const appointmentData: Omit<Appointment, 'id' | 'createdAt'> = {
+    const appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'lastUpdated'> = {
       title: finalTitle || '',
       appointmentTypeId: data.appointmentTypeId,
       startDate: startDateTimestamp,
       ...(endDateTimestamp && { endDate: endDateTimestamp }),
       isAllDay: data.isAllDay,
       recurrence: data.recurrence,
-      ...(recurrenceEndDateTimestamp && { recurrenceEndDate: recurrenceEndDateTimestamp }),
+      ...(recurrenceEndDateTimestamp && data.recurrence !== 'none' && { recurrenceEndDate: recurrenceEndDateTimestamp }),
       visibility: {
         type: data.visibilityType,
         teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [],
@@ -298,10 +360,10 @@ function AdminTerminePageContent() {
       if (selectedAppointment) {
         const docRef = doc(firestore, 'appointments', selectedAppointment.id);
         await updateDoc(docRef, { ...appointmentData, lastUpdated: serverTimestamp() });
-        toast({ title: 'Termin erfolgreich aktualisiert.' });
+        toast({ title: 'Terminserie erfolgreich aktualisiert.' });
       } else {
         await addDoc(appointmentsRef, { ...appointmentData, createdAt: serverTimestamp() });
-        toast({ title: 'Neuer Termin erfolgreich erstellt.' });
+        toast({ title: 'Neue Terminserie erfolgreich erstellt.' });
       }
       resetAppointmentForm();
       setIsAppointmentDialogOpen(false);
@@ -326,15 +388,23 @@ function AdminTerminePageContent() {
     const docRef = doc(firestore, 'appointments', id);
     try {
         await deleteDoc(docRef);
-        toast({ title: 'Termin gelöscht.' });
+        toast({ title: 'Terminserie gelöscht.' });
     } catch(e) {
         const permissionError = new FirestorePermissionError({ path: docRef.path, operation: 'delete' });
         errorEmitter.emit('permission-error', permissionError);
     }
   };
 
-  const handleEditAppointment = (appointment: Appointment) => {
-    setSelectedAppointment(appointment);
+  const handleEditAppointment = (appointment: UnrolledAppointment) => {
+    const originalId = appointment.virtualId || appointment.id;
+    const originalAppointment = appointments?.find(app => app.id === originalId);
+    
+    if (!originalAppointment) {
+        toast({ variant: 'destructive', title: 'Fehler', description: 'Originaltermin nicht gefunden.' });
+        return;
+    }
+    
+    setSelectedAppointment(originalAppointment);
     
     const formatTimestampForInput = (ts: Timestamp | undefined, type: 'datetime' | 'date' = 'datetime') => {
         if (!ts) return '';
@@ -347,30 +417,30 @@ function AdminTerminePageContent() {
         }
     };
 
-    const startDateString = formatTimestampForInput(appointment.startDate, appointment.isAllDay ? 'date' : 'datetime');
-    const endDateString = formatTimestampForInput(appointment.endDate, appointment.isAllDay ? 'date' : 'datetime');
-    const rsvpDeadlineString = formatTimestampForInput(appointment.rsvpDeadline, appointment.isAllDay ? 'date' : 'datetime');
-    const recurrenceEndDateString = formatTimestampForInput(appointment.recurrenceEndDate, 'date');
+    const startDateString = formatTimestampForInput(originalAppointment.startDate, originalAppointment.isAllDay ? 'date' : 'datetime');
+    const endDateString = formatTimestampForInput(originalAppointment.endDate, originalAppointment.isAllDay ? 'date' : 'datetime');
+    const rsvpDeadlineString = formatTimestampForInput(originalAppointment.rsvpDeadline, originalAppointment.isAllDay ? 'date' : 'datetime');
+    const recurrenceEndDateString = formatTimestampForInput(originalAppointment.recurrenceEndDate, 'date');
     
-    const typeName = typesMap.get(appointment.appointmentTypeId);
+    const typeName = typesMap.get(originalAppointment.appointmentTypeId);
     const isSonstiges = typeName === 'Sonstiges';
-    const titleIsDefault = !isSonstiges && appointment.title === typeName;
+    const titleIsDefault = !isSonstiges && originalAppointment.title === typeName;
 
     appointmentForm.reset({
-        title: titleIsDefault ? '' : appointment.title,
-        appointmentTypeId: appointment.appointmentTypeId,
+        title: titleIsDefault ? '' : originalAppointment.title,
+        appointmentTypeId: originalAppointment.appointmentTypeId,
         startDate: startDateString,
         endDate: endDateString,
-        isAllDay: appointment.isAllDay ?? false,
-        recurrence: appointment.recurrence ?? 'none',
+        isAllDay: originalAppointment.isAllDay ?? false,
+        recurrence: originalAppointment.recurrence ?? 'none',
         recurrenceEndDate: recurrenceEndDateString,
-        visibilityType: appointment.visibility.type,
-        visibleTeamIds: appointment.visibility.teamIds,
+        visibilityType: originalAppointment.visibility.type,
+        visibleTeamIds: originalAppointment.visibility.teamIds,
         rsvpDeadline: rsvpDeadlineString,
-        locationId: appointment.locationId ?? '',
-        meetingPoint: appointment.meetingPoint ?? '',
-        meetingTime: appointment.meetingTime ?? '',
-        description: appointment.description ?? '',
+        locationId: originalAppointment.locationId ?? '',
+        meetingPoint: originalAppointment.meetingPoint ?? '',
+        meetingTime: originalAppointment.meetingTime ?? '',
+        description: originalAppointment.description ?? '',
      });
      setIsAppointmentDialogOpen(true);
   };
@@ -436,15 +506,15 @@ function AdminTerminePageContent() {
              <DialogHeader>
                <DialogTitle className="flex items-center gap-2">
                  <CalendarPlus className="h-5 w-5"/>
-                 {selectedAppointment ? 'Termin bearbeiten' : 'Neuer Termin'}
+                 {selectedAppointment ? 'Terminserie bearbeiten' : 'Neuer Termin'}
                </DialogTitle>
                <DialogDescription>
-                 {selectedAppointment ? 'Details ändern.' : 'Neuen Termin hinzufügen.'}
+                 {selectedAppointment ? 'Details der Terminserie ändern.' : 'Neue Terminserie hinzufügen.'}
                </DialogDescription>
              </DialogHeader>
              <ScrollArea className="max-h-[70vh] p-1 pr-6">
               <Form {...appointmentForm}>
-                <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); appointmentForm.handleSubmit(onSubmitAppointment)(); }} className="space-y-4 px-1 py-4">
+                <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 px-1 py-4">
                   
                   {/* Art des Termins */}
                   <FormField control={appointmentForm.control} name="appointmentTypeId" render={({ field }) => (
@@ -507,8 +577,7 @@ function AdminTerminePageContent() {
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
-                          {/* *** KORREKTUR: Popover-Schließ-Problem *** */}
-                          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => e.preventDefault()}>
+                          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => e.preventDefault()} style={{ zIndex: 9999 }}>
                              <ScrollArea className="h-48">
                                 <div className="p-2 space-y-1">
                                   {isLoadingGroups ? <p className="text-sm text-muted-foreground p-2">Lade...</p> : groupedTeams.length > 0 ? (
@@ -531,7 +600,17 @@ function AdminTerminePageContent() {
                                                                 }}
                                                               />
                                                             </FormControl>
-                                                            <FormLabel className="text-sm font-normal cursor-pointer" onClick={(e) => e.preventDefault()}> {/* Verhindert Schließen bei Label-Klick */}
+                                                            <FormLabel 
+                                                              className="text-sm font-normal cursor-pointer w-full"
+                                                              onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                const newValue = multiSelectField.value?.includes(team.id)
+                                                                  ? (multiSelectField.value || []).filter(id => id !== team.id)
+                                                                  : [...(multiSelectField.value || []), team.id];
+                                                                multiSelectField.onChange(newValue);
+                                                              }}
+                                                            >
                                                                 {team.name}
                                                             </FormLabel>
                                                           </FormItem>
@@ -584,7 +663,10 @@ function AdminTerminePageContent() {
                   
                   <DialogFooter className="pt-4">
                     <DialogClose asChild><Button type="button" variant="ghost" onClick={resetAppointmentForm}> Abbrechen </Button></DialogClose>
-                    <Button type="submit" disabled={isSubmitting}> {isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)} {selectedAppointment ? 'Änderungen speichern' : 'Termin erstellen'} </Button>
+                    <Button type="submit" onClick={appointmentForm.handleSubmit(onSubmitAppointment)} disabled={isSubmitting}>
+                         {isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}
+                         {selectedAppointment ? 'Änderungen speichern' : 'Termin erstellen'}
+                    </Button>
                   </DialogFooter>
                 </form>
               </Form>
@@ -669,8 +751,7 @@ function AdminTerminePageContent() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? ( <div className="flex justify-center p-12"> <Loader2 className="h-8 w-8 animate-spin" /> </div> ) : (
-            <ScrollArea className="h-[600px] pr-4">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -684,7 +765,13 @@ function AdminTerminePageContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAppointments.length > 0 ? (
+                {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={`skeleton-${i}`}>
+                            <TableCell colSpan={7}><Loader2 className="h-5 w-5 animate-spin"/></TableCell>
+                        </TableRow>
+                    ))
+                ) : filteredAppointments.length > 0 ? (
                   filteredAppointments.map((app) => {
                       const typeName = typesMap.get(app.appointmentTypeId) || app.appointmentTypeId;
                       const isSonstiges = typeName === 'Sonstiges';
@@ -700,15 +787,29 @@ function AdminTerminePageContent() {
                             {app.endDate && !app.isAllDay && (<> - {format(app.endDate.toDate(), 'HH:mm', { locale: de })}</>)}
                             {app.isAllDay && <span className="text-xs text-muted-foreground"> (Ganztags)</span>}
                           </TableCell>
-                          <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
+                          <TableCell>{app.visibility.type === 'all' ? 'Alle' : (app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ') || '-')}</TableCell>
                           <TableCell>{app.locationId ? (locationsMap.get(app.locationId) || '-') : '-'}</TableCell>
-                          <TableCell>{app.recurrence && app.recurrence !== 'none' ? `${app.recurrence} (bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : 'unbegrenzt'})` : '-'}</TableCell>
+                          <TableCell>{app.recurrence && app.recurrence !== 'none' ? `bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : '...'}` : '-'}</TableCell>
                           <TableCell>{app.rsvpDeadline ? format(app.rsvpDeadline.toDate(), 'dd.MM.yy HH:mm', { locale: de }) : '-'}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => handleEditAppointment(app)}> <Edit className="h-4 w-4" /> </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild><Button variant="ghost" size="icon"> <Trash2 className="h-4 w-4 text-destructive" /> </Button></AlertDialogTrigger>
-                              <AlertDialogContent><AlertDialogHeader> <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle> <AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription> </AlertDialogHeader><AlertDialogFooter> <AlertDialogCancel>Abbrechen</AlertDialogCancel> <AlertDialogAction onClick={() => handleDeleteAppointment(app.id)} className="bg-destructive hover:bg-destructive/90"> Löschen </AlertDialogAction> </AlertDialogFooter></AlertDialogContent>
+                              <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                      <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Diese Aktion kann nicht rückgängig gemacht werden.
+                                        {app.virtualId ? " Hiermit wird die gesamte Serie gelöscht, zu der dieser Termin gehört." : ` Der Termin "${app.title}" wird dauerhaft gelöscht.`}
+                                      </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteAppointment(app.virtualId || app.id)} className="bg-destructive hover:bg-destructive/90">
+                                          Löschen
+                                      </AlertDialogAction>
+                                  </AlertDialogFooter>
+                              </AlertDialogContent>
                             </AlertDialog>
                           </TableCell>
                         </TableRow>
@@ -717,7 +818,7 @@ function AdminTerminePageContent() {
                 ) : ( <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Keine Termine entsprechen den Filtern.</TableCell></TableRow> )}
               </TableBody>
             </Table>
-            </ScrollArea>
+          </div>
           )}
         </CardContent>
       </Card>

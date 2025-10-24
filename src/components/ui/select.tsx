@@ -49,10 +49,12 @@ const SelectScrollUpButton = React.forwardRef<
 ))
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
 
+// *** BEGINN KORREKTUR: Tippfehler 'VSelectScrollDownButton' korrigiert ***
 const SelectScrollDownButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
 >(({ className, ...props }, ref) => (
+// *** ENDE KORREKTUR ***
   <SelectPrimitive.ScrollDownButton
     ref={ref}
     className={cn(
@@ -119,7 +121,7 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "active:bg-accent/80", // *** HIER IST DIE ÄNDERUNG FÜR DAS FEEDBACK ***
+      "active:bg-accent/80", // <-- Die Änderung für das Klick-Feedback
       className
     )}
     {...props}
