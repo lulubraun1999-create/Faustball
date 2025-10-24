@@ -62,7 +62,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Loader2 } from "lucide-react";
-import { format, isPast } from "date-fns";
+import { format, isPast, addDays, addWeeks, addMonths, isBefore } from "date-fns";
 import { de } from "date-fns/locale";
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
@@ -132,16 +132,56 @@ export default function VerwaltungTerminePage() {
       userProfile.teams?.includes(teamId),
     );
   };
+  
+  const expandedAppointments = useMemo(() => {
+    if (!appointments) return [];
+
+    const allOccurrences: (Appointment & { occurrenceDate: Date })[] = [];
+
+    appointments.forEach(app => {
+        const startDate = app.startDate.toDate();
+        allOccurrences.push({ ...app, occurrenceDate: startDate });
+
+        if (app.recurrence && app.recurrence !== 'none' && app.recurrenceEndDate) {
+            let currentDate = startDate;
+            const recurrenceEndDate = app.recurrenceEndDate.toDate();
+
+            const getNextDate = (date: Date): Date | null => {
+                switch (app.recurrence) {
+                    case 'daily': return addDays(date, 1);
+                    case 'weekly': return addWeeks(date, 1);
+                    case 'bi-weekly': return addWeeks(date, 2);
+                    case 'monthly': return addMonths(date, 1);
+                    default: return null;
+                }
+            };
+            
+            let nextDate = getNextDate(currentDate);
+
+            while(nextDate && isBefore(nextDate, recurrenceEndDate)) {
+                allOccurrences.push({
+                    ...app,
+                    id: `${app.id}-${nextDate.toISOString()}`,
+                    occurrenceDate: nextDate
+                });
+                nextDate = getNextDate(nextDate);
+            }
+        }
+    });
+
+    return allOccurrences;
+  }, [appointments]);
+
 
   const filteredAppointments = useMemo(() => {
-    if (!appointments || !profile) return [];
+    if (!expandedAppointments || !profile) return [];
     
     const now = new Date();
 
-    return appointments
+    return expandedAppointments
       .filter((app) => isUserRelevantForAppointment(app, profile))
       .filter((app) => {
-        const appointmentDate = (app.startDate as Timestamp).toDate();
+        const appointmentDate = app.occurrenceDate;
         if (showPast) {
             return isPast(appointmentDate);
         }
@@ -163,24 +203,24 @@ export default function VerwaltungTerminePage() {
       })
       .sort(
         (a, b) => {
-            const dateA = (a.startDate as Timestamp).toMillis();
-            const dateB = (b.startDate as Timestamp).toMillis();
+            const dateA = a.occurrenceDate.getTime();
+            const dateB = b.occurrenceDate.getTime();
             return showPast ? dateB - dateA : dateA - dateB;
         }
       );
-  }, [appointments, selectedType, selectedTeam, profile, showPast]);
+  }, [expandedAppointments, selectedType, selectedTeam, profile, showPast]);
 
   const handleResponse = async (
     appointmentId: string,
     status: UserResponseStatus,
   ) => {
     if (!user || !firestore) return;
-    const docRef = doc(firestore, "appointments", appointmentId);
+    // We need the original appointment ID, not the occurrence ID
+    const originalAppointmentId = appointmentId.split('-')[0];
+    const docRef = doc(firestore, "appointments", originalAppointmentId);
     
-    const currentAppointment = appointments?.find(a => a.id === appointmentId);
+    const currentAppointment = appointments?.find(a => a.id === originalAppointmentId);
     if (!currentAppointment) return;
-
-    const existingResponse = currentAppointment.responses?.[user.uid];
 
     const newResponse = {
         status: status,
@@ -208,7 +248,8 @@ export default function VerwaltungTerminePage() {
 
   const handleAbsageClick = (appointmentId: string) => {
     setCurrentAbsageAppId(appointmentId);
-    const existingReason = appointments?.find(a => a.id === appointmentId)?.responses?.[user?.uid ?? '']?.reason;
+    const originalAppointmentId = appointmentId.split('-')[0];
+    const existingReason = appointments?.find(a => a.id === originalAppointmentId)?.responses?.[user?.uid ?? '']?.reason;
     setAbsageGrund(existingReason || "");
     setIsAbsageDialogOpen(true);
   };
@@ -232,9 +273,9 @@ export default function VerwaltungTerminePage() {
   const getTypeName = (typeId: string) =>
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
-  const formatDateTime = (timestamp: Timestamp) => {
-    if (!timestamp) return "Kein Datum";
-    return timestamp.toDate().toLocaleString("de-DE", {
+  const formatDateTime = (date: Date) => {
+    if (!date) return "Kein Datum";
+    return date.toLocaleString("de-DE", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -334,7 +375,7 @@ export default function VerwaltungTerminePage() {
                           {app.title}
                         </TableCell>
                         <TableCell>
-                          {formatDateTime(app.startDate as Timestamp)} Uhr
+                          {formatDateTime(app.occurrenceDate)} Uhr
                         </TableCell>
                         <TableCell>{getTypeName(app.appointmentTypeId)}</TableCell>
                         <TableCell>{app.locationId}</TableCell>
@@ -427,5 +468,3 @@ export default function VerwaltungTerminePage() {
     </div>
   );
 }
-
-    

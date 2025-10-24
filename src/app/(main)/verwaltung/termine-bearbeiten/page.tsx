@@ -294,6 +294,7 @@ function AdminTerminePageContent() {
       ...(data.meetingPoint && { meetingPoint: data.meetingPoint }),
       ...(data.meetingTime && { meetingTime: data.meetingTime }),
       ...(data.description && { description: data.description }),
+      responses: {},
     };
 
     try {
@@ -493,10 +494,6 @@ function AdminTerminePageContent() {
                   <FormField control={appointmentForm.control} name="visibilityType" render={({ field }) => ( <FormItem><FormLabel>Sichtbar für</FormLabel><Select onValueChange={(value) => { field.onChange(value); if (value === 'all') appointmentForm.setValue('visibleTeamIds', []); }} value={field.value}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="all">Alle Mitglieder</SelectItem> <SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem> </SelectContent> </Select><FormMessage /></FormItem> )}/>
                   
                   {watchVisibilityType === 'specificTeams' && (
-                    <FormField
-                      control={appointmentForm.control}
-                      name="visibleTeamIds"
-                      render={({ field }) => (
                         <FormItem>
                           <FormLabel>Mannschaften auswählen</FormLabel>
                           <Popover>
@@ -507,12 +504,12 @@ function AdminTerminePageContent() {
                                   role="combobox"
                                   className={cn(
                                     'w-full justify-between h-auto min-h-10 py-2',
-                                    !field.value?.length && 'text-muted-foreground'
+                                    !appointmentForm.getValues("visibleTeamIds")?.length && 'text-muted-foreground'
                                   )}
                                 >
                                   <span className="flex flex-wrap gap-1">
-                                    {field.value?.length > 0
-                                      ? field.value.map((id) => (
+                                    {appointmentForm.getValues("visibleTeamIds")?.length > 0
+                                      ? appointmentForm.getValues("visibleTeamIds").map((id) => (
                                           <span
                                             key={id}
                                             className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm"
@@ -527,84 +524,53 @@ function AdminTerminePageContent() {
                             </PopoverTrigger>
                             <PopoverContent
                               className="w-[--radix-popover-trigger-width] p-0"
-                              onInteractOutside={(e) => e.preventDefault()}
                             >
-                              <ScrollArea className="h-48">
-                                <div className="p-2 space-y-1">
-                                  {isLoadingGroups ? (
-                                    <p className="text-sm text-muted-foreground p-2">
-                                      Lade...
-                                    </p>
-                                  ) : groupedTeams.length > 0 ? (
-                                    groupedTeams.map((group) => (
-                                      <div key={group.id} className="mb-2">
-                                        <h4 className="font-semibold text-sm mb-1.5 px-2">
-                                          {group.name}
-                                        </h4>
-                                        <div className="flex flex-col space-y-1 pl-4">
-                                          {group.teams.map((team) => (
-                                            <FormField
-                                              key={team.id}
-                                              control={appointmentForm.control}
-                                              name="visibleTeamIds"
-                                              render={({
-                                                field: multiSelectField,
-                                              }) => (
+                               <Controller
+                                name="visibleTeamIds"
+                                control={appointmentForm.control}
+                                render={({ field }) => (
+                                  <ScrollArea className="h-48">
+                                    <div className="p-2 space-y-1">
+                                      {isLoadingGroups ? (
+                                        <p className="text-sm text-muted-foreground p-2">Lade...</p>
+                                      ) : groupedTeams.length > 0 ? (
+                                        groupedTeams.map((group) => (
+                                          <div key={group.id} className="mb-2">
+                                            <h4 className="font-semibold text-sm mb-1.5 px-2">{group.name}</h4>
+                                            <div className="flex flex-col space-y-1 pl-4">
+                                              {group.teams.map((team) => (
                                                 <FormItem
                                                   key={team.id}
                                                   className="flex flex-row items-center space-x-2 space-y-0 px-2 py-1.5 rounded-sm hover:bg-accent"
                                                 >
                                                   <FormControl>
                                                     <Checkbox
-                                                      checked={multiSelectField.value?.includes(
-                                                        team.id
-                                                      )}
-                                                      onCheckedChange={(
-                                                        checked
-                                                      ) => {
-                                                        const newValue =
-                                                          checked
-                                                            ? [
-                                                                ...(multiSelectField.value ||
-                                                                  []),
-                                                                team.id,
-                                                              ]
-                                                            : (
-                                                                multiSelectField.value ||
-                                                                []
-                                                              ).filter(
-                                                                (id) =>
-                                                                  id !== team.id
-                                                              );
-                                                        multiSelectField.onChange(
-                                                          newValue
-                                                        );
+                                                      checked={field.value?.includes(team.id)}
+                                                      onCheckedChange={(checked) => {
+                                                        const newValue = checked
+                                                          ? [...(field.value || []), team.id]
+                                                          : (field.value || []).filter((id) => id !== team.id);
+                                                        field.onChange(newValue);
                                                       }}
                                                     />
                                                   </FormControl>
-                                                  <FormLabel className="text-sm font-normal cursor-pointer">
-                                                    {team.name}
-                                                  </FormLabel>
+                                                  <FormLabel className="text-sm font-normal cursor-pointer">{team.name}</FormLabel>
                                                 </FormItem>
-                                              )}
-                                            />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <p className="text-sm text-muted-foreground p-2 text-center">
-                                      Keine Mannschaften erstellt.
-                                    </p>
-                                  )}
-                                </div>
-                              </ScrollArea>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p className="text-sm text-muted-foreground p-2 text-center">Keine Mannschaften erstellt.</p>
+                                      )}
+                                    </div>
+                                  </ScrollArea>
+                                )}
+                              />
                             </PopoverContent>
                           </Popover>
                           <FormMessage />
                         </FormItem>
-                      )}
-                    />
                   )}
 
                   {/* Rückmeldefrist */}
@@ -723,65 +689,65 @@ function AdminTerminePageContent() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center p-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : (
-            <ScrollArea className="h-[600px] pr-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Art (Titel)</TableHead>
-                    <TableHead>Datum/Zeit</TableHead>
-                    <TableHead>Sichtbarkeit</TableHead>
-                    <TableHead>Ort</TableHead>
-                    <TableHead>Wiederholung</TableHead>
-                    <TableHead>Rückmeldung bis</TableHead>
-                    <TableHead className="text-right">Aktionen</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAppointments.length > 0 ? (
-                    filteredAppointments.map((app) => {
-                      const typeName = typesMap.get(app.appointmentTypeId) || app.appointmentTypeId;
-                      const isSonstiges = typeName === 'Sonstiges';
-                      const titleIsDefault = !isSonstiges && app.title === typeName;
-                      const displayTitle = titleIsDefault ? typeName : (app.title ? `${typeName} (${app.title})` : typeName);
+            <div className="overflow-x-auto">
+              {isLoading ? (
+                <div className="flex justify-center p-12">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Art (Titel)</TableHead>
+                        <TableHead>Datum/Zeit</TableHead>
+                        <TableHead>Sichtbarkeit</TableHead>
+                        <TableHead>Ort</TableHead>
+                        <TableHead>Wiederholung</TableHead>
+                        <TableHead>Rückmeldung bis</TableHead>
+                        <TableHead className="text-right">Aktionen</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAppointments.length > 0 ? (
+                        filteredAppointments.map((app) => {
+                          const typeName = typesMap.get(app.appointmentTypeId) || app.appointmentTypeId;
+                          const isSonstiges = typeName === 'Sonstiges';
+                          const titleIsDefault = !isSonstiges && app.title === typeName;
+                          const displayTitle = titleIsDefault ? typeName : (app.title ? `${typeName} (${app.title})` : typeName);
 
-                      return (
-                        <TableRow key={app.id}>
-                          <TableCell className="font-medium max-w-[200px] truncate">{displayTitle}</TableCell>
-                          <TableCell>
-                            {app.startDate ? format(app.startDate.toDate(), app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm', { locale: de }) : 'N/A'}
-                            {app.endDate && !app.isAllDay && (<> - {format(app.endDate.toDate(), 'HH:mm', { locale: de })}</>)}
-                            {app.isAllDay && <span className="text-xs text-muted-foreground"> (Ganztags)</span>}
-                          </TableCell>
-                          <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
-                          <TableCell>{app.locationId ? (locationsMap.get(app.locationId) || '-') : '-'}</TableCell>
-                          <TableCell>{app.recurrence !== 'none' ? `${app.recurrence} (bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : 'unbegrenzt'})` : '-'}</TableCell>
-                          <TableCell>{app.rsvpDeadline ? format(app.rsvpDeadline.toDate(), 'dd.MM.yy HH:mm', { locale: de }) : '-'}</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" onClick={() => handleEditAppointment(app)}> <Edit className="h-4 w-4" /> </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon"> <Trash2 className="h-4 w-4 text-destructive" /> </Button></AlertDialogTrigger>
-                              <AlertDialogContent><AlertDialogHeader> <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle> <AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription> </AlertDialogHeader><AlertDialogFooter> <AlertDialogCancel>Abbrechen</AlertDialogCancel> <AlertDialogAction onClick={() => handleDeleteAppointment(app.id)} className="bg-destructive hover:bg-destructive/90"> Löschen </AlertDialogAction> </AlertDialogFooter></AlertDialogContent>
-                            </AlertDialog>
+                          return (
+                            <TableRow key={app.id}>
+                              <TableCell className="font-medium max-w-[200px] truncate">{displayTitle}</TableCell>
+                              <TableCell>
+                                {app.startDate ? format(app.startDate.toDate(), app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm', { locale: de }) : 'N/A'}
+                                {app.endDate && !app.isAllDay && (<> - {format(app.endDate.toDate(), 'HH:mm', { locale: de })}</>)}
+                                {app.isAllDay && <span className="text-xs text-muted-foreground"> (Ganztags)</span>}
+                              </TableCell>
+                              <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
+                              <TableCell>{app.locationId ? (locationsMap.get(app.locationId) || '-') : '-'}</TableCell>
+                              <TableCell>{app.recurrence !== 'none' ? `${app.recurrence} (bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : 'unbegrenzt'})` : '-'}</TableCell>
+                              <TableCell>{app.rsvpDeadline ? format(app.rsvpDeadline.toDate(), 'dd.MM.yy HH:mm', { locale: de }) : '-'}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" onClick={() => handleEditAppointment(app)}> <Edit className="h-4 w-4" /> </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon"> <Trash2 className="h-4 w-4 text-destructive" /> </Button></AlertDialogTrigger>
+                                  <AlertDialogContent><AlertDialogHeader> <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle> <AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription> </AlertDialogHeader><AlertDialogFooter> <AlertDialogCancel>Abbrechen</AlertDialogCancel> <AlertDialogAction onClick={() => handleDeleteAppointment(app.id)} className="bg-destructive hover:bg-destructive/90"> Löschen </AlertDialogAction> </AlertDialogFooter></AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                            Keine Termine entsprechen den Filtern.
                           </TableCell>
                         </TableRow>
-                      )
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                        Keine Termine entsprechen den Filtern.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
+                      )}
+                    </TableBody>
+                  </Table>
+              )}
+            </div>
         </CardContent>
       </Card>
     </div>
