@@ -1,15 +1,16 @@
 
 'use client';
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import type { MemberProfile, Group } from '@/lib/types';
 import { collection } from 'firebase/firestore';
 
-// 1. Context für die Admin-Daten erstellen (nur noch mit Gruppen)
+// 1. Context für die Admin-Daten erstellen
 interface AdminDataContextType {
+  members: MemberProfile[];
   groups: Group[];
   isLoading: boolean;
 }
@@ -25,26 +26,30 @@ export const useAdminData = () => {
   return context;
 };
 
-
 // 3. AdminDataProvider, der die Daten nur für Admins lädt
 function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const firestore = useFirestore();
     const { isAdmin } = useUser();
 
-    // Lade nur noch Gruppen, wenn der Benutzer Admin ist
+    // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
+    const membersRef = useMemoFirebase(
+        () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+        [firestore, isAdmin]
+    );
     const groupsRef = useMemoFirebase(
         () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
         [firestore, isAdmin]
     );
 
+    const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-    // isLoading hängt nur noch vom Laden der Gruppen ab.
-    const isLoading = isAdmin ? isLoadingGroups : false;
+    const isLoading = isAdmin ? (isLoadingMembers || isLoadingGroups) : false;
+    const members = membersData || [];
     const groups = groupsData || [];
     
     return (
-        <AdminDataContext.Provider value={{ groups, isLoading }}>
+        <AdminDataContext.Provider value={{ members, groups, isLoading }}>
             {isLoading ? (
                  <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -53,7 +58,6 @@ function AdminDataProvider({ children }: { children: React.ReactNode }) {
         </AdminDataContext.Provider>
     );
 }
-
 
 // 4. AdminGuard, der den Provider nur rendert, wenn der Benutzer Admin ist
 export function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -87,6 +91,6 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Only render the provider and its children if the user is a confirmed admin
+  // Nur wenn der Benutzer Admin ist, werden der Provider und die Daten geladen.
   return <AdminDataProvider>{children}</AdminDataProvider>;
 }
