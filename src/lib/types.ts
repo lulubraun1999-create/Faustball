@@ -178,3 +178,22 @@ export interface TreasuryTransaction {
     memberId?: string;
     status: 'paid' | 'unpaid';
 }
+// *** NEU: Typ für Termin-Ausnahmen ***
+export interface AppointmentException {
+  id?: string; // ID der Ausnahme
+  originalAppointmentId: string; // ID der ursprünglichen Terminserie
+  originalDate: Timestamp; // Das ursprüngliche Datum des betroffenen Termins
+  status: 'cancelled' | 'modified'; // Art der Ausnahme
+  modifiedData?: { // Nur relevant, wenn status 'modified' ist
+    startDate?: Timestamp;
+    endDate?: Timestamp;
+    title?: string;
+    locationId?: string;
+    description?: string;
+    meetingPoint?: string;
+    meetingTime?: string;
+    // Füge hier weitere Felder hinzu, die einzeln änderbar sein sollen
+  };
+  createdAt: Timestamp; // Wann wurde die Ausnahme erstellt
+  userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
+}

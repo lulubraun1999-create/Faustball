@@ -133,6 +133,40 @@ service cloud.firestore {
           return request.auth.uid == resource.data.userId;
         }
 
+    match /appointmentExceptions/{exceptionId} {
+
+        // Hilfsfunktion: Holt das Original-Appointment
+        function getOriginalAppointment() {
+          return get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
+          // Für Lese-/Lösch-Zugriff (resource statt request.resource)
+          // return get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId));
+        }
+        // Hilfsfunktion: Prüft, ob der Benutzer in einem Team des Original-Termins ist
+        function isMemberOfOriginalAppointmentTeam() {
+           let originalAppointmentData = getOriginalAppointment().data;
+           let memberDoc = getMemberDoc(request.auth.uid);
+           return memberDoc.data != null &&
+                  originalAppointmentData.visibility.type == 'specificTeams' &&
+                  originalAppointmentData.visibility.teamIds.hasAny(memberDoc.data.teams);
+        }
+
+        // LESEN (get, list): Admins ODER Benutzer, die den Original-Termin sehen dürften
+        // (Wir vereinfachen: Admins oder wenn Original-Termin für 'all' ist oder man im Team ist)
+        allow read: if isSignedIn() && (
+                      isAdmin() ||
+                      getOriginalAppointment().data.visibility.type == 'all' || // Prüfe auf existierendes Dokument zuerst
+                      isMemberOfOriginalAppointmentTeam()
+                    );
+
+        // ERSTELLEN: Nur Admins (da nur Admins Termine bearbeiten/absagen)
+        allow create: if isSignedIn() && isAdmin();
+
+        // ÄNDERN/LÖSCHEN: Nur Admins
+        allow update, delete: if isSignedIn() && isAdmin();
+        }
+
+
+
         // LESEN (einzeln): Admin ODER der Besitzer der Antwort
         allow get: if isSignedIn() && (isAdmin() || isExistingResponseOwner());
         
@@ -154,6 +188,12 @@ service cloud.firestore {
         // ÄNDERN/LÖSCHEN: Nur der Besitzer der Antwort
         allow update, delete: if isSignedIn() && isExistingResponseOwner();
     }
+
+
+
+
+
+
     // *** ENDE NEUER REGELN ***
 
     // --- /polls/{pollId} ---
