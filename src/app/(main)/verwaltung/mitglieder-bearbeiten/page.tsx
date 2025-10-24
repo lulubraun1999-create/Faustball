@@ -238,7 +238,7 @@ function AdminMitgliederPageContent() {
 
 
   const getTeamNamesForDisplay = (teamIds?: string[]): string[] => {
-    if (!teamIds || teamIds.length === 0) return [];
+    if (!teamIds || !teams) return [];
     return teamIds.map(id => teams.find(t => t.id === id)?.name || id)
   };
 
