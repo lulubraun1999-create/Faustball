@@ -16,14 +16,16 @@ import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { VerwaltungDropdown } from './verwaltung-dropdown';
+import { cn } from "@/lib/utils";
 
 
 export function MainHeader() {
   const { user: authUser, userProfile } = useUser();
   const auth = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     if (auth) {
@@ -52,14 +54,18 @@ export function MainHeader() {
         <nav className="flex justify-self-center">
           <div className="flex items-center space-x-6 text-sm font-medium">
             <Link
-              href="/dashboard"
-              className="transition-colors hover:text-foreground/80 text-foreground"
+              href="/kalender"
+              className={cn("transition-colors hover:text-foreground/80", 
+                pathname.startsWith('/kalender') ? "text-foreground" : "text-foreground/60"
+              )}
             >
-              Aktuelles
+              Kalender
             </Link>
             <Link
               href="/chat"
-              className="transition-colors hover:text-foreground/80 text-foreground/60"
+              className={cn("transition-colors hover:text-foreground/80", 
+                pathname.startsWith('/chat') ? "text-foreground" : "text-foreground/60"
+              )}
             >
               Chat
             </Link>

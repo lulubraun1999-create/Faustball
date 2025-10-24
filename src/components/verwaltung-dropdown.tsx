@@ -16,10 +16,13 @@ import { Button } from "./ui/button";
 import { useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 export function VerwaltungDropdown() {
   const { isAdmin, isUserLoading, userProfile } = useUser();
   const [isClient, setIsClient] = useState(false);
+  const pathname = usePathname();
 
   // This ensures the component only renders the dynamic part on the client after hydration
   useEffect(() => {
@@ -29,13 +32,16 @@ export function VerwaltungDropdown() {
   // On the server and during initial client render, showAdminMenu will be false.
   // It will only be true on the client after the user state has been determined.
   const showAdminMenu = isClient && !isUserLoading && (isAdmin || userProfile?.role === 'admin');
+  const isVerwaltungActive = pathname.startsWith('/verwaltung');
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="px-2 lg:px-3 text-foreground/60 hover:text-foreground/80"
+          className={cn("px-2 lg:px-3 hover:text-foreground/80", 
+             isVerwaltungActive ? "text-foreground" : "text-foreground/60"
+          )}
         >
           Verwaltung
         </Button>
