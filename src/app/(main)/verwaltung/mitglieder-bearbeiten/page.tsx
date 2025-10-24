@@ -352,7 +352,7 @@ function AdminMitgliederPageContent() {
                                             {updatingStates[`role-${member.userId}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                             Speichern
                                         </Button>
-                                    </DialogFooter>
+                                    </Footer>
                                 </DialogContent>
                              </Dialog>
 

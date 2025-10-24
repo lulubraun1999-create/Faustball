@@ -29,10 +29,10 @@ export const useAdminData = () => {
 // 3. AdminDataProvider, der die Daten nur für Admins lädt
 function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const firestore = useFirestore();
-    const { isAdmin } = useUser(); // We need isAdmin to decide if we should fetch
+    // isAdmin ist hier garantiert true, da der Provider nur von AdminGuard gerendert wird
+    const { isAdmin } = useUser();
 
     // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
-    // Wichtig: Die Hooks werden nur mit einer gültigen Referenz aktiv, wenn isAdmin true ist.
     const membersRef = useMemoFirebase(
         () => (firestore && isAdmin ? collection(firestore, 'members') : null),
         [firestore, isAdmin]
