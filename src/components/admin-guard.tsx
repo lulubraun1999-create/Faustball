@@ -44,6 +44,7 @@ function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
+    // Die Gesamtladezeit ist die Ladezeit beider Abfragen, aber nur wenn der Benutzer Admin ist.
     const isLoading = isAdmin ? (isLoadingMembers || isLoadingGroups) : false;
     const members = membersData || [];
     const groups = groupsData || [];

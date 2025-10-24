@@ -64,7 +64,7 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, forceRefresh } = useUser();
+  const { forceRefresh } = useUser();
   
   // Daten kommen jetzt vom useAdminData Hook, der durch AdminGuard bereitgestellt wird.
   const { members, groups, isLoading } = useAdminData();

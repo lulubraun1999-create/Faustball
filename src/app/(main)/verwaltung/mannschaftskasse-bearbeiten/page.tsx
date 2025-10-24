@@ -112,15 +112,11 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { groups, isLoading: isLoadingAdminData } = useAdminData(); // Lädt nur noch Gruppen
+  const { members, groups, isLoading: isLoadingAdminData } = useAdminData(); 
   const { isAdmin } = useUser();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
-
-  // Lade Mitglieder nur, wenn Admin und eine Mannschaft ausgewählt ist
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
   // Data fetching - Defer heavy queries until a team is selected
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
@@ -213,7 +209,7 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingAdminData || isLoadingMembers || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
+  const isLoading = isLoadingAdminData || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
