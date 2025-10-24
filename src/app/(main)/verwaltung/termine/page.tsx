@@ -155,7 +155,7 @@ export default function VerwaltungTerminePage() {
     const now = new Date();
   
     appointments.forEach(app => {
-      if (!app.startDate || app.recurrence === 'none' || !app.recurrenceEndDate) {
+      if (!app.startDate || !app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
         if (app.startDate && app.startDate.toDate() >= now) {
           allEvents.push(app);
         }
@@ -417,7 +417,6 @@ export default function VerwaltungTerminePage() {
                   <TableRow>
                     <TableHead>Titel</TableHead>
                     <TableHead>Datum & Uhrzeit</TableHead>
-                    <TableHead>Art</TableHead>
                     <TableHead>Ort</TableHead>
                     <TableHead>Sichtbar für</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
@@ -433,9 +432,6 @@ export default function VerwaltungTerminePage() {
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-5 w-28" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-20" />
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-5 w-24" />
@@ -462,15 +458,20 @@ export default function VerwaltungTerminePage() {
                         ? 'Alle'
                         : app.visibility.teamIds.map(id => teamsMap.get(id) || 'Unbekannt').join(', ');
 
+                      const typeName = getTypeName(app.appointmentTypeId);
+                      const isSonstiges = typeName === 'Sonstiges';
+                      const titleIsDefault = !isSonstiges && app.title === typeName;
+                      const showTitle = app.title && (!titleIsDefault || isSonstiges);
+                      const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
+
                       return (
                         <TableRow key={app.id}>
                           <TableCell className="font-medium">
-                            {app.title}
+                            {displayTitle}
                           </TableCell>
                           <TableCell>
                             {formatDateTime(app.startDate as Timestamp)} Uhr
                           </TableCell>
-                          <TableCell>{getTypeName(app.appointmentTypeId)}</TableCell>
                           <TableCell>
                             {location ? (
                               <Tooltip>
@@ -547,7 +548,7 @@ export default function VerwaltungTerminePage() {
                   ) : (
                     // Keine Termine gefunden
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center">
+                      <TableCell colSpan={5} className="text-center">
                         Keine Termine gefunden, die den Filtern entsprechen.
                       </TableCell>
                     </TableRow>
@@ -593,5 +594,3 @@ export default function VerwaltungTerminePage() {
     </>
   );
 }
-
-    
