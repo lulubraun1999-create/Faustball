@@ -1,7 +1,7 @@
 
 'use client';
 
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import {
   Card,
   CardContent,
@@ -20,10 +20,26 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+import type { MemberProfile, Group } from '@/lib/types';
+
 
 function VerwaltungMitgliederPageContent() {
-  // Daten kommen jetzt vom useAdminData Hook, der durch AdminGuard bereitgestellt wird.
-  const { members, groups, isLoading } = useAdminData();
+  const firestore = useFirestore();
+
+  const membersRef = useMemoFirebase(
+      () => (firestore ? collection(firestore, 'members') : null),
+      [firestore]
+  );
+  const groupsRef = useMemoFirebase(
+      () => (firestore ? collection(firestore, 'groups') : null),
+      [firestore]
+  );
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
+  const isLoading = isLoadingMembers || isLoadingGroups;
   
   const sortedMembers = useMemo(() => {
     if (!members) return [];

@@ -1,62 +1,10 @@
-
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { ReactNode } from 'react';
+import { useUser } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import type { MemberProfile, Group } from '@/lib/types';
-import { collection, Firestore } from 'firebase/firestore';
 
-// 1. Context für die Admin-Daten erstellen
-interface AdminDataContextType {
-  members: MemberProfile[];
-  groups: Group[];
-  isLoading: boolean;
-}
-
-const AdminDataContext = createContext<AdminDataContextType | null>(null);
-
-// 2. Hook für den Zugriff auf die Admin-Daten
-export const useAdminData = () => {
-  const context = useContext(AdminDataContext);
-  if (!context) {
-    throw new Error('useAdminData must be used within an AdminDataProvider');
-  }
-  return context;
-};
-
-// 3. AdminDataProvider, der die Daten nur für Admins lädt
-function AdminDataProvider({ children }: { children: React.ReactNode }) {
-    const firestore = useFirestore();
-    // isAdmin ist hier garantiert true, da der Provider nur von AdminGuard gerendert wird
-    const { isAdmin } = useUser();
-
-    // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
-    const membersRef = useMemoFirebase(
-        () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-        [firestore, isAdmin]
-    );
-    const groupsRef = useMemoFirebase(
-        () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-        [firestore, isAdmin]
-    );
-
-    const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-    const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-
-    const isLoading = isLoadingMembers || isLoadingGroups;
-    const members = membersData || [];
-    const groups = groupsData || [];
-    
-    return (
-        <AdminDataContext.Provider value={{ members, groups, isLoading }}>
-            {children}
-        </AdminDataContext.Provider>
-    );
-}
-
-// 4. AdminGuard, der den Provider nur rendert, wenn der Benutzer Admin ist
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
@@ -87,7 +35,14 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  // Nur wenn der Benutzer Admin ist, werden der Provider und die Daten geladen.
-  return <AdminDataProvider>{children}</AdminDataProvider>;
+  
+  return <>{children}</>;
 }
+
+// Dummy export to prevent breaking changes in other files for now.
+// Will be removed once all components are updated.
+export const useAdminData = () => ({
+    members: [],
+    groups: [],
+    isLoading: true,
+});

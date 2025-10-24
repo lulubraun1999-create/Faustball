@@ -7,10 +7,12 @@ import {
   FirestorePermissionError,
   useUser,
   initializeFirebase,
+  useCollection,
+  useMemoFirebase
 } from '@/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -55,7 +57,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -66,8 +68,20 @@ function AdminMitgliederPageContent() {
   const firestore = useFirestore();
   const { forceRefresh } = useUser();
   
-  // Daten kommen jetzt vom useAdminData Hook, der durch AdminGuard bereitgestellt wird.
-  const { members, groups, isLoading } = useAdminData();
+  const membersRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'members') : null),
+    [firestore]
+  );
+  const groupsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
+  );
+
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
+  const isLoading = isLoadingMembers || isLoadingGroups;
+
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);

@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -87,7 +87,7 @@ import {
   Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Penalty, TreasuryTransaction, MemberProfile } from '@/lib/types';
+import type { Penalty, TreasuryTransaction, MemberProfile, Group } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -111,10 +111,16 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { members, groups, isLoading: isLoadingAdminData } = useAdminData(); 
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
+
+  // Fetch all groups and members once
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
+  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
   // Data fetching - Defer heavy queries until a team is selected
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
@@ -207,7 +213,7 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingAdminData || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
+  const isLoading = isLoadingGroups || isLoadingMembers || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -221,7 +227,7 @@ function AdminKassePageContent() {
             <SelectValue placeholder="Mannschaft auswählen..." />
           </SelectTrigger>
           <SelectContent>
-            {isLoadingAdminData ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
+            {isLoadingGroups ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
               teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
           </SelectContent>
         </Select>
