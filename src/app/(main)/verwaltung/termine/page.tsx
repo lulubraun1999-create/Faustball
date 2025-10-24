@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useUser } from "@/firebase/auth/use-user";
 import { useCollection } from "@/firebase/firestore/use-collection";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -11,7 +11,7 @@ import {
   updateDoc,
   serverTimestamp,
   Timestamp,
-  deleteField, // <-- HINZUGEFÜGT
+  deleteField,
 } from "firebase/firestore";
 import {
   Appointment,
@@ -158,7 +158,7 @@ export default function VerwaltungTerminePage() {
       );
   }, [appointments, selectedType, selectedTeam]);
 
-  // *** NEU (Lösung Problem 2): Handler für Zusage / Unsicher (mit Toggle/Entfernen) ***
+  // Handler für Zusage / Unsicher (mit Toggle/Entfernen)
   const handleSimpleResponse = async (
     appointmentId: string,
     newStatus: "zugesagt" | "unsicher",
@@ -209,7 +209,7 @@ export default function VerwaltungTerminePage() {
     setIsAbsageDialogOpen(true);
   };
 
-  // *** NEU (Lösung Problem 1): Handler für Bestätigung im Absage-Dialog (eigene Logik) ***
+  // Handler für Bestätigung im Absage-Dialog
   const handleAbsageSubmit = async () => {
     if (!absageGrund) {
       toast({
@@ -224,7 +224,6 @@ export default function VerwaltungTerminePage() {
     const docRef = doc(firestore, "appointments", currentAbsageAppId);
 
     try {
-      // Direkte Update-Logik, unabhängig von handleSimpleResponse
       await updateDoc(docRef, {
         [`responses.${auth.user.uid}`]: {
           status: "abgesagt",
@@ -376,7 +375,6 @@ export default function VerwaltungTerminePage() {
                         <TableCell className="text-right">
                           {canRespond && auth.user ? (
                             <div className="flex justify-end gap-2">
-                              {/* *** GEÄNDERT: Ruft handleSimpleResponse mit userStatus auf *** */}
                               <Button
                                 size="sm"
                                 variant={
@@ -394,7 +392,6 @@ export default function VerwaltungTerminePage() {
                               >
                                 Zusage
                               </Button>
-                              {/* *** GEÄNDERT: Ruft handleSimpleResponse mit userStatus auf *** */}
                               <Button
                                 size="sm"
                                 variant={
@@ -412,7 +409,6 @@ export default function VerwaltungTerminePage() {
                               >
                                 Unsicher
                               </Button>
-                              {/* *** UNVERÄNDERT: Ruft handleAbsageClick auf *** */}
                               <Button
                                 size="sm"
                                 variant={
@@ -482,5 +478,3 @@ export default function VerwaltungTerminePage() {
     </>
   );
 }
-
-    
