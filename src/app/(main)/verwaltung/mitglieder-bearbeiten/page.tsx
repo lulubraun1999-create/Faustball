@@ -7,10 +7,12 @@ import {
   FirestorePermissionError,
   useUser,
   initializeFirebase,
+  useCollection,
+  useMemoFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -55,7 +57,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -64,8 +66,17 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh } = useUser();
-  const { members, groups, isLoading } = useAdminData();
+  const { user, forceRefresh, isAdmin } = useUser();
+
+  // --- Data Fetching ---
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+
+  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  // --- End Data Fetching ---
+
+  const isLoading = isLoadingMembers || isLoadingGroups;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
@@ -162,18 +173,9 @@ function AdminMitgliederPageContent() {
       } else if (newRole === 'user' && currentRole === 'admin') {
         const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
         await revokeAdminRole({ uid: userId });
-      } else {
-        // Fallback for cases where claims might fail, but we can still try to set the DB role
-        const memberDocRef = doc(firestore, 'members', userId);
-        const userDocRef = doc(firestore, 'users', userId);
-        const batch = writeBatch(firestore);
-        batch.set(memberDocRef, { role: newRole }, { merge: true });
-        batch.set(userDocRef, { role: newRole }, { merge: true });
-        await batch.commit();
       }
       
       if (forceRefresh && (newRole !== currentRole)) {
-        // Force refresh only if the role actually changed to update claims
         await forceRefresh();
       }
   
@@ -213,11 +215,6 @@ function AdminMitgliederPageContent() {
         }
 
         await batch.commit();
-        
-        // This Firebase Function call would be needed if you want to delete the auth user
-        // const functions = getFunctions(initializeFirebase().firebaseApp);
-        // const deleteAuthUser = httpsCallable(functions, 'deleteAuthUser');
-        // await deleteAuthUser({ uid: userId });
 
         toast({
             title: 'Mitglied-Dokumente gelöscht',
@@ -366,7 +363,7 @@ function AdminMitgliederPageContent() {
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="py-4">
-                                       <RadioGroup defaultValue={member.role} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}>
+                                       <RadioGroup value={newRole ?? undefined} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}>
                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="user" id={`role-${member.userId}-user`} />
                                                 <Label htmlFor={`role-${member.userId}-user`}>Spieler</Label>

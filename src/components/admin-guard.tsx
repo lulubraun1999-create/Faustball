@@ -1,13 +1,8 @@
 
 'use client';
 
-import { ReactNode, createContext, useContext, useMemo } from 'react';
-import {
-  useUser,
-  useCollection,
-  useFirestore,
-  useMemoFirebase,
-} from '@/firebase';
+import { ReactNode } from 'react';
+import { useUser } from '@/firebase';
 import {
   Card,
   CardContent,
@@ -15,79 +10,22 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
 
-// 1. Define the context for Admin Data
-interface AdminDataContextType {
-  members: MemberProfile[] | null;
-  groups: Group[] | null;
-  isLoading: boolean;
-}
-
-const AdminDataContext = createContext<AdminDataContextType | undefined>(
-  undefined
-);
-
-// 2. Create a hook to consume the context
-export const useAdminData = () => {
-  const context = useContext(AdminDataContext);
-  if (!context) {
-    throw new Error('useAdminData must be used within an AdminDataProvider');
-  }
-  return context;
-};
-
-// 3. Create a component that fetches data only if it receives an explicit isAdmin prop
-function AdminDataProvider({ children, isAdmin }: { children: ReactNode, isAdmin: boolean }) {
-  const firestore = useFirestore();
-
-  // CRITICAL FIX: The query is ONLY created if firestore is available AND the isAdmin prop is explicitly true.
-  // This prevents the query from being created during the initial loading state or for non-admins.
-  const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
-  );
-  const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
-  );
-
-  const { data: members, isLoading: isLoadingMembers } =
-    useCollection<MemberProfile>(membersRef);
-  const { data: groups, isLoading: isLoadingGroups } =
-    useCollection<Group>(groupsRef);
-
-  // The overall loading state depends on whether the queries are active (i.e., isAdmin is true).
-  const isLoading = isAdmin && (isLoadingMembers || isLoadingGroups);
-
-  const value = useMemo(
-    () => ({
-      members,
-      groups,
-      isLoading,
-    }),
-    [members, groups, isLoading]
-  );
-
-  return (
-    <AdminDataContext.Provider value={value}>
-      {isLoading ? (
-        <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        children
-      )}
-    </AdminDataContext.Provider>
-  );
-}
-
-
-// 4. Update AdminGuard to use the new provider logic correctly
+/**
+ * AdminGuard is a client component that protects a route or component tree.
+ * It checks the user's authentication state and admin claim.
+ *
+ * It will show a loading spinner while the user's status is being determined.
+ * If the user is not an admin, it will display an "Access Denied" message.
+ * If the user is an admin, it will render the children components.
+ *
+ * This component no longer manages a data provider. Data fetching is now
+ * handled directly and safely within the admin components that this guard protects.
+ */
 export function AdminGuard({ children }: { children: ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
+  // While checking user auth state and claims, show a loading indicator.
   if (isUserLoading) {
     return (
       <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
@@ -96,6 +34,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
+  // If loading is finished and the user is not an admin, show access denied.
   if (!isAdmin) {
     return (
       <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -118,6 +57,6 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // Only if the user is verified as an admin, render the provider and explicitly pass isAdmin={true}.
-  return <AdminDataProvider isAdmin={true}>{children}</AdminDataProvider>;
+  // If loading is finished and the user is an admin, render the protected content.
+  return <>{children}</>;
 }
