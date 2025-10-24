@@ -1,3 +1,4 @@
+
 'use client';
 
 import { ReactNode, createContext, useContext, useMemo } from 'react';
@@ -32,7 +33,7 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(
 export const useAdminData = () => {
   const context = useContext(AdminDataContext);
   if (!context) {
-    throw new Error('useAdminData must be used within an AdminGuard');
+    throw new Error('useAdminData must be used within an AdminDataProvider');
   }
   return context;
 };
@@ -40,9 +41,8 @@ export const useAdminData = () => {
 // 3. Create a component that fetches data only if the user is an admin
 function AdminDataProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
+  const { isAdmin } = useUser(); // We can safely use this now because this component is only rendered for admins
 
-  // These refs are now created inside the provider, which is only rendered for admins
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -109,6 +109,6 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // Only if the user is an admin, render the provider which fetches data
+  // Only if the user is verified as an admin, render the provider which fetches the data.
   return <AdminDataProvider>{children}</AdminDataProvider>;
 }

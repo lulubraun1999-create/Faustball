@@ -20,8 +20,6 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import type { MemberProfile } from '@/lib/types';
-
 
 function VerwaltungMitgliederPageContent() {
   const { members, groups, isLoading } = useAdminData();

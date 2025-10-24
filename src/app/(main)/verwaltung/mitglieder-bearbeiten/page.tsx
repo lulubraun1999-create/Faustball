@@ -8,9 +8,9 @@ import {
   useUser,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch, collection } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
