@@ -27,18 +27,16 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(undefin
 // 2. Create the internal Data Provider component
 interface AdminDataProviderProps {
   children: ReactNode;
-  isAdmin: boolean; // Explicitly pass admin status
 }
 
-function AdminDataProvider({ children, isAdmin }: AdminDataProviderProps) {
+function AdminDataProvider({ children }: AdminDataProviderProps) {
   const firestore = useFirestore();
 
-  // These hooks will now ONLY run when the parent (AdminGuard) has confirmed the user is an admin.
-  // If isAdmin is false, the refs will be null, and no query will be executed.
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  // These hooks are now safe because this component is ONLY rendered when the user is an admin.
+  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const value = useMemo(() => ({
@@ -103,7 +101,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
   // If the user IS an admin, render the provider which then fetches the data,
   // and then render the children.
   return (
-    <AdminDataProvider isAdmin={isAdmin}>
+    <AdminDataProvider>
         {children}
     </AdminDataProvider>
   );
