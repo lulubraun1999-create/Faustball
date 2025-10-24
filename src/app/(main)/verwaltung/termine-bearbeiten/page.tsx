@@ -83,6 +83,7 @@ import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, CalendarPlus } from 'luc
 import type { Appointment, AppointmentType, Location, Group } from '@/lib/types';
 import { format, formatISO, isValid as isDateValid, addDays, addWeeks, addMonths, differenceInMilliseconds, set } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Separator } from '@/components/ui/separator';
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -231,7 +232,7 @@ function AdminTerminePageContent() {
     const allEvents: UnrolledAppointment[] = [];
   
     appointments.forEach(app => {
-      if (!app.startDate || app.recurrence === 'none' || !app.recurrenceEndDate) {
+      if (!app.startDate || !app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
         allEvents.push(app);
       } else {
         let currentDate = app.startDate.toDate();
@@ -443,7 +444,6 @@ function AdminTerminePageContent() {
           await addDoc(typeColRef, data);
           toast({ title: 'Typ hinzugefügt' });
           typeForm.reset();
-          setIsTypeDialogOpen(false);
       } catch (error) {
            errorEmitter.emit('permission-error', new FirestorePermissionError({
                path: 'appointmentTypes',
@@ -453,6 +453,17 @@ function AdminTerminePageContent() {
       }
   };
 
+    const onDeleteAppointmentType = async (id: string) => {
+        if(!firestore) return;
+        const docRef = doc(firestore, 'appointmentTypes', id);
+        try {
+            await deleteDoc(docRef);
+            toast({ title: 'Typ gelöscht' });
+        } catch(e) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
+        }
+    };
+
   const onSubmitLocation = async (data: LocationFormValues) => {
       if(!firestore) return;
       const locationColRef = collection(firestore, 'locations');
@@ -460,7 +471,6 @@ function AdminTerminePageContent() {
           await addDoc(locationColRef, data);
           toast({ title: 'Ort hinzugefügt' });
           locationForm.reset();
-          setIsLocationDialogOpen(false);
       } catch (error) {
            errorEmitter.emit('permission-error', new FirestorePermissionError({
                path: 'locations',
@@ -469,6 +479,17 @@ function AdminTerminePageContent() {
            }));
       }
   };
+  
+    const onDeleteLocation = async (id: string) => {
+        if(!firestore) return;
+        const docRef = doc(firestore, 'locations', id);
+        try {
+            await deleteDoc(docRef);
+            toast({ title: 'Ort gelöscht' });
+        } catch(e) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
+        }
+    };
 
   const isLoading = isLoadingAppointments || isLoadingTypes || isLoadingLocations || isLoadingGroups;
 
@@ -497,7 +518,7 @@ function AdminTerminePageContent() {
                       <div className="flex items-center justify-between">
                         <FormLabel>Art des Termins</FormLabel>
                         <Button variant="ghost" size="sm" type="button" onClick={() => setIsTypeDialogOpen(true)}>
-                            <Plus className="h-3 w-3 mr-1"/> Neu
+                            <Plus className="h-3 w-3 mr-1"/> Verwalten
                         </Button>
                       </div>
                       <Select onValueChange={field.onChange} value={field.value}>
@@ -594,7 +615,7 @@ function AdminTerminePageContent() {
                       <div className="flex items-center justify-between">
                         <FormLabel>Ort</FormLabel>
                         <Button variant="ghost" size="sm" type="button" onClick={() => setIsLocationDialogOpen(true)}>
-                            <Plus className="h-3 w-3 mr-1"/> Neu
+                            <Plus className="h-3 w-3 mr-1"/> Verwalten
                         </Button>
                       </div>
                       <Select onValueChange={field.onChange} value={field.value ?? ''}>
@@ -627,40 +648,89 @@ function AdminTerminePageContent() {
       
       <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
           <DialogContent className="sm:max-w-md">
-              <DialogHeader><DialogTitle>Neue Termin-Art hinzufügen</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Termin-Arten verwalten</DialogTitle></DialogHeader>
               <Form {...typeForm}>
-                  <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); typeForm.handleSubmit(onSubmitAppointmentType)(); }}>
+                  <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                       <div className="space-y-4 py-4">
-                          <FormField control={typeForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name der Art</FormLabel><FormControl><Input placeholder="z.B. Turnier" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                      </div>
-                      <DialogFooter>
-                          <DialogClose asChild><Button type="button" variant="ghost">Abbrechen</Button></DialogClose>
-                          <Button type="button" onClick={typeForm.handleSubmit(onSubmitAppointmentType)} disabled={typeForm.formState.isSubmitting}>
+                          <FormField control={typeForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Neue Art hinzufügen</FormLabel><FormControl><Input placeholder="z.B. Turnier" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                          <Button type="button" className="w-full" onClick={typeForm.handleSubmit(onSubmitAppointmentType)} disabled={typeForm.formState.isSubmitting}>
                               {typeForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Typ Speichern
                           </Button>
-                      </DialogFooter>
+                      </div>
                   </form>
               </Form>
+              <Separator className="my-4" />
+              <h4 className="text-sm font-medium mb-2">Bestehende Arten</h4>
+                <ScrollArea className="h-40">
+                    <div className="space-y-2 pr-4">
+                    {appointmentTypes && appointmentTypes.length > 0 ? appointmentTypes.map(type => (
+                        <div key={type.id} className="flex justify-between items-center p-2 hover:bg-accent rounded-md">
+                            <span>{type.name}</span>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader><AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle><AlertDialogDescription>Möchten Sie "{type.name}" wirklich löschen?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => onDeleteAppointmentType(type.id)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
+                    )) : <p className="text-sm text-muted-foreground text-center">Keine Arten gefunden.</p>}
+                    </div>
+                </ScrollArea>
+                <DialogFooter className="mt-4">
+                    <DialogClose asChild><Button type="button" variant="outline">Schließen</Button></DialogClose>
+                </DialogFooter>
           </DialogContent>
       </Dialog>
 
       <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
           <DialogContent className="sm:max-w-md">
-              <DialogHeader><DialogTitle>Neuen Ort hinzufügen</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Orte verwalten</DialogTitle></DialogHeader>
               <Form {...locationForm}>
-                  <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); locationForm.handleSubmit(onSubmitLocation)(); }}>
+                  <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation();}}>
                       <div className="space-y-4 py-4">
                           <FormField control={locationForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name des Ortes</FormLabel><FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                           <FormField control={locationForm.control} name="address" render={({ field }) => (<FormItem><FormLabel>Adresse (optional)</FormLabel><FormControl><Input placeholder="Straße, PLZ Ort" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                      </div>
-                      <DialogFooter>
-                          <DialogClose asChild><Button type="button" variant="ghost">Abbrechen</Button></DialogClose>
-                          <Button type="button" onClick={locationForm.handleSubmit(onSubmitLocation)} disabled={locationForm.formState.isSubmitting}>
-                              {locationForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Ort Speichern
+                          <Button type="button" className="w-full" onClick={locationForm.handleSubmit(onSubmitLocation)} disabled={locationForm.formState.isSubmitting}>
+                            {locationForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Ort Speichern
                           </Button>
-                      </DialogFooter>
+                      </div>
                   </form>
               </Form>
+              <Separator className="my-4" />
+              <h4 className="text-sm font-medium mb-2">Bestehende Orte</h4>
+              <ScrollArea className="h-40">
+                    <div className="space-y-2 pr-4">
+                    {locations && locations.length > 0 ? locations.map(loc => (
+                        <div key={loc.id} className="flex justify-between items-center p-2 hover:bg-accent rounded-md">
+                            <div>
+                                <p>{loc.name}</p>
+                                <p className="text-xs text-muted-foreground">{loc.address}</p>
+                            </div>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader><AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle><AlertDialogDescription>Möchten Sie "{loc.name}" wirklich löschen?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => onDeleteLocation(loc.id)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
+                    )) : <p className="text-sm text-muted-foreground text-center">Keine Orte gefunden.</p>}
+                    </div>
+                </ScrollArea>
+                <DialogFooter className="mt-4">
+                    <DialogClose asChild><Button type="button" variant="outline">Schließen</Button></DialogClose>
+                </DialogFooter>
           </DialogContent>
       </Dialog>
 
@@ -781,3 +851,6 @@ export default function AdminTerminePage() {
 
     
 
+
+
+    
