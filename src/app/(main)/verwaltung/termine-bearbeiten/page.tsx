@@ -242,7 +242,7 @@ function AdminTerminePageContent() {
     const allEvents: UnrolledAppointment[] = [];
 
     appointments.forEach(app => {
-      if (app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
+      if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
         allEvents.push(app);
       } else {
         let currentDate = app.startDate.toDate();
@@ -579,9 +579,8 @@ function AdminTerminePageContent() {
                                 </Button>
                               </FormControl>
                             </PopoverTrigger>
-                            <PopoverPortal>
-                              <PopoverContent 
-                                className="w-[--radix-popover-trigger-width] p-0" 
+                            <PopoverContent
+                                className="w-[--radix-popover-trigger-width] p-0"
                                 align="start"
                               >
                                 <Controller
@@ -610,14 +609,14 @@ function AdminTerminePageContent() {
                                                         }}
                                                       />
                                                     </FormControl>
-                                                    <FormLabel className="text-sm font-normal cursor-pointer w-full"
+                                                    <FormLabel
+                                                      className="text-sm font-normal cursor-pointer w-full"
                                                       onClick={(e) => {
-                                                          e.preventDefault();
-                                                          e.stopPropagation();
-                                                          const newValue = field.value?.includes(team.id)
-                                                            ? (field.value || []).filter(id => id !== team.id)
-                                                            : [...(field.value || []), team.id];
-                                                          field.onChange(newValue);
+                                                        e.preventDefault();
+                                                        const newValue = field.value?.includes(team.id)
+                                                          ? (field.value || []).filter(id => id !== team.id)
+                                                          : [...(field.value || []), team.id];
+                                                        field.onChange(newValue);
                                                       }}
                                                     >
                                                       {team.name}
@@ -635,7 +634,6 @@ function AdminTerminePageContent() {
                                   )}
                                 />
                               </PopoverContent>
-                            </PopoverPortal>
                           </Popover>
                           <FormMessage />
                         </FormItem>
