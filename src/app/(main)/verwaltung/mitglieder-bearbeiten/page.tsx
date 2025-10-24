@@ -3,15 +3,13 @@
 
 import {
   useFirestore,
-  useCollection,
-  useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
   useUser,
+  initializeFirebase,
 } from '@/firebase';
 import { collection, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { initializeFirebase } from '@/firebase';
 import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
@@ -57,7 +55,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard } from '@/components/admin-guard';
+import { AdminGuard, useAdminData } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -66,26 +64,16 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh, isAdmin, isUserLoading } = useUser();
+  const { forceRefresh } = useUser();
+  const { members, groups, isLoading } = useAdminData();
+
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
-  const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
-  );
-  const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
-  );
-
-  const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-
   const sortedMembers = useMemo(() => {
-    if (!membersData) return [];
-    return membersData.sort((a, b) => {
+    if (!members) return [];
+    return members.sort((a, b) => {
         const lastNameA = a.lastName || '';
         const lastNameB = b.lastName || '';
         if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -93,10 +81,10 @@ function AdminMitgliederPageContent() {
         }
         return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData]);
+  }, [members]);
 
   const { classes, teams, groupedTeams } = useMemo(() => {
-    const allGroups = groupsData || [];
+    const allGroups = groups || [];
     const classes = allGroups.filter(g => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name));
     const teams = allGroups.filter(g => g.type === 'team');
 
@@ -106,7 +94,7 @@ function AdminMitgliederPageContent() {
     })).filter(c => c.teams.length > 0);
 
     return { classes, teams, groupedTeams: grouped };
-  }, [groupsData]);
+  }, [groups]);
 
   const handleTeamsChange = async (userId: string, newTeams: string[]) => {
     if (!firestore) return;
@@ -133,10 +121,6 @@ function AdminMitgliederPageContent() {
   
     const { userId, firstName, lastName, role: currentRole } = memberToEdit;
   
-    // Prevent changing your own role in this interface
-    // const { user: currentUser } = useUser(); // This is a hook, can't be called here. Need to get user from context or props.
-    // For now, let's assume we can change any role.
-  
     setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
   
     try {
@@ -150,14 +134,10 @@ function AdminMitgliederPageContent() {
         const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
         await revokeAdminRole({ uid: userId });
       } else {
-        // No change in role, but let's ensure DB is consistent.
-        // This case is unlikely if the button is disabled correctly.
         const memberDocRef = doc(firestore, 'members', userId);
         await setDoc(memberDocRef, { role: newRole }, { merge: true });
       }
       
-      // forceRefresh is available from useUser(), which should be called at the top level
-      // of the component, not inside a handler. Assuming forceRefresh is available.
       if (forceRefresh) {
         await forceRefresh();
       }
@@ -213,8 +193,13 @@ function AdminMitgliederPageContent() {
     return teamIds.map(id => teams.find(t => t.id === id)?.name || id)
   };
 
-
-  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -226,11 +211,6 @@ function AdminMitgliederPageContent() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex h-64 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -286,7 +266,6 @@ function AdminMitgliederPageContent() {
                         <TableCell>{member.location || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Action 1: Assign Teams */}
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.userId}`]}>
@@ -327,7 +306,6 @@ function AdminMitgliederPageContent() {
                                 </PopoverContent>
                             </Popover>
 
-                             {/* Action 2: Change Role */}
                              <Dialog open={memberToEdit?.userId === member.userId} onOpenChange={(isOpen) => { if (!isOpen) { setMemberToEdit(null); setNewRole(null); }}}>
                                 <DialogTrigger asChild>
                                     <Button variant="ghost" size="icon" onClick={() => { setMemberToEdit(member); setNewRole(member.role as 'user' | 'admin'); }} disabled={updatingStates[`role-${member.userId}`]}>
@@ -363,7 +341,6 @@ function AdminMitgliederPageContent() {
                                 </DialogContent>
                              </Dialog>
 
-                            {/* Action 3: Delete Member */}
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" disabled={updatingStates[`delete-${member.userId}`]}>
@@ -404,7 +381,6 @@ function AdminMitgliederPageContent() {
                 </TableBody>
               </Table>
             </div>
-          )}
         </CardContent>
       </Card>
     </div>

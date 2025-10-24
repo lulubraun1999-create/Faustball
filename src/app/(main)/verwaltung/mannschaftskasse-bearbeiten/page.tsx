@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AdminGuard } from '@/components/admin-guard';
+import { AdminGuard, useAdminData } from '@/components/admin-guard';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -66,7 +66,6 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
-  useUser,
 } from '@/firebase';
 import {
   collection,
@@ -88,7 +87,7 @@ import {
   Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Group, Penalty, TreasuryTransaction, MemberProfile } from '@/lib/types';
+import type { Penalty, TreasuryTransaction, MemberProfile } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -112,24 +111,19 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
+  const { members, groups, isLoading: isLoadingAdminData } = useAdminData();
+
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
   // Data fetching - Defer heavy queries until a team is selected
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
-  const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
   const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
-
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
   
-  const teams = useMemo(() => groupsData?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groupsData]);
+  const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);
   const membersOfSelectedTeam = useMemo(() => members?.filter(m => m.teams?.includes(selectedTeamId || '')) || [], [members, selectedTeamId]);
   const totalBalance = useMemo(() => transactions?.reduce((acc, tx) => acc + tx.amount, 0) || 0, [transactions]);
 
@@ -213,7 +207,7 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingGroups || (selectedTeamId && (isLoadingMembers || isLoadingPenalties || isLoadingTransactions));
+  const isLoading = isLoadingAdminData || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -227,7 +221,7 @@ function AdminKassePageContent() {
             <SelectValue placeholder="Mannschaft auswählen..." />
           </SelectTrigger>
           <SelectContent>
-            {isLoadingGroups ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
+            {isLoadingAdminData ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
               teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -447,5 +441,3 @@ export default function AdminKassePage() {
     </AdminGuard>
   );
 }
-
-    

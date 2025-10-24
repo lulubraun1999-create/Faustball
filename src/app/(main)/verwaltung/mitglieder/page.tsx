@@ -1,14 +1,7 @@
 
 'use client';
 
-import {
-  useFirestore,
-  useCollection,
-  useMemoFirebase,
-  useUser,
-} from '@/firebase';
-import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
+import { useAdminData } from '@/components/admin-guard';
 import {
   Card,
   CardContent,
@@ -27,28 +20,14 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { AdminGuard } from '@/components/admin-guard';
 
 function VerwaltungMitgliederPageContent() {
-  const firestore = useFirestore();
-  const { isAdmin, isUserLoading } = useUser();
-
-  const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
-  );
-  const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
-  );
-
-  const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  const { members, groups, isLoading } = useAdminData();
 
   const sortedMembers = useMemo(() => {
-    if (!membersData) return [];
+    if (!members) return [];
     
-    return [...membersData].sort((a, b) => {
+    return [...members].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -56,20 +35,25 @@ function VerwaltungMitgliederPageContent() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [membersData]);
+  }, [members]);
 
   const teamsMap = useMemo(() => {
-    if (!groupsData) return new Map();
-    return new Map(groupsData.filter(g => g.type === 'team').map(team => [team.id, team.name]));
-  }, [groupsData]);
+    if (!groups) return new Map();
+    return new Map(groups.filter(g => g.type === 'team').map(team => [team.id, team.name]));
+  }, [groups]);
 
   const getTeamNames = (teamIds?: string[]): string[] => {
     if (!teamIds || teamIds.length === 0) return [];
     return teamIds.map(id => teamsMap.get(id) || id);
   };
 
-
-  const isLoading = isUserLoading || (isAdmin && (isLoadingMembers || isLoadingGroups));
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -81,11 +65,6 @@ function VerwaltungMitgliederPageContent() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex h-64 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -151,7 +130,6 @@ function VerwaltungMitgliederPageContent() {
                 </TableBody>
               </Table>
             </div>
-          )}
         </CardContent>
       </Card>
     </div>
