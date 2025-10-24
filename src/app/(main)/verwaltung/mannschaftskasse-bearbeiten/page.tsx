@@ -447,6 +447,3 @@ export default function AdminKassePage() {
     </AdminGuard>
   );
 }
-
-    
-    
