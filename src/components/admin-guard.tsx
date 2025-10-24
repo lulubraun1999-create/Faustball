@@ -27,18 +27,17 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(undefin
 // 2. Create the internal Data Provider component
 interface AdminDataProviderProps {
   children: ReactNode;
-  isAdmin: boolean; // Explicitly receive admin status
 }
 
-function AdminDataProvider({ children, isAdmin }: AdminDataProviderProps) {
+function AdminDataProvider({ children }: AdminDataProviderProps) {
   const firestore = useFirestore();
 
-  // IMPORTANT: Queries are now conditional on the `isAdmin` prop.
-  // If not an admin, the ref remains null, and `useCollection` will not execute a query.
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  // These hooks will only run when this component is rendered,
+  // which is only when the user is confirmed to be an admin by AdminGuard.
+  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const value = useMemo(() => ({
@@ -78,12 +77,8 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // The AdminDataProvider is always rendered, but its internal queries
-  // are strictly controlled by the `isAdmin` prop. This avoids conditional
-  // hook rendering issues while preventing unauthorized data fetches.
-  return (
-    <AdminDataProvider isAdmin={isAdmin}>
-      {!isAdmin ? (
+  if (!isAdmin) {
+    return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
           <Card className="border-destructive/50">
             <CardHeader>
@@ -101,10 +96,13 @@ export function AdminGuard({ children }: { children: ReactNode }) {
             </CardContent>
           </Card>
         </div>
-      ) : (
-        // Only render children if the user is an admin
-        children
-      )}
+      );
+  }
+
+  // If the user IS an admin, render the provider which will then fetch the data.
+  return (
+    <AdminDataProvider>
+        {children}
     </AdminDataProvider>
   );
 }

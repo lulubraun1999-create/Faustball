@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -7,9 +8,9 @@ import {
   useUser,
   initializeFirebase,
 } from '@/firebase';
-import { doc, writeBatch, collection } from 'firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -63,7 +64,7 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, forceRefresh } = useUser();
+  const { forceRefresh } = useUser();
   
   // Fetch data safely from the admin context
   const { members, groups, isLoadingMembers, isLoadingGroups } = useAdminData();
