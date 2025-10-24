@@ -220,6 +220,7 @@ function AdminTerminePageContent() {
       defaultValues: { name: '' },
   });
 
+  const watchAppointmentTypeId = appointmentForm.watch('appointmentTypeId');
   const watchVisibilityType = appointmentForm.watch('visibilityType');
   const watchIsAllDay = appointmentForm.watch('isAllDay');
   const watchRecurrence = appointmentForm.watch('recurrence');
@@ -779,3 +780,4 @@ export default function AdminTerminePage() {
 }
 
     
+
