@@ -41,8 +41,11 @@ export const useAdminData = () => {
 // 3. Create a component that fetches data only if the user is an admin
 function AdminDataProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
-  const { isAdmin } = useUser(); // We can safely use this now because this component is only rendered for admins
+  // We can safely use isAdmin here because AdminGuard ensures this component only renders for admins.
+  const { isAdmin } = useUser();
 
+  // CRITICAL FIX: The query is ONLY created if firestore is available AND the user is an admin.
+  // If not, it remains null, and useCollection will not execute a query.
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -57,7 +60,8 @@ function AdminDataProvider({ children }: { children: ReactNode }) {
   const { data: groups, isLoading: isLoadingGroups } =
     useCollection<Group>(groupsRef);
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  // The overall loading state depends on whether the queries are active.
+  const isLoading = (isAdmin && (isLoadingMembers || isLoadingGroups));
 
   const value = useMemo(
     () => ({
@@ -70,10 +74,17 @@ function AdminDataProvider({ children }: { children: ReactNode }) {
 
   return (
     <AdminDataContext.Provider value={value}>
-      {children}
+      {isLoading ? (
+        <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        children
+      )}
     </AdminDataContext.Provider>
   );
 }
+
 
 // 4. Update AdminGuard to use the new provider
 export function AdminGuard({ children }: { children: ReactNode }) {
