@@ -216,7 +216,7 @@ export default function AdminKassePage() {
          return;
       }
       finalAmount = -penalty.amount; // Penalties are always stored as negative
-      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
+      finalDescription = `Strafe: ${penalty.description}`;
       finalStatus = 'unpaid';
     } else if (data.type === 'expense') {
       finalAmount = -(data.amount ?? 0); // Expenses are stored as negative
@@ -535,3 +535,5 @@ export default function AdminKassePage() {
     </div>
   );
 }
+
+  
