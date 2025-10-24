@@ -8,9 +8,8 @@ import { Loader2, ShieldAlert } from 'lucide-react';
 import type { MemberProfile, Group } from '@/lib/types';
 import { collection } from 'firebase/firestore';
 
-// 1. Context für die Admin-Daten erstellen
+// 1. Context für die Admin-Daten erstellen (nur noch mit Gruppen)
 interface AdminDataContextType {
-  members: MemberProfile[];
   groups: Group[];
   isLoading: boolean;
 }
@@ -32,26 +31,20 @@ function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const firestore = useFirestore();
     const { isAdmin } = useUser();
 
-    // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
-    const membersRef = useMemoFirebase(
-        () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-        [firestore, isAdmin]
-    );
+    // Lade nur noch Gruppen, wenn der Benutzer Admin ist
     const groupsRef = useMemoFirebase(
         () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
         [firestore, isAdmin]
     );
 
-    const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-    // If the user is not an admin, we are technically not "loading" admin data.
-    const isLoading = isAdmin ? (isLoadingMembers || isLoadingGroups) : false;
-    const members = membersData || [];
+    // isLoading hängt nur noch vom Laden der Gruppen ab.
+    const isLoading = isAdmin ? isLoadingGroups : false;
     const groups = groupsData || [];
     
     return (
-        <AdminDataContext.Provider value={{ members, groups, isLoading }}>
+        <AdminDataContext.Provider value={{ groups, isLoading }}>
             {isLoading ? (
                  <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />

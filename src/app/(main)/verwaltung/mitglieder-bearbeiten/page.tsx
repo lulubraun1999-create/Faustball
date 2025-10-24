@@ -7,6 +7,8 @@ import {
   FirestorePermissionError,
   useUser,
   initializeFirebase,
+  useCollection,
+  useMemoFirebase,
 } from '@/firebase';
 import { collection, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -55,7 +57,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -64,8 +66,22 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh } = useUser();
-  const { members, groups, isLoading } = useAdminData();
+  const { user, forceRefresh, isAdmin } = useUser();
+  
+  const membersRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
+  );
+   const groupsRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
+  );
+
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  
+  const isLoading = isLoadingMembers || isLoadingGroups;
+
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
@@ -73,7 +89,7 @@ function AdminMitgliederPageContent() {
 
   const sortedMembers = useMemo(() => {
     if (!members) return [];
-    return members.sort((a, b) => {
+    return [...members].sort((a, b) => {
         const lastNameA = a.lastName || '';
         const lastNameB = b.lastName || '';
         if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -134,11 +150,17 @@ function AdminMitgliederPageContent() {
         const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
         await revokeAdminRole({ uid: userId });
       } else {
+        // Fallback for cases where claims might fail, but we can still try to set the DB role
         const memberDocRef = doc(firestore, 'members', userId);
-        await setDoc(memberDocRef, { role: newRole }, { merge: true });
+        const userDocRef = doc(firestore, 'users', userId);
+        const batch = writeBatch(firestore);
+        batch.set(memberDocRef, { role: newRole }, { merge: true });
+        batch.set(userDocRef, { role: newRole }, { merge: true });
+        await batch.commit();
       }
       
-      if (forceRefresh) {
+      if (forceRefresh && (newRole !== currentRole)) {
+        // Force refresh only if the role actually changed to update claims
         await forceRefresh();
       }
   
@@ -170,9 +192,15 @@ function AdminMitgliederPageContent() {
         batch.delete(userDocRef);
 
         await batch.commit();
+        
+        // This Firebase Function call would be needed if you want to delete the auth user
+        // const functions = getFunctions(initializeFirebase().firebaseApp);
+        // const deleteAuthUser = httpsCallable(functions, 'deleteAuthUser');
+        // await deleteAuthUser({ uid: userId });
+
         toast({
-            title: 'Mitglied gelöscht',
-            description: `Das Profil für ${firstName} ${lastName} wurde entfernt.`,
+            title: 'Mitglied-Dokumente gelöscht',
+            description: `Die Profildaten für ${firstName} ${lastName} wurden entfernt. Das Benutzerkonto existiert weiterhin.`,
         });
     } catch (error: any) {
          console.error("Fehler beim Löschen des Mitglieds:", error);
@@ -334,7 +362,8 @@ function AdminMitgliederPageContent() {
                                     </div>
                                     <DialogFooter>
                                         <DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose>
-                                        <Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role}>
+                                        <Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role || updatingStates[`role-${member.userId}`]}>
+                                            {updatingStates[`role-${member.userId}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                             Speichern
                                         </Button>
                                     </DialogFooter>
@@ -352,7 +381,7 @@ function AdminMitgliederPageContent() {
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Der Benutzer kann sich weiterhin anmelden, verliert aber alle Profildaten.
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Benutzerkonto existiert weiterhin und der Benutzer muss ggf. separat gelöscht werden.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
