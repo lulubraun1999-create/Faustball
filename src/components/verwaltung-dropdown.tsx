@@ -21,13 +21,14 @@ export function VerwaltungDropdown() {
   const { isAdmin, isUserLoading, userProfile } = useUser();
   const [isClient, setIsClient] = useState(false);
 
+  // This ensures the component only renders the dynamic part on the client after hydration
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Show admin menu if the token claim is true OR if the profile role from DB is 'admin'.
-  // This creates a more robust check that is less prone to timing issues with token propagation.
-  const showAdminMenu = isAdmin || userProfile?.role === 'admin';
+  // On the server and during initial client render, showAdminMenu will be false.
+  // It will only be true on the client after the user state has been determined.
+  const showAdminMenu = isClient && !isUserLoading && (isAdmin || userProfile?.role === 'admin');
 
   return (
     <DropdownMenu>
@@ -64,15 +65,8 @@ export function VerwaltungDropdown() {
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
         
-        {(isUserLoading || !isClient) ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              <span>Lade Admin-Status...</span>
-            </DropdownMenuItem>
-          </>
-        ) : showAdminMenu ? (
+        {/* This block will only render on the client, avoiding the hydration mismatch */}
+        {showAdminMenu ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
@@ -100,6 +94,14 @@ export function VerwaltungDropdown() {
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+          </>
+        ) : isClient && isUserLoading ? ( // Show a loader only on the client while checking auth
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Lade Admin-Status...</span>
+            </DropdownMenuItem>
           </>
         ) : null}
       </DropdownMenuContent>
