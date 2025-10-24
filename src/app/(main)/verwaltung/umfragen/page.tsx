@@ -53,22 +53,15 @@ export default function UmfragenPage() {
     
     // First, remove any existing vote from this user for this poll
     const existingVote = currentPoll.votes.find(v => v.userId === user.uid);
-    let voteOperations = [];
-    if (existingVote) {
-       voteOperations.push(arrayRemove(existingVote));
-    }
-    
-    // Then, add the new vote
-    const newVote = { userId: user.uid, optionId: optionId };
-    voteOperations.push(arrayUnion(newVote));
     
     try {
-        if (voteOperations.length > 1) {
-             await updateDoc(pollDocRef, { votes: voteOperations[0] });
-             await updateDoc(pollDocRef, { votes: voteOperations[1] });
-        } else {
-             await updateDoc(pollDocRef, { votes: voteOperations[0] });
+        if (existingVote) {
+             await updateDoc(pollDocRef, { votes: arrayRemove(existingVote) });
         }
+        // Then, add the new vote
+        const newVote = { userId: user.uid, optionId: optionId };
+        await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
+        
     } catch (e) {
       errorEmitter.emit(
         'permission-error',

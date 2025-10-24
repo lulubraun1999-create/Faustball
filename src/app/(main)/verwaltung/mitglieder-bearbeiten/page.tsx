@@ -66,7 +66,7 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh, isAdmin } = useUser();
+  const { forceRefresh, isAdmin, isUserLoading } = useUser();
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
@@ -158,7 +158,9 @@ function AdminMitgliederPageContent() {
       
       // forceRefresh is available from useUser(), which should be called at the top level
       // of the component, not inside a handler. Assuming forceRefresh is available.
-      await forceRefresh?.();
+      if (forceRefresh) {
+        await forceRefresh();
+      }
   
       toast({
         title: 'Rolle aktualisiert',
@@ -212,7 +214,7 @@ function AdminMitgliederPageContent() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
