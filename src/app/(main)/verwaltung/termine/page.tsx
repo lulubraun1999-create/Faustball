@@ -2,21 +2,16 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import {
-  useUser,
-  useCollection,
-  useDoc,
-  useFirestore,
-  useMemoFirebase,
-  errorEmitter,
-  FirestorePermissionError,
-} from "@/firebase";
+import { useUser } from "@/firebase/auth/use-user";
+import { useCollection } from "@/firebase/firestore/use-collection";
+import { useDoc } from "@/firebase/firestore/use-doc";
+import { useFirestore } from "@/firebase";
 import {
   doc,
   updateDoc,
   serverTimestamp,
   Timestamp,
-  collection,
+  deleteField, // <-- HINZUGEFÜGT
 } from "firebase/firestore";
 import {
   Appointment,
@@ -61,66 +56,67 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Loader2 } from "lucide-react";
-import { format, isPast, addDays, addWeeks, addMonths, isBefore } from "date-fns";
-import { de } from "date-fns/locale";
+import { useMemoFirebase } from "@/firebase/provider";
+import { collection } from "firebase/firestore";
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
 export default function VerwaltungTerminePage() {
-  const { user, isUserLoading } = useUser();
-  const firestore = useFirestore();
+  const auth = useUser();
   const { toast } = useToast();
+  const firestore = useFirestore();
 
+  // State für Filter
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedTeam, setSelectedTeam] = useState<string>("all");
-  const [showPast, setShowPast] = useState(false);
 
+  // State für Absage-Dialog
   const [isAbsageDialogOpen, setIsAbsageDialogOpen] = useState(false);
   const [currentAbsageAppId, setCurrentAbsageAppId] = useState<string | null>(
     null,
   );
   const [absageGrund, setAbsageGrund] = useState("");
 
-  // Data fetching
-  const profileRef = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, "members", user.uid) : null),
-    [firestore, user],
+  // Daten abrufen
+  const memberProfileRef = useMemoFirebase(
+      () => (auth.user ? doc(firestore, 'members', auth.user.uid) : null),
+      [firestore, auth.user]
   );
-  const { data: profile, isLoading: profileLoading } =
-    useDoc<MemberProfile>(profileRef);
-    
+  const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
+  
   const appointmentsRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'appointments') : null),
+      () => collection(firestore, 'appointments'),
       [firestore]
   );
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
 
-  const typesRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'appointmentTypes') : null),
+  const appointmentTypesRef = useMemoFirebase(
+      () => collection(firestore, 'appointmentTypes'),
       [firestore]
   );
-  const { data: appointmentTypes, isLoading: typesLoading } = useCollection<AppointmentType>(typesRef);
-  
+  const { data: appointmentTypes, isLoading: typesLoading } = useCollection<AppointmentType>(appointmentTypesRef);
+
   const groupsRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'groups') : null),
+      () => collection(firestore, 'groups'),
       [firestore]
   );
   const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsRef);
 
-
+  // Ladezustand
   const isLoading =
-    isUserLoading ||
+    auth.isUserLoading ||
     profileLoading ||
     appointmentsLoading ||
     typesLoading ||
     groupsLoading;
 
+  // Teams für Filter extrahieren
   const teams = useMemo(
-    () => groups?.filter((g) => g.type === "team").sort((a, b) => a.name.localeCompare(b.name)) || [],
+    () => groups?.filter((g) => g.type === "team") ?? [],
     [groups],
   );
 
+  // Helper-Funktion: Prüft, ob der Benutzer auf einen Termin antworten darf
   const isUserRelevantForAppointment = (
     app: Appointment,
     userProfile: MemberProfile | null,
@@ -128,69 +124,23 @@ export default function VerwaltungTerminePage() {
     if (!userProfile) return false;
     if (app.visibility.type === "all") return true;
     if (!app.visibility.teamIds || !userProfile.teams) return false;
+
+    // Prüft, ob es eine Überschneidung zwischen den Teams des Termins und den Teams des Benutzers gibt
     return app.visibility.teamIds.some((teamId) =>
       userProfile.teams?.includes(teamId),
     );
   };
-  
-  const expandedAppointments = useMemo(() => {
-    if (!appointments) return [];
 
-    const allOccurrences: (Appointment & { occurrenceDate: Date })[] = [];
-
-    appointments.forEach(app => {
-        const startDate = app.startDate.toDate();
-        allOccurrences.push({ ...app, occurrenceDate: startDate });
-
-        if (app.recurrence && app.recurrence !== 'none' && app.recurrenceEndDate) {
-            let currentDate = startDate;
-            const recurrenceEndDate = app.recurrenceEndDate.toDate();
-
-            const getNextDate = (date: Date): Date | null => {
-                switch (app.recurrence) {
-                    case 'daily': return addDays(date, 1);
-                    case 'weekly': return addWeeks(date, 1);
-                    case 'bi-weekly': return addWeeks(date, 2);
-                    case 'monthly': return addMonths(date, 1);
-                    default: return null;
-                }
-            };
-            
-            let nextDate = getNextDate(currentDate);
-
-            while(nextDate && isBefore(nextDate, recurrenceEndDate)) {
-                allOccurrences.push({
-                    ...app,
-                    id: `${app.id}-${nextDate.toISOString()}`,
-                    occurrenceDate: nextDate
-                });
-                nextDate = getNextDate(nextDate);
-            }
-        }
-    });
-
-    return allOccurrences;
-  }, [appointments]);
-
-
+  // Gefilterte Termine
   const filteredAppointments = useMemo(() => {
-    if (!expandedAppointments || !profile) return [];
-    
-    const now = new Date();
-
-    return expandedAppointments
-      .filter((app) => isUserRelevantForAppointment(app, profile))
+    if (!appointments) return [];
+    return appointments
       .filter((app) => {
-        const appointmentDate = app.occurrenceDate;
-        if (showPast) {
-            return isPast(appointmentDate);
-        }
-        return !isPast(appointmentDate);
-      })
-      .filter((app) => {
+        // Nach Typ filtern
         if (selectedType !== "all" && app.appointmentTypeId !== selectedType) {
           return false;
         }
+        // Nach Team filtern
         if (selectedTeam !== "all") {
           const isVisibleToAll = app.visibility.type === "all";
           const isVisibleToTeam =
@@ -202,58 +152,64 @@ export default function VerwaltungTerminePage() {
         return true;
       })
       .sort(
-        (a, b) => {
-            const dateA = a.occurrenceDate.getTime();
-            const dateB = b.occurrenceDate.getTime();
-            return showPast ? dateB - dateA : dateA - dateB;
-        }
+        (a, b) =>
+          (a.startDate as Timestamp).toMillis() -
+          (b.startDate as Timestamp).toMillis(),
       );
-  }, [expandedAppointments, selectedType, selectedTeam, profile, showPast]);
+  }, [appointments, selectedType, selectedTeam]);
 
-  const handleResponse = async (
+  // *** NEU (Lösung Problem 2): Handler für Zusage / Unsicher (mit Toggle/Entfernen) ***
+  const handleSimpleResponse = async (
     appointmentId: string,
-    status: UserResponseStatus,
+    newStatus: "zugesagt" | "unsicher",
+    currentStatus: UserResponseStatus | undefined,
   ) => {
-    if (!user || !firestore) return;
-    // We need the original appointment ID, not the occurrence ID
-    const originalAppointmentId = appointmentId.split('-')[0];
-    const docRef = doc(firestore, "appointments", originalAppointmentId);
-    
-    const currentAppointment = appointments?.find(a => a.id === originalAppointmentId);
-    if (!currentAppointment) return;
+    if (!auth.user || !firestore) return;
+    const docRef = doc(firestore, "appointments", appointmentId);
 
-    const newResponse = {
-        status: status,
-        userId: user.uid,
-        timestamp: serverTimestamp(),
-        reason: status === "abgesagt" ? absageGrund : "",
-    };
-
-    updateDoc(docRef, {
-        [`responses.${user.uid}`]: newResponse,
-    }).then(() => {
-         toast({
-            title: "Antwort gespeichert",
-            description: `Deine Antwort (${status}) wurde gespeichert.`,
+    try {
+      // Wenn der aktuelle Status dem neuen Status entspricht (Doppelklick), entferne die Antwort
+      if (newStatus === currentStatus) {
+        await updateDoc(docRef, {
+          [`responses.${auth.user.uid}`]: deleteField(),
         });
-    }).catch(error => {
-        const permissionError = new FirestorePermissionError({
-            path: docRef.path,
-            operation: 'update',
-            requestResourceData: { [`responses.${user.uid}`]: newResponse }
+        toast({
+          title: "Antwort entfernt",
+          description: "Deine Teilnahme-Info wurde zurückgesetzt.",
         });
-        errorEmitter.emit('permission-error', permissionError);
-    });
+      } else {
+        // Normaler Klick: Setze den neuen Status
+        await updateDoc(docRef, {
+          [`responses.${auth.user.uid}`]: {
+            status: newStatus,
+            userId: auth.user.uid,
+            timestamp: serverTimestamp(),
+            reason: "", // Sicherstellen, dass der Grund bei Zusage/Unsicher gelöscht wird
+          },
+        });
+        toast({
+          title: "Antwort gespeichert",
+          description: `Deine Antwort (${newStatus}) wurde gespeichert.`,
+        });
+      }
+    } catch (error) {
+      console.error("Fehler beim Speichern der Antwort:", error);
+      toast({
+        title: "Fehler",
+        description: "Antwort konnte nicht gespeichert werden.",
+        variant: "destructive",
+      });
+    }
   };
 
+  // Handler für Klick auf "Absage"
   const handleAbsageClick = (appointmentId: string) => {
     setCurrentAbsageAppId(appointmentId);
-    const originalAppointmentId = appointmentId.split('-')[0];
-    const existingReason = appointments?.find(a => a.id === originalAppointmentId)?.responses?.[user?.uid ?? '']?.reason;
-    setAbsageGrund(existingReason || "");
+    setAbsageGrund(""); // Grund zurücksetzen
     setIsAbsageDialogOpen(true);
   };
 
+  // *** NEU (Lösung Problem 1): Handler für Bestätigung im Absage-Dialog (eigene Logik) ***
   const handleAbsageSubmit = async () => {
     if (!absageGrund) {
       toast({
@@ -263,19 +219,47 @@ export default function VerwaltungTerminePage() {
       });
       return;
     }
-    if (currentAbsageAppId) {
-      await handleResponse(currentAbsageAppId, "abgesagt");
+    if (!currentAbsageAppId || !auth.user || !firestore) return; // Sicherheitscheck
+
+    const docRef = doc(firestore, "appointments", currentAbsageAppId);
+
+    try {
+      // Direkte Update-Logik, unabhängig von handleSimpleResponse
+      await updateDoc(docRef, {
+        [`responses.${auth.user.uid}`]: {
+          status: "abgesagt",
+          userId: auth.user.uid,
+          timestamp: serverTimestamp(),
+          reason: absageGrund, // Grund hier direkt eintragen
+        },
+      });
+      toast({
+        title: "Antwort gespeichert",
+        description: "Deine Absage wurde gespeichert.",
+      });
+    } catch (error) {
+      console.error("Fehler beim Speichern der Absage:", error);
+      toast({
+        title: "Fehler",
+        description: "Absage konnte nicht gespeichert werden.",
+        variant: "destructive",
+      });
+    } finally {
+      // Dialog aufräumen
+      setIsAbsageDialogOpen(false);
+      setCurrentAbsageAppId(null);
+      setAbsageGrund(""); // Grund auch hier zurücksetzen
     }
-    setIsAbsageDialogOpen(false);
-    setCurrentAbsageAppId(null);
   };
 
+  // Helper zum Nachschlagen von Namen
   const getTypeName = (typeId: string) =>
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
-  const formatDateTime = (date: Date) => {
-    if (!date) return "Kein Datum";
-    return date.toLocaleString("de-DE", {
+  // Formatiert Datum und Uhrzeit
+  const formatDateTime = (timestamp: Timestamp) => {
+    if (!timestamp) return "Kein Datum";
+    return timestamp.toDate().toLocaleString("de-DE", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -285,26 +269,19 @@ export default function VerwaltungTerminePage() {
   };
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+    <>
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="flex items-center gap-3">
-              <Calendar className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-headline">Deine Termine</span>
-            </CardTitle>
-            <div className="flex items-center gap-2">
-                 <Button variant={showPast ? "secondary" : "outline"} onClick={() => setShowPast(false)}>Anstehend</Button>
-                 <Button variant={!showPast ? "secondary" : "outline"} onClick={() => setShowPast(true)}>Vergangen</Button>
-            </div>
-          </div>
+          <CardTitle>Termin Verwaltung</CardTitle>
           <CardDescription>
-            Hier kannst du alle für dich relevanten Termine einsehen und deine Teilnahme
+            Hier kannst du alle anstehenden Termine einsehen und deine Teilnahme
             bestätigen oder absagen.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4 md:flex-row mb-4">
+            {/* Filter: Art */}
             <Select
               value={selectedType}
               onValueChange={setSelectedType}
@@ -323,6 +300,7 @@ export default function VerwaltungTerminePage() {
               </SelectContent>
             </Select>
 
+            {/* Filter: Mannschaft */}
             <Select
               value={selectedTeam}
               onValueChange={setSelectedTeam}
@@ -342,6 +320,7 @@ export default function VerwaltungTerminePage() {
             </Select>
           </div>
 
+          {/* Termin-Tabelle */}
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -355,19 +334,34 @@ export default function VerwaltungTerminePage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
+                  // Skeleton-Loading-Ansicht
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell> <Skeleton className="h-5 w-32" /> </TableCell>
-                      <TableCell> <Skeleton className="h-5 w-28" /> </TableCell>
-                      <TableCell> <Skeleton className="h-5 w-20" /> </TableCell>
-                      <TableCell> <Skeleton className="h-5 w-24" /> </TableCell>
-                      <TableCell className="text-right"> <Skeleton className="h-8 w-48 ml-auto" /> </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-32" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-28" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-24" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Skeleton className="h-8 w-48 ml-auto" />
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : filteredAppointments.length > 0 ? (
+                  // Geladene Termine
                   filteredAppointments.map((app) => {
-                    const userStatus =
-                      user && app.responses?.[user.uid]?.status;
+                    const canRespond = isUserRelevantForAppointment(app, profile);
+                    // Den aktuellen Status des Benutzers für diesen Termin ermitteln
+                    const userResponse =
+                      auth.user && app.responses?.[auth.user.uid];
+                    const userStatus = userResponse?.status;
 
                     return (
                       <TableRow key={app.id}>
@@ -375,58 +369,76 @@ export default function VerwaltungTerminePage() {
                           {app.title}
                         </TableCell>
                         <TableCell>
-                          {formatDateTime(app.occurrenceDate)} Uhr
+                          {formatDateTime(app.startDate as Timestamp)} Uhr
                         </TableCell>
                         <TableCell>{getTypeName(app.appointmentTypeId)}</TableCell>
-                        <TableCell>{app.locationId}</TableCell>
+                        <TableCell>{app.location}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant={
-                                userStatus === "zugesagt"
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() =>
-                                handleResponse(app.id, "zugesagt")
-                              }
-                            >
-                              Zusage
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={
-                                userStatus === "unsicher"
-                                  ? "secondary"
-                                  : "outline"
-                              }
-                              onClick={() =>
-                                handleResponse(app.id, "unsicher")
-                              }
-                            >
-                              Unsicher
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={
-                                userStatus === "abgesagt"
-                                  ? "destructive"
-                                  : "outline"
-                              }
-                              onClick={() => handleAbsageClick(app.id)}
-                            >
-                              Absage
-                            </Button>
-                          </div>
+                          {canRespond && auth.user ? (
+                            <div className="flex justify-end gap-2">
+                              {/* *** GEÄNDERT: Ruft handleSimpleResponse mit userStatus auf *** */}
+                              <Button
+                                size="sm"
+                                variant={
+                                  userStatus === "zugesagt"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                onClick={() =>
+                                  handleSimpleResponse(
+                                    app.id,
+                                    "zugesagt",
+                                    userStatus,
+                                  )
+                                }
+                              >
+                                Zusage
+                              </Button>
+                              {/* *** GEÄNDERT: Ruft handleSimpleResponse mit userStatus auf *** */}
+                              <Button
+                                size="sm"
+                                variant={
+                                  userStatus === "unsicher"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                onClick={() =>
+                                  handleSimpleResponse(
+                                    app.id,
+                                    "unsicher",
+                                    userStatus,
+                                  )
+                                }
+                              >
+                                Unsicher
+                              </Button>
+                              {/* *** UNVERÄNDERT: Ruft handleAbsageClick auf *** */}
+                              <Button
+                                size="sm"
+                                variant={
+                                  userStatus === "abgesagt"
+                                    ? "destructive"
+                                    : "outline"
+                                }
+                                onClick={() => handleAbsageClick(app.id)}
+                              >
+                                Absage
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Nicht relevant
+                            </span>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
+                  // Keine Termine gefunden
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center h-24">
-                      Keine {showPast ? 'vergangenen' : 'anstehenden'} Termine gefunden, die den Filtern entsprechen.
+                    <TableCell colSpan={5} className="text-center">
+                      Keine Termine gefunden, die den Filtern entsprechen.
                     </TableCell>
                   </TableRow>
                 )}
@@ -435,7 +447,9 @@ export default function VerwaltungTerminePage() {
           </div>
         </CardContent>
       </Card>
+      </div>
 
+      {/* Absage-Dialog (unverändert) */}
       <AlertDialog
         open={isAbsageDialogOpen}
         onOpenChange={setIsAbsageDialogOpen}
@@ -465,6 +479,8 @@ export default function VerwaltungTerminePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
+
+    
