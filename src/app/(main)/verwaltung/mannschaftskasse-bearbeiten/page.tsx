@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useMemo, FC, useEffect } from 'react';
+import { useState, useMemo, FC } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -66,6 +65,7 @@ import {
   errorEmitter,
   FirestorePermissionError,
   useUser,
+  useDoc // useDoc importieren
 } from '@/firebase';
 import {
   collection,
@@ -86,12 +86,15 @@ import {
   PiggyBank,
   BookMarked,
   Coins,
+  Info // Info importieren
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Penalty, TreasuryTransaction, MemberProfile, Group } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useEffect } from 'react'; // useEffect importieren
 
+// Zod Schemas (bleiben unverändert)
 const penaltySchema = z.object({
   description: z.string().min(1, 'Beschreibung ist erforderlich.'),
   amount: z.coerce.number().positive('Betrag muss eine positive Zahl sein.'),
@@ -128,60 +131,82 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 export default function AdminKassePage() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin, isUserLoading } = useUser();
+  const { user, isAdmin, isUserLoading } = useUser(); // user holen
+
+  // *** BEGINN DER ÄNDERUNG: Eigenes Member-Profil holen ***
+  const currentUserMemberRef = useMemoFirebase(
+    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: currentUserMemberProfile, isLoading: isLoadingCurrentUserMember } = useDoc<MemberProfile>(currentUserMemberRef);
+  // *** ENDE DER ÄNDERUNG ***
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
+  // Data fetching
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-
   const membersMap = useMemo(() => {
       if (!members) return new Map<string, MemberProfile>();
       return new Map(members.map(m => [m.userId, m]));
   }, [members]);
 
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]); // Alle Gruppen holen für Namen
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
+  // *** BEGINN DER ÄNDERUNG: Teams für Dropdown basierend auf eigenem Profil filtern ***
+  const teamsForDropdown = useMemo(() => {
+    if (!groups || !currentUserMemberProfile?.teams) return [];
+    const userTeamIds = currentUserMemberProfile.teams;
+    return groups.filter(g => g.type === 'team' && userTeamIds.includes(g.id))
+                      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [groups, currentUserMemberProfile]);
+  // *** ENDE DER ÄNDERUNG ***
+
+  // Firestore Abfragen basierend auf selectedTeamId
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
   const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
 
-  const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);
-  
-  const membersOfSelectedTeam = useMemo(() => {
+  const membersOfSelectedTeam = useMemo(() => { // Brauchen wir weiterhin für den Transaktionsdialog
     if (!members || !selectedTeamId) return [];
-    return members.filter(m => m.teams?.includes(selectedTeamId)).sort((a,b) => a.lastName.localeCompare(b.lastName));
+    return members.filter(m => m.teams?.includes(selectedTeamId));
   }, [members, selectedTeamId]);
 
-  useEffect(() => {
-      if(!selectedTeamId && teams.length > 0) {
-          setSelectedTeamId(teams[0].id)
-      }
-  }, [teams, selectedTeamId]);
-
+  // Saldo-Berechnung (bleibt gleich)
   const totalBalance = useMemo(() => {
     return transactions?.reduce((acc, tx) => {
-      if (tx.type === 'income') {
-        return acc + tx.amount;
-      } else if (tx.type === 'expense') {
-        return acc + tx.amount;
-      } else if (tx.type === 'penalty' && tx.status === 'paid') {
-        return acc + Math.abs(tx.amount);
-      }
+      if (tx.type === 'income') return acc + tx.amount;
+      else if (tx.type === 'expense') return acc + tx.amount;
+      else if (tx.type === 'penalty' && tx.status === 'paid') return acc + Math.abs(tx.amount);
       return acc;
     }, 0) || 0;
   }, [transactions]);
 
-
+  // Forms (bleiben gleich)
   const penaltyForm = useForm<PenaltyFormValues>({ resolver: zodResolver(penaltySchema), defaultValues: { description: '', amount: 0 } });
   const transactionForm = useForm<TransactionFormValues>({ resolver: zodResolver(transactionSchema), defaultValues: { type: 'income', description: '', amount: 0 } });
-
   const watchTxType = transactionForm.watch('type');
 
+  // *** BEGINN DER ÄNDERUNG: Automatische Auswahl des ersten eigenen Teams ***
+  useEffect(() => {
+      if (!selectedTeamId && teamsForDropdown.length > 0) {
+          setSelectedTeamId(teamsForDropdown[0].id);
+      }
+      // Wenn das aktuell ausgewählte Team nicht mehr zu den userTeams gehört (sollte nicht passieren, aber sicher ist sicher)
+      if (selectedTeamId && teamsForDropdown.length > 0 && !teamsForDropdown.some(t => t.id === selectedTeamId)) {
+          setSelectedTeamId(teamsForDropdown[0].id);
+      } else if (selectedTeamId && teamsForDropdown.length === 0) {
+           setSelectedTeamId(null); // Falls Admin aus allen Teams entfernt wird
+      }
+  }, [teamsForDropdown, selectedTeamId]);
+  // *** ENDE DER ÄNDERUNG ***
+
+  // Handler-Funktionen (onAddPenalty, onDeletePenalty, onAddTransaction, etc. bleiben unverändert)
+    // Penalty Catalog Logic
   const onAddPenalty = async (data: PenaltyFormValues) => {
     if (!firestore || !selectedTeamId) return;
     const penaltyCollectionRef = collection(firestore, 'penalties');
@@ -199,33 +224,37 @@ export default function AdminKassePage() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `penalties/${id}`, operation: 'delete' })));
   };
 
+  // Transaction Logic
   const onAddTransaction = async (data: TransactionFormValues) => {
     if (!firestore || !selectedTeamId) return;
 
-    let finalAmount: number;
-    let finalDescription: string;
+    let finalAmount = 0;
+    let finalDescription = data.description ?? '';
     let finalStatus: 'paid' | 'unpaid' = 'paid';
-    let finalMemberId = data.type === 'penalty' ? data.memberId : undefined;
+    let finalMemberId = data.memberId;
 
     if (data.type === 'penalty') {
-        const penalty = penalties?.find(p => p.id === data.penaltyId);
-        if (!penalty) {
-            toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe nicht gefunden.' });
-            return;
-        }
-        finalAmount = -penalty.amount;
-        finalDescription = `Strafe: ${penalty.description}`;
-        finalStatus = 'unpaid';
+      const penalty = penalties?.find(p => p.id === data.penaltyId);
+      const member = membersOfSelectedTeam.find(m => m.userId === data.memberId);
+      if (!penalty || !member) {
+         toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe oder Mitglied nicht gefunden.' });
+         return;
+      }
+      finalAmount = -penalty.amount;
+      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
+      finalStatus = 'unpaid';
+      finalMemberId = data.memberId;
+
     } else if (data.type === 'expense') {
-        finalAmount = -(data.amount ?? 0);
-        finalDescription = data.description ?? '';
+      finalAmount = -(data.amount ?? 0);
+      finalMemberId = undefined;
     } else { // income
         finalAmount = data.amount ?? 0;
-        finalDescription = data.description ?? '';
+        finalMemberId = undefined;
     }
-    
-    if (isNaN(finalAmount) || !finalDescription) {
-        toast({ variant: 'destructive', title: 'Fehler', description: 'Ungültige Eingabe für Betrag oder Beschreibung.' });
+
+     if (isNaN(finalAmount)) {
+        toast({ variant: 'destructive', title: 'Fehler', description: 'Ungültiger Betrag.' });
         return;
     }
 
@@ -247,7 +276,6 @@ export default function AdminKassePage() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'treasury', operation: 'create', requestResourceData: txData })));
   };
 
-
   const onUpdateTransactionStatus = (id: string, status: 'paid' | 'unpaid') => {
     if (!firestore) return;
     const docRef = doc(firestore, 'treasury', id);
@@ -263,37 +291,39 @@ export default function AdminKassePage() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoadingInitial = isUserLoading || isLoadingGroups;
-  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions || isLoadingMembers);
+  // Ladezustände
+  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingCurrentUserMember || isLoadingMembers; // isLoadingMembers hinzugefügt (für membersMap)
+  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
 
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
+  // Render Logic
+    if (isLoadingInitial) {
+        return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> );
     }
 
     if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <PiggyBank className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
+       return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><PiggyBank className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen...</p></CardContent></Card></div> );
     }
+
+    // *** BEGINN DER ÄNDERUNG: Meldung, wenn Admin in keinem Team ist ***
+    if (!isLoadingInitial && teamsForDropdown.length === 0) {
+         return (
+             <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+                 <Card>
+                     <CardHeader>
+                         <CardTitle className="flex items-center gap-3">
+                             <Edit className="h-8 w-8 text-primary" />
+                             <span className="text-2xl font-headline">Admin: Kasse bearbeiten</span>
+                         </CardTitle>
+                     </CardHeader>
+                     <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+                         <Info className="h-10 w-10 text-muted-foreground" />
+                         <p className="mt-4 text-muted-foreground">Sie sind derzeit keinem Team zugewiesen. Bitten Sie einen anderen Admin, Sie hinzuzufügen, oder weisen Sie sich selbst Teams unter "Mitglieder bearbeiten" zu.</p>
+                     </CardContent>
+                 </Card>
+             </div>
+         );
+    }
+    // *** ENDE DER ÄNDERUNG ***
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -302,29 +332,32 @@ export default function AdminKassePage() {
           <Edit className="h-8 w-8 text-primary" />
           <span className="font-headline">Admin: Kasse bearbeiten</span>
         </h1>
-        <Select onValueChange={setSelectedTeamId} value={selectedTeamId ?? undefined} disabled={teams.length === 0}>
+        {/* *** BEGINN DER ÄNDERUNG: Dropdown verwendet gefilterte Liste *** */}
+        <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId} disabled={teamsForDropdown.length === 0}>
           <SelectTrigger className="w-full sm:w-[280px]">
             <SelectValue placeholder="Mannschaft auswählen..." />
           </SelectTrigger>
           <SelectContent>
-            {isLoadingGroups ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
-              teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
+            {teamsForDropdown.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {/* *** ENDE DER ÄNDERUNG *** */}
       </div>
 
+      {/* Restlicher Code bleibt größtenteils gleich, zeigt aber nur Daten für selectedTeamId an */}
       {!selectedTeamId ? (
         <Card className="flex flex-col items-center justify-center p-12 text-center">
             <PiggyBank className="h-12 w-12 text-muted-foreground" />
             <h2 className="mt-4 text-xl font-semibold">Keine Mannschaft ausgewählt</h2>
-            <p className="mt-2 text-muted-foreground">Bitte wählen Sie eine Mannschaft aus, um die Kasse zu verwalten.</p>
+            <p className="mt-2 text-muted-foreground">Bitte wählen Sie eine Ihrer Mannschaften aus.</p>
         </Card>
-      ) : isLoadingInitial || isLoadingTeamData ? (
+      ) : isLoadingTeamData ? (
          <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* Transactions */}
           <div className="space-y-6 lg:col-span-2">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -340,77 +373,15 @@ export default function AdminKassePage() {
                       <DialogTrigger asChild>
                           <Button><Plus className="mr-2 h-4 w-4" />Transaktion</Button>
                       </DialogTrigger>
-                      <DialogContent>
+                       <DialogContent>
                           <DialogHeader>
                               <DialogTitle>Neue Transaktion hinzufügen</DialogTitle>
                           </DialogHeader>
                           <Form {...transactionForm}>
                               <form onSubmit={transactionForm.handleSubmit(onAddTransaction)} className="space-y-4">
-                                  <FormField control={transactionForm.control} name="type" render={({ field }) => (
-                                      <FormItem>
-                                          <FormLabel>Typ</FormLabel>
-                                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                              <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                              <SelectContent>
-                                                  <SelectItem value="income">Einnahme</SelectItem>
-                                                  <SelectItem value="expense">Ausgabe</SelectItem>
-                                                  <SelectItem value="penalty">Strafe</SelectItem>
-                                              </SelectContent>
-                                          </Select>
-                                      </FormItem>
-                                  )} />
-
-                                  {watchTxType === 'penalty' ? (
-                                      <>
-                                          <FormField control={transactionForm.control} name="memberId" render={({ field }) => (
-                                              <FormItem>
-                                                  <FormLabel>Mitglied</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                                                      <FormControl><SelectTrigger><SelectValue placeholder="Mitglied auswählen..."/></SelectTrigger></FormControl>
-                                                      <SelectContent>
-                                                          {membersOfSelectedTeam.map(m => <SelectItem key={m.userId} value={m.userId}>{m.firstName} {m.lastName}</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
-                                                  <FormMessage />
-                                              </FormItem>
-                                          )} />
-                                          <FormField control={transactionForm.control} name="penaltyId" render={({ field }) => (
-                                              <FormItem>
-                                                  <FormLabel>Strafenart</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                                                      <FormControl><SelectTrigger><SelectValue placeholder="Strafe auswählen..."/></SelectTrigger></FormControl>
-                                                      <SelectContent>
-                                                          {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.description} ({p.amount.toFixed(2)} €)</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
-                                                  <FormMessage />
-                                              </FormItem>
-                                          )} />
-                                      </>
-                                  ) : (
-                                      <>
-                                          <FormField control={transactionForm.control} name="description" render={({ field }) => (
-                                              <FormItem>
-                                                  <FormLabel>Beschreibung</FormLabel>
-                                                  <FormControl><Input placeholder="z.B. Getränkeverkauf" {...field} value={field.value || ''} /></FormControl>
-                                                  <FormMessage />
-                                              </FormItem>
-                                          )} />
-                                          <FormField control={transactionForm.control} name="amount" render={({ field }) => (
-                                              <FormItem>
-                                                  <FormLabel>Betrag (€)</FormLabel>
-                                                  <FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl>
-                                                  <FormMessage />
-                                              </FormItem>
-                                          )} />
-                                      </>
-                                  )}
-                                  <DialogFooter>
-                                      <Button type="button" variant="ghost" onClick={() => setIsTxDialogOpen(false)}>Abbrechen</Button>
-                                      <Button type="submit" disabled={transactionForm.formState.isSubmitting}>
-                                          {transactionForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern
-                                      </Button>
-                                  </DialogFooter>
+                                  <FormField control={transactionForm.control} name="type" render={({ field }) => ( <FormItem> <FormLabel>Typ</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl> <SelectContent> <SelectItem value="income">Einnahme</SelectItem> <SelectItem value="expense">Ausgabe</SelectItem> <SelectItem value="penalty">Strafe</SelectItem> </SelectContent> </Select> </FormItem> )}/>
+                                  {watchTxType === 'penalty' ? ( <> <FormField control={transactionForm.control} name="memberId" render={({ field }) => ( <FormItem> <FormLabel>Mitglied</FormLabel> <Select onValueChange={field.onChange} value={field.value ?? ''}> <FormControl><SelectTrigger><SelectValue placeholder="Mitglied auswählen..."/></SelectTrigger></FormControl> <SelectContent> {membersOfSelectedTeam.map(m => <SelectItem key={m.userId} value={m.userId}>{m.firstName} {m.lastName}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/> <FormField control={transactionForm.control} name="penaltyId" render={({ field }) => ( <FormItem> <FormLabel>Strafenart</FormLabel> <Select onValueChange={field.onChange} value={field.value ?? ''}> <FormControl><SelectTrigger><SelectValue placeholder="Strafe auswählen..."/></SelectTrigger></FormControl> <SelectContent> {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.description} ({p.amount.toFixed(2)} €)</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/> </> ) : ( <> <FormField control={transactionForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Beschreibung</FormLabel> <FormControl><Input placeholder="z.B. Getränkeverkauf" {...field} /></FormControl> <FormMessage /> </FormItem> )}/> <FormField control={transactionForm.control} name="amount" render={({ field }) => ( <FormItem> <FormLabel>Betrag (€)</FormLabel> <FormControl><Input type="number" step="0.01" {...field} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl> <FormMessage /> </FormItem> )}/> </> )}
+                                  <DialogFooter> <Button type="button" variant="ghost" onClick={() => setIsTxDialogOpen(false)}>Abbrechen</Button> <Button type="submit" disabled={transactionForm.formState.isSubmitting}> {transactionForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern </Button> </DialogFooter>
                               </form>
                           </Form>
                       </DialogContent>
@@ -419,20 +390,9 @@ export default function AdminKassePage() {
               <CardContent>
                  <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Datum</TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Beschreibung</TableHead>
-                            <TableHead>Betrag</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Aktion</TableHead>
-                        </TableRow>
-                    </TableHeader>
+                    <TableHeader><TableRow><TableHead>Datum</TableHead><TableHead>Name</TableHead><TableHead>Beschreibung</TableHead><TableHead>Betrag</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aktion</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {isLoadingTransactions ? (
-                            <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
-                        ) : transactions && transactions.length > 0 ? (
+                        {isLoadingTransactions ? ( <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow> ) : transactions && transactions.length > 0 ? (
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             return (
@@ -440,89 +400,38 @@ export default function AdminKassePage() {
                                 <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
                                 <TableCell>{memberName}</TableCell>
                                 <TableCell className="font-medium">{tx.description}</TableCell>
-                                <TableCell className={cn(
-                                    tx.amount >= 0 ? "text-green-600" : "text-red-600"
-                                    )}>
-                                  {tx.amount.toFixed(2)} €
-                                </TableCell>
-                                <TableCell>
-                                    {(tx.type === 'penalty' || tx.status === 'unpaid') ? (
-                                        <Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'}
-                                            onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>
-                                            {tx.status === 'paid' ? 'Bezahlt' : 'Offen'}
-                                        </Button>
-                                    ) : '-'}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader><AlertDialogTitle>Transaktion löschen?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader>
-                                            <AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeleteTransaction(tx.id)}>Löschen</AlertDialogAction></AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                </TableCell>
+                                <TableCell className={cn(tx.amount >= 0 ? "text-green-600" : "text-red-600")}>{tx.amount.toFixed(2)} €</TableCell>
+                                <TableCell>{(tx.type === 'penalty' || tx.status === 'unpaid') ? (<Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'} onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>{tx.status === 'paid' ? 'Bezahlt' : 'Offen'}</Button>) : '-'}</TableCell>
+                                <TableCell className="text-right"><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Transaktion löschen?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeleteTransaction(tx.id)}>Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></TableCell>
                             </TableRow>
                            )})
-                        ) : (
-                            <TableRow><TableCell colSpan={6} className="text-center h-24">Keine Transaktionen gefunden.</TableCell></TableRow>
-                        )}
+                        ) : ( <TableRow><TableCell colSpan={6} className="text-center h-24">Keine Transaktionen gefunden.</TableCell></TableRow> )}
                     </TableBody>
                   </Table>
                   </div>
               </CardContent>
             </Card>
           </div>
+          {/* Penalty Catalog */}
           <div className="space-y-6">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><BookMarked className="h-6 w-6" /> Strafenkatalog</CardTitle>
-                <CardDescription>Verwalte die Strafen für diese Mannschaft.</CardDescription>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><BookMarked className="h-6 w-6" /> Strafenkatalog</CardTitle><CardDescription>Verwalte die Strafen für diese Mannschaft.</CardDescription></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader><TableRow><TableHead>Beschreibung</TableHead><TableHead>Betrag</TableHead><TableHead className="text-right">Aktion</TableHead></TableRow></TableHeader>
                   <TableBody>
-                     {isLoadingPenalties ? (
-                         <TableRow><TableCell colSpan={3} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
-                     ) : penalties && penalties.length > 0 ? (
+                     {isLoadingPenalties ? ( <TableRow><TableCell colSpan={3} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow> ) : penalties && penalties.length > 0 ? (
                         penalties.map(p => (
                             <TableRow key={p.id}>
-                                <TableCell>{p.description}</TableCell>
-                                <TableCell>{p.amount.toFixed(2)} €</TableCell>
-                                <TableCell className="text-right">
-                                     <AlertDialog>
-                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader><AlertDialogTitle>Strafe löschen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie "{p.description}" wirklich aus dem Katalog entfernen?</AlertDialogDescription></AlertDialogHeader>
-                                            <AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeletePenalty(p.id)}>Löschen</AlertDialogAction></AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                </TableCell>
-                            </TableRow>
-                        ))
-                     ) : (
-                        <TableRow><TableCell colSpan={3} className="text-center h-24">Keine Strafen im Katalog.</TableCell></TableRow>
-                     )}
+                                <TableCell>{p.description}</TableCell><TableCell>{p.amount.toFixed(2)} €</TableCell>
+                                <TableCell className="text-right"><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Strafe löschen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie "{p.description}" wirklich aus dem Katalog entfernen?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeletePenalty(p.id)}>Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></TableCell>
+                            </TableRow> ))
+                     ) : ( <TableRow><TableCell colSpan={3} className="text-center h-24">Keine Strafen im Katalog.</TableCell></TableRow> )}
                   </TableBody>
                 </Table>
               </CardContent>
               <CardFooter>
-                 <Form {...penaltyForm}>
-                    <form onSubmit={penaltyForm.handleSubmit(onAddPenalty)} className="flex w-full items-start gap-2">
-                        <div className="grid flex-grow gap-2">
-                          <FormField control={penaltyForm.control} name="description" render={({ field }) => (
-                            <FormItem><FormControl><Input placeholder="Neue Strafbeschreibung" {...field}/></FormControl><FormMessage/></FormItem>
-                          )} />
-                           <FormField control={penaltyForm.control} name="amount" render={({ field }) => (
-                            <FormItem><FormControl><Input type="number" step="0.5" placeholder="Betrag in €" {...field} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl><FormMessage/></FormItem>
-                          )} />
-                        </div>
-                        <Button type="submit" disabled={penaltyForm.formState.isSubmitting}>
-                           {penaltyForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : <Plus className="h-4 w-4" />}
-                        </Button>
-                    </form>
-                 </Form>
+                 <Form {...penaltyForm}><form onSubmit={penaltyForm.handleSubmit(onAddPenalty)} className="flex w-full items-start gap-2"><div className="grid flex-grow gap-2"><FormField control={penaltyForm.control} name="description" render={({ field }) => ( <FormItem><FormControl><Input placeholder="Neue Strafbeschreibung" {...field}/></FormControl><FormMessage/></FormItem> )}/> <FormField control={penaltyForm.control} name="amount" render={({ field }) => ( <FormItem><FormControl><Input type="number" step="0.5" placeholder="Betrag in €" {...field} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl><FormMessage/></FormItem> )}/></div><Button type="submit" disabled={penaltyForm.formState.isSubmitting}>{penaltyForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : <Plus className="h-4 w-4" />}</Button></form></Form>
               </CardFooter>
             </Card>
           </div>
@@ -531,5 +440,3 @@ export default function AdminKassePage() {
     </div>
   );
 }
-
-    

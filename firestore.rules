@@ -7,11 +7,14 @@ service cloud.firestore {
       return request.auth != null;
     }
     function isAdmin() {
+      // Prüft, ob der Benutzer den Admin-Claim im Token hat
       return request.auth.token.admin == true;
     }
     // Holt die Team-IDs des anfragenden Benutzers aus seinem Member-Dokument
     function getUserTeams() {
-      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams;
+      // Stelle sicher, dass das Dokument existiert, bevor auf 'teams' zugegriffen wird
+      let memberDoc = get(/databases/$(database)/documents/members/$(request.auth.uid));
+      return memberDoc.data != null ? memberDoc.data.teams : []; // Leere Liste zurückgeben, wenn kein Profil
     }
     // Prüft, ob der Benutzer Mitglied eines bestimmten Teams ist
     function isMemberOfTeam(teamId) {
@@ -19,7 +22,8 @@ service cloud.firestore {
     }
      // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das Dokument gehört (für get)
     function isMemberOfDocTeam() {
-      return isSignedIn() && resource.data.teamId in getUserTeams();
+      // Stelle sicher, dass das Dokument 'teamId' hat und getUserTeams() nicht null ist
+      return isSignedIn() && resource.data.keys().hasAny(['teamId']) && resource.data.teamId in getUserTeams();
     }
 
 
@@ -38,20 +42,24 @@ service cloud.firestore {
                (request.resource.data.role == 'user' || !('role' in request.resource.data));
       }
        function isUpdatingOwnDocument(userId) {
+         // Erlaubt dem Besitzer, sein eigenes Dokument zu aktualisieren,
+         // aber NICHT die Rolle zu ändern (außer Admins).
          return isOwner(userId) && !('role' in request.resource.data);
        }
        function isAdminUpdatingDocument(userId) {
+         // Erlaubt Admins, jedes Benutzerdokument zu aktualisieren (einschließlich der Rolle).
          return isAdmin();
        }
        function isOwnerDeleting(userId) {
+          // Stellt sicher, dass der Benutzer nur sein eigenes Dokument löschen kann
           return isOwner(userId);
        }
 
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow list: if false;
+      allow list: if isSignedIn() && isAdmin(); // Admins dürfen auflisten
       allow create: if isSignedIn() && isCreatingOwnDocument(userId);
       allow update: if isSignedIn() && (isUpdatingOwnDocument(userId) || isAdminUpdatingDocument(userId));
-      allow delete: if isSignedIn() && (isOwnerDeleting(userId) || isAdmin());
+      allow delete: if isSignedIn() && (isOwnerDeleting(userId) || isAdmin()); // Admins dürfen auch löschen
     }
 
     /**
@@ -60,40 +68,42 @@ service cloud.firestore {
      * @path /members/{memberId}
      */
     match /members/{memberId} {
+        // isOwner prüft, ob die Auth-UID mit der ID des Dokuments übereinstimmt (für get)
+        // oder mit der userId im bestehenden Dokument (für update/delete)
         function isOwner(memberId) {
             return request.auth.uid == memberId;
         }
          function isExistingOwner(memberId) {
+           // Überprüft, ob der Benutzer der Eigentümer des vorhandenen Dokuments ist
            return isSignedIn() && exists(/databases/$(database)/documents/members/$(memberId)) && resource.data.userId == request.auth.uid;
          }
         function isCreatingOwnProfile(memberId) {
+            // Stellt sicher, dass die Dokument-ID mit der userId im Request übereinstimmt
+            // und dass diese userId die des angemeldeten Benutzers ist.
             return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid;
         }
 
+        // Lesen: Erlaubt für den Besitzer ODER einen Admin
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        // Auflisten: Erlaubt NUR für Admins
         allow list: if isSignedIn() && isAdmin();
+        // Erstellen: Erlaubt für den Benutzer, der sein eigenes Profil erstellt
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
+        // Aktualisieren/Löschen: Erlaubt NUR für den Besitzer ODER einen Admin
         allow update, delete: if isSignedIn() && (isExistingOwner(memberId) || isAdmin());
     }
 
-    /**
-     * @description Controls access to the list of group members.
-     * Publicly readable, admin-writeable.
-     * @path /groups/{groupId}/members/{memberId}
-     */
-    match /groups/{groupId}/members/{memberId} {
+       /**
+        * @description Controls access to the list of group members.
+        * Publicly readable, admin-writeable.
+        * @path /groups/{groupId}/members/{memberId}
+        */
+      match /groups/{groupId}/members/{memberId} {
+        // Lesen ist öffentlich erlaubt
         allow get, list: if true;
+        // Schreiben (Erstellen, Ändern, Löschen) nur für Admins
         allow write: if isSignedIn() && isAdmin();
-    }
-
-    /**
-     * @description Controls access to appointments. Publicly readable, admin-writeable.
-     * @path /appointments/{appointmentId}
-     */
-    match /appointments/{appointmentId} {
-        allow get, list: if true;
-        allow write: if isSignedIn() && isAdmin();
-    }
+      }
 
     /**
      * @description Controls access to groups (classes and teams).
@@ -101,7 +111,51 @@ service cloud.firestore {
      * @path /groups/{groupId}
      */
     match /groups/{groupId} {
-        allow get, list: if true;
+        allow get, list: if true; // Jeder kann lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins können schreiben
+    }
+
+    // --- NEUE REGELN ---
+    /**
+     * @description Controls access to Appointment Types. Readable by all, writable by admin.
+     * @path /appointmentTypes/{typeId}
+     */
+    match /appointmentTypes/{typeId} {
+        allow read: if true; // Jeder darf Typen lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins dürfen Typen ändern/erstellen
+    }
+
+    /**
+     * @description Controls access to Locations. Readable by all, writable by admin.
+     * @path /locations/{locationId}
+     */
+    match /locations/{locationId} {
+        allow read: if true; // Jeder darf Orte lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins dürfen Orte ändern/erstellen
+    }
+    // --- ENDE NEUE REGELN ---
+
+
+    /**
+     * @description Controls access to appointments.
+     * Admins can read/write all. Members can read appointments visible to them.
+     * @path /appointments/{appointmentId}
+     */
+    match /appointments/{appointmentId} {
+        // Hilfsfunktion: Prüft, ob der Benutzer Mitglied mindestens eines Teams ist, für das der Termin sichtbar ist
+        function isMemberOfVisibleTeamForAppointment() {
+          let memberDoc = get(/databases/$(database)/documents/members/$(request.auth.uid));
+          // Prüft auf Überschneidung zwischen den Teams des Mitglieds und den sichtbaren Teams des Termins
+          // Stellt sicher, dass visibility.teamIds existiert, bevor hasAny aufgerufen wird
+          return memberDoc.data != null &&
+                 resource.data.visibility.keys().hasAny(['teamIds']) &&
+                 resource.data.visibility.teamIds.hasAny(memberDoc.data.teams);
+        }
+
+        // Lesen (get, list): Erlaubt für Admins ODER wenn der Termin für alle sichtbar ist ODER der Benutzer Mitglied eines sichtbaren Teams ist
+        allow read: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForAppointment());
+
+        // Schreiben (create, update, delete): Nur für Admins
         allow write: if isSignedIn() && isAdmin();
     }
 
@@ -112,17 +166,18 @@ service cloud.firestore {
      * @path /polls/{pollId}
      */
     match /polls/{pollId} {
-        function isMemberOfVisibleTeam() {
-          // Prüft, ob das Member-Dokument existiert, bevor auf 'teams' zugegriffen wird
+        function isMemberOfVisibleTeamForPoll() {
           let memberDoc = get(/databases/$(database)/documents/members/$(request.auth.uid));
-          return memberDoc.data != null && resource.data.visibility.teamIds.hasAny(memberDoc.data.teams);
+          return memberDoc.data != null &&
+                 resource.data.visibility.keys().hasAny(['teamIds']) &&
+                 resource.data.visibility.teamIds.hasAny(memberDoc.data.teams);
         }
 
-        allow get, list: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeam());
+        allow get, list: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
         allow create, delete: if isSignedIn() && isAdmin();
         allow update: if isSignedIn() && (
                       isAdmin() ||
-                      (isMemberOfVisibleTeam() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
+                      (isMemberOfVisibleTeamForPoll() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
                     );
     }
 
@@ -131,8 +186,8 @@ service cloud.firestore {
      * @path /news/{newsId}
      */
     match /news/{newsId} {
-        allow get, list: if true;
-        allow write: if isSignedIn() && isAdmin();
+        allow get, list: if true; // Jeder kann lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins können schreiben
     }
 
     /**
@@ -141,9 +196,7 @@ service cloud.firestore {
      * @path /treasury/{transactionId}
      */
     match /treasury/{transactionId} {
-        // Lesen: Erlaubt für Admins ODER Mitglieder des entsprechenden Teams
         allow get, list: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
-        // Schreiben: Nur für Admins
         allow write: if isSignedIn() && isAdmin();
     }
 
@@ -153,9 +206,7 @@ service cloud.firestore {
      * @path /penalties/{penaltyId}
      */
     match /penalties/{penaltyId} {
-       // Lesen: Erlaubt für Admins ODER Mitglieder des entsprechenden Teams
        allow get, list: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
-       // Schreiben: Nur für Admins
        allow write: if isSignedIn() && isAdmin();
     }
   }
