@@ -1,3 +1,4 @@
+
 'use client';
 
 import { ReactNode } from 'react';
@@ -38,11 +39,3 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   
   return <>{children}</>;
 }
-
-// Dummy export to prevent breaking changes in other files for now.
-// Will be removed once all components are updated.
-export const useAdminData = () => ({
-    members: [],
-    groups: [],
-    isLoading: true,
-});

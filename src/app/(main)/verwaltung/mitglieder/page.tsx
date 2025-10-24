@@ -20,21 +20,22 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { MemberProfile, Group } from '@/lib/types';
 
 
 function VerwaltungMitgliederPageContent() {
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
 
   const membersRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'members') : null),
-      [firestore]
+      () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+      [firestore, isAdmin]
   );
   const groupsRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'groups') : null),
-      [firestore]
+      () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+      [firestore, isAdmin]
   );
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);

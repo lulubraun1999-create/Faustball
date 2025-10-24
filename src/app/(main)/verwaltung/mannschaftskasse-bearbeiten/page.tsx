@@ -66,6 +66,7 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
+  useUser,
 } from '@/firebase';
 import {
   collection,
@@ -111,22 +112,23 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
   // Fetch all groups and members once
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
   // Data fetching - Defer heavy queries until a team is selected
-  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
+  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
-  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
+  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
   
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);

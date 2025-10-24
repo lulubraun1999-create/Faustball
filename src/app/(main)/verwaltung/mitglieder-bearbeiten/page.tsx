@@ -66,15 +66,15 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh } = useUser();
+  const { forceRefresh, isAdmin } = useUser();
   
   const membersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
   );
   const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
   );
 
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
