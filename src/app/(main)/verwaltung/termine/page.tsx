@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useUser } from "@/firebase/auth/use-user";
 import { useCollection } from "@/firebase/firestore/use-collection";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -17,6 +17,7 @@ import {
   Appointment,
   AppointmentType,
   Group,
+  Location,
   MemberProfile,
 } from "@/lib/types";
 import {
@@ -58,8 +59,22 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
 import { collection } from "firebase/firestore";
+import { differenceInMilliseconds, addDays, addWeeks, addMonths } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
+
+type UnrolledAppointment = Appointment & {
+  virtualId?: string; 
+  originalStartDate?: Timestamp; 
+};
+
 
 export default function VerwaltungTerminePage() {
   const auth = useUser();
@@ -101,6 +116,13 @@ export default function VerwaltungTerminePage() {
       [firestore]
   );
   const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsRef);
+  
+  const locationsRef = useMemoFirebase(
+      () => collection(firestore, 'locations'),
+      [firestore]
+  );
+  const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsRef);
+
 
   // Ladezustand
   const isLoading =
@@ -108,13 +130,75 @@ export default function VerwaltungTerminePage() {
     profileLoading ||
     appointmentsLoading ||
     typesLoading ||
-    groupsLoading;
+    groupsLoading ||
+    locationsLoading;
 
   // Teams für Filter extrahieren
-  const teams = useMemo(
-    () => groups?.filter((g) => g.type === "team") ?? [],
-    [groups],
-  );
+  const { teams, teamsMap } = useMemo(() => {
+      const allGroups = groups || [];
+      const teams = allGroups.filter((g: Group) => g.type === 'team');
+      const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
+      return { teams, teamsMap };
+  }, [groups]);
+  
+  // Locations-Map
+   const locationsMap = useMemo(() => {
+    const map = new Map<string, Location>();
+    locations?.forEach((loc) => map.set(loc.id, loc));
+    return map;
+  }, [locations]);
+
+  // Entrollte Termine (inkl. Wiederholungen)
+  const unrolledAppointments = useMemo(() => {
+    if (!appointments) return [];
+    const allEvents: UnrolledAppointment[] = [];
+    const now = new Date();
+
+    appointments.forEach(app => {
+      const originalStartDate = app.startDate.toDate();
+
+      // Nur Termine anzeigen, deren erste Instanz noch nicht zu lange her ist oder in der Zukunft liegt
+      if (app.recurrence === 'none' || !app.recurrenceEndDate) {
+        if (originalStartDate >= now) {
+          allEvents.push(app);
+        }
+      } else {
+        let currentDate = originalStartDate;
+        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1); 
+        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), originalStartDate) : 0;
+
+        let iter = 0;
+        const MAX_ITERATIONS = 365;
+
+        while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
+          if (currentDate >= now) {
+              const newStartDate = Timestamp.fromDate(currentDate);
+              const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
+              
+              allEvents.push({
+                ...app,
+                id: `${app.id}-${currentDate.toISOString()}`, // Eindeutige ID für die virtuelle Instanz
+                virtualId: app.id,
+                startDate: newStartDate,
+                endDate: newEndDate,
+                originalStartDate: app.startDate
+              });
+          }
+
+          switch (app.recurrence) {
+            case 'daily': currentDate = addDays(currentDate, 1); break;
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            default: currentDate = addDays(recurrenceEndDate, 1); break; // Stop loop
+          }
+          iter++;
+        }
+      }
+    });
+    return allEvents;
+  }, [appointments]);
+
 
   // Helper-Funktion: Prüft, ob der Benutzer auf einen Termin antworten darf
   const isUserRelevantForAppointment = (
@@ -133,8 +217,7 @@ export default function VerwaltungTerminePage() {
 
   // Gefilterte Termine
   const filteredAppointments = useMemo(() => {
-    if (!appointments) return [];
-    return appointments
+    return unrolledAppointments
       .filter((app) => {
         // Nach Typ filtern
         if (selectedType !== "all" && app.appointmentTypeId !== selectedType) {
@@ -156,7 +239,7 @@ export default function VerwaltungTerminePage() {
           (a.startDate as Timestamp).toMillis() -
           (b.startDate as Timestamp).toMillis(),
       );
-  }, [appointments, selectedType, selectedTeam]);
+  }, [unrolledAppointments, selectedType, selectedTeam]);
 
   // Handler für Zusage / Unsicher (mit Toggle/Entfernen)
   const handleSimpleResponse = async (
@@ -165,7 +248,8 @@ export default function VerwaltungTerminePage() {
     currentStatus: UserResponseStatus | undefined,
   ) => {
     if (!auth.user || !firestore) return;
-    const docRef = doc(firestore, "appointments", appointmentId);
+    const docId = appointmentId.includes('-') ? appointmentId.split('-')[0] : appointmentId;
+    const docRef = doc(firestore, "appointments", docId);
 
     try {
       // Wenn der aktuelle Status dem neuen Status entspricht (Doppelklick), entferne die Antwort
@@ -221,7 +305,8 @@ export default function VerwaltungTerminePage() {
     }
     if (!currentAbsageAppId || !auth.user || !firestore) return; // Sicherheitscheck
 
-    const docRef = doc(firestore, "appointments", currentAbsageAppId);
+    const docId = currentAbsageAppId.includes('-') ? currentAbsageAppId.split('-')[0] : currentAbsageAppId;
+    const docRef = doc(firestore, "appointments", docId);
 
     try {
       await updateDoc(docRef, {
@@ -269,181 +354,206 @@ export default function VerwaltungTerminePage() {
 
   return (
     <>
-      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Termin Verwaltung</CardTitle>
-          <CardDescription>
-            Hier kannst du alle anstehenden Termine einsehen und deine Teilnahme
-            bestätigen oder absagen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4 md:flex-row mb-4">
-            {/* Filter: Art */}
-            <Select
-              value={selectedType}
-              onValueChange={setSelectedType}
-              disabled={isLoading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Nach Art filtern..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Arten</SelectItem>
-                {appointmentTypes?.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    {type.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <TooltipProvider>
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Termin Verwaltung</CardTitle>
+            <CardDescription>
+              Hier kannst du alle anstehenden Termine einsehen und deine Teilnahme
+              bestätigen oder absagen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4 md:flex-row mb-4">
+              {/* Filter: Art */}
+              <Select
+                value={selectedType}
+                onValueChange={setSelectedType}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nach Art filtern..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Arten</SelectItem>
+                  {appointmentTypes?.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      {type.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            {/* Filter: Mannschaft */}
-            <Select
-              value={selectedTeam}
-              onValueChange={setSelectedTeam}
-              disabled={isLoading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Nach Mannschaft filtern..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Mannschaften</SelectItem>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>
-                    {team.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {/* Filter: Mannschaft */}
+              <Select
+                value={selectedTeam}
+                onValueChange={setSelectedTeam}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nach Mannschaft filtern..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Mannschaften</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Termin-Tabelle */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Titel</TableHead>
-                  <TableHead>Datum & Uhrzeit</TableHead>
-                  <TableHead>Art</TableHead>
-                  <TableHead>Ort</TableHead>
-                  <TableHead className="text-right">Aktionen</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  // Skeleton-Loading-Ansicht
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-5 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-28" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-20" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-24" />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="h-8 w-48 ml-auto" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : filteredAppointments.length > 0 ? (
-                  // Geladene Termine
-                  filteredAppointments.map((app) => {
-                    const canRespond = isUserRelevantForAppointment(app, profile);
-                    // Den aktuellen Status des Benutzers für diesen Termin ermitteln
-                    const userResponse =
-                      auth.user && app.responses?.[auth.user.uid];
-                    const userStatus = userResponse?.status;
-
-                    return (
-                      <TableRow key={app.id}>
-                        <TableCell className="font-medium">
-                          {app.title}
+            {/* Termin-Tabelle */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Titel</TableHead>
+                    <TableHead>Datum & Uhrzeit</TableHead>
+                    <TableHead>Art</TableHead>
+                    <TableHead>Ort</TableHead>
+                    <TableHead>Sichtbar für</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    // Skeleton-Loading-Ansicht
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <Skeleton className="h-5 w-32" />
                         </TableCell>
                         <TableCell>
-                          {formatDateTime(app.startDate as Timestamp)} Uhr
+                          <Skeleton className="h-5 w-28" />
                         </TableCell>
-                        <TableCell>{getTypeName(app.appointmentTypeId)}</TableCell>
-                        <TableCell>{app.location}</TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-24" />
+                        </TableCell>
                         <TableCell className="text-right">
-                          {canRespond && auth.user ? (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant={
-                                  userStatus === "zugesagt"
-                                    ? "default"
-                                    : "outline"
-                                }
-                                onClick={() =>
-                                  handleSimpleResponse(
-                                    app.id,
-                                    "zugesagt",
-                                    userStatus,
-                                  )
-                                }
-                              >
-                                Zusage
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={
-                                  userStatus === "unsicher"
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                onClick={() =>
-                                  handleSimpleResponse(
-                                    app.id,
-                                    "unsicher",
-                                    userStatus,
-                                  )
-                                }
-                              >
-                                Unsicher
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={
-                                  userStatus === "abgesagt"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                                onClick={() => handleAbsageClick(app.id)}
-                              >
-                                Absage
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Nicht relevant
-                            </span>
-                          )}
+                          <Skeleton className="h-8 w-48 ml-auto" />
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                ) : (
-                  // Keine Termine gefunden
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center">
-                      Keine Termine gefunden, die den Filtern entsprechen.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-      </div>
+                    ))
+                  ) : filteredAppointments.length > 0 ? (
+                    // Geladene Termine
+                    filteredAppointments.map((app) => {
+                      const canRespond = isUserRelevantForAppointment(app, profile);
+                      // Den aktuellen Status des Benutzers für diesen Termin ermitteln
+                      const userResponse =
+                        auth.user && app.responses?.[auth.user.uid];
+                      const userStatus = userResponse?.status;
+
+                      const location = app.locationId ? locationsMap.get(app.locationId) : null;
+                      const teamNames = app.visibility.type === 'all'
+                        ? 'Alle'
+                        : app.visibility.teamIds.map(id => teamsMap.get(id) || 'Unbekannt').join(', ');
+
+                      return (
+                        <TableRow key={app.id}>
+                          <TableCell className="font-medium">
+                            {app.title}
+                          </TableCell>
+                          <TableCell>
+                            {formatDateTime(app.startDate as Timestamp)} Uhr
+                          </TableCell>
+                          <TableCell>{getTypeName(app.appointmentTypeId)}</TableCell>
+                          <TableCell>
+                            {location ? (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className="underline decoration-dotted cursor-help">{location.name}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{location.address || 'Keine Adresse hinterlegt'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate">{teamNames}</TableCell>
+                          <TableCell className="text-right">
+                            {canRespond && auth.user ? (
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant={
+                                    userStatus === "zugesagt"
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                  onClick={() =>
+                                    handleSimpleResponse(
+                                      app.id,
+                                      "zugesagt",
+                                      userStatus,
+                                    )
+                                  }
+                                >
+                                  Zusage
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant={
+                                    userStatus === "unsicher"
+                                      ? "secondary"
+                                      : "outline"
+                                  }
+                                  onClick={() =>
+                                    handleSimpleResponse(
+                                      app.id,
+                                      "unsicher",
+                                      userStatus,
+                                    )
+                                  }
+                                >
+                                  Unsicher
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant={
+                                    userStatus === "abgesagt"
+                                      ? "destructive"
+                                      : "outline"
+                                  }
+                                  onClick={() => handleAbsageClick(app.id)}
+                                >
+                                  Absage
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Nicht relevant
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    // Keine Termine gefunden
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        Keine Termine gefunden, die den Filtern entsprechen.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+        </div>
+      </TooltipProvider>
 
       {/* Absage-Dialog (unverändert) */}
       <AlertDialog
