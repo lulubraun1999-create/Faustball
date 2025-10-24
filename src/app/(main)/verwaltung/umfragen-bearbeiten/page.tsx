@@ -89,11 +89,11 @@ const pollSchema = z.object({
 
 type PollFormValues = z.infer<typeof pollSchema>;
 
-function AdminUmfragenPageContent() {
+export default function AdminUmfragenBearbeitenPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
+  const { isAdmin, isUserLoading } = useUser();
 
   const groupsRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
@@ -189,6 +189,35 @@ function AdminUmfragenPageContent() {
       return dateB.toMillis() - dateA.toMillis();
     });
   }, [polls]);
+  
+    if (isUserLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+  
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <Vote className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+    }
 
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
@@ -474,39 +503,4 @@ function AdminUmfragenPageContent() {
       </Card>
     </div>
   );
-}
-
-export default function AdminUmfragenBearbeitenPage() {
-    const { isAdmin, isUserLoading } = useUser();
-
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-  
-    if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <Vote className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
-    }
-  
-    return <AdminUmfragenPageContent />;
 }

@@ -24,8 +24,8 @@ import { collection } from 'firebase/firestore';
 import type { MemberProfile, Group } from '@/lib/types';
 
 
-function VerwaltungMitgliederPageContent() {
-  const { isAdmin } = useUser();
+export default function VerwaltungMitgliederPage() {
+  const { isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
 
   const membersRef = useMemoFirebase(
@@ -41,7 +41,7 @@ function VerwaltungMitgliederPageContent() {
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
 
   const sortedMembers = useMemo(() => {
     if (!members) return [];
@@ -66,12 +66,33 @@ function VerwaltungMitgliederPageContent() {
     return teamIds.map(id => teamsMap.get(id) || id);
   };
 
-  if (isLoading) {
+  if (isLoading && !members) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+  }
+  
+  if (!isAdmin) {
+     return (
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+          <Card className="border-destructive/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 text-destructive">
+                <Users2 className="h-8 w-8" />
+                <span className="text-2xl font-headline">Zugriff verweigert</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                diesen Bereich zuzugreifen.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      );
   }
 
   return (
@@ -85,6 +106,11 @@ function VerwaltungMitgliederPageContent() {
         </CardHeader>
         <CardContent>
             <div className="overflow-x-auto">
+              {isLoading ? (
+                 <div className="flex h-64 items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                 </div>
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -148,44 +174,10 @@ function VerwaltungMitgliederPageContent() {
                   )}
                 </TableBody>
               </Table>
+              )}
             </div>
         </CardContent>
       </Card>
     </div>
   );
-}
-
-export default function VerwaltungMitgliederPage() {
-    const { isAdmin, isUserLoading } = useUser();
-
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-  
-    if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <Users2 className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
-    }
-  
-    return <VerwaltungMitgliederPageContent />;
 }

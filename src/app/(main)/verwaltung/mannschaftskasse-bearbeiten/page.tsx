@@ -109,15 +109,15 @@ const transactionSchema = z.object({
 type PenaltyFormValues = z.infer<typeof penaltySchema>;
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
-function AdminKassePageContent() {
+export default function AdminKassePage() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { isAdmin, isUserLoading } = useUser();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
-  // Data fetching is now conditional on admin status.
-  const { isAdmin } = useUser();
+  // Data fetching
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
@@ -214,16 +214,37 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoadingInitial = isLoadingMembers || isLoadingGroups;
+  const isLoadingInitial = isUserLoading || isLoadingMembers || isLoadingGroups;
   const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
 
-  if (isLoadingInitial) {
-    return (
-        <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-    )
-  }
+    if (isLoadingInitial && !members && !groups) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+  
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <PiggyBank className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+    }
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -448,39 +469,4 @@ function AdminKassePageContent() {
       )}
     </div>
   );
-}
-
-export default function AdminKassePage() {
-    const { isAdmin, isUserLoading } = useUser();
-
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-  
-    if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <PiggyBank className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
-    }
-  
-    return <AdminKassePageContent />;
 }

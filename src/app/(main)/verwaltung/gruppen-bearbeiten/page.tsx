@@ -80,168 +80,198 @@ const groupManagementSchema = z.object({
 
 type GroupManagementValues = z.infer<typeof groupManagementSchema>;
 
-function AdminGruppenBearbeitenPageContent() {
-  const { toast } = useToast();
-  const firestore = useFirestore();
-  const [isEditingOpen, setIsEditingOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<Group | null>(null);
+export default function AdminGruppenBearbeitenPage() {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const [isEditingOpen, setIsEditingOpen] = useState(false);
+    const [selectedClass, setSelectedClass] = useState<Group | null>(null);
+    const { isAdmin, isUserLoading } = useUser();
 
-  const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
-  );
-  const { data: groups, isLoading } = useCollection<Group>(groupsRef);
+    const groupsRef = useMemoFirebase(
+      () => (firestore ? collection(firestore, 'groups') : null),
+      [firestore]
+    );
+    const { data: groups, isLoading } = useCollection<Group>(groupsRef);
 
-  const classes =
-    groups?.filter((g) => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name)) || [];
-  const teams =
-    groups?.filter((g) => g.type === 'team' && g.parentId === selectedClass?.id)
-      .sort((a, b) => a.name.localeCompare(b.name)) || [];
+    const classes =
+      groups?.filter((g) => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name)) || [];
+    const teams =
+      groups?.filter((g) => g.type === 'team' && g.parentId === selectedClass?.id)
+        .sort((a, b) => a.name.localeCompare(b.name)) || [];
 
-  useEffect(() => {
-    if (!selectedClass && classes.length > 0) {
-      setSelectedClass(classes[0]);
-    }
-    if (selectedClass) {
-        const updatedSelectedClass = classes.find(c => c.id === selectedClass.id);
-        if(updatedSelectedClass) {
-            setSelectedClass(updatedSelectedClass);
-        } else if (classes.length > 0) {
-            setSelectedClass(classes[0]);
-        } else {
-            setSelectedClass(null);
+    useEffect(() => {
+      if (!selectedClass && classes.length > 0) {
+        setSelectedClass(classes[0]);
+      }
+      if (selectedClass) {
+          const updatedSelectedClass = classes.find(c => c.id === selectedClass.id);
+          if(updatedSelectedClass) {
+              setSelectedClass(updatedSelectedClass);
+          } else if (classes.length > 0) {
+              setSelectedClass(classes[0]);
+          } else {
+              setSelectedClass(null);
+          }
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [groups]);
+    
+    const form = useForm<GroupManagementValues>({
+      resolver: zodResolver(groupManagementSchema),
+      defaultValues: {
+        action: 'add',
+        type: 'class',
+        name: '',
+        parentId: '',
+        deleteId: '',
+      },
+    });
+    const watchAction = form.watch('action');
+    const watchType = form.watch('type');
+    const watchParentId = form.watch('parentId');
+
+    useEffect(() => {
+        const currentValues = form.getValues();
+        form.reset({
+            ...currentValues,
+            deleteId: '',
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [watchParentId, watchType, watchAction]);
+
+
+    const onManagementSubmit = async (data: GroupManagementValues) => {
+      if (!firestore) return;
+      const groupsRef = collection(firestore, 'groups');
+
+      const currentFormValues = form.getValues();
+
+      if (data.action === 'add') {
+        if (!data.name || data.name.trim() === '') {
+          form.setError('name', {
+            type: 'manual',
+            message: 'Name ist erforderlich.',
+          });
+          return;
         }
+        if (data.type === 'team' && !data.parentId) {
+          form.setError('parentId', {
+            type: 'manual',
+            message: 'Eine Obergruppe ist erforderlich.',
+          });
+          return;
+        }
+        const newGroup: Omit<Group, 'id'> = {
+          name: data.name,
+          type: data.type,
+          ...(data.type === 'team' && { parentId: data.parentId }),
+        };
+        
+        addDoc(groupsRef, newGroup).then(() => {
+          toast({ title: 'Gruppe erfolgreich erstellt.' });
+          form.reset({ ...currentFormValues, name: '', deleteId: '' });
+        }).catch(() => {
+          const permissionError = new FirestorePermissionError({
+            path: 'groups',
+            operation: 'create',
+            requestResourceData: newGroup
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
+      } else if (data.action === 'delete') {
+        if (!data.deleteId) {
+          form.setError('deleteId', {
+            type: 'manual',
+            message: 'Bitte wählen Sie ein Element zum Löschen aus.',
+          });
+          return;
+        }
+        
+        const docRef = doc(firestore, 'groups', data.deleteId);
+        const itemToDelete = groups?.find(g => g.id === data.deleteId);
+
+        if (itemToDelete?.type === 'class') {
+            const batch = writeBatch(firestore);
+            const teamQuery = query(collection(firestore, 'groups'), where('parentId', '==', data.deleteId));
+            getDocs(teamQuery).then(teamSnapshot => {
+              teamSnapshot.forEach(doc => {
+                  batch.delete(doc.ref);
+              });
+              batch.delete(docRef);
+              return batch.commit();
+            }).then(() => {
+              toast({ title: 'Obergruppe und alle zugehörigen Untergruppen gelöscht.' });
+              form.reset({ ...currentFormValues, name: '', deleteId: '' });
+            }).catch(() => {
+              const permissionError = new FirestorePermissionError({
+                path: `groups/${data.deleteId}`,
+                operation: 'delete',
+              });
+              errorEmitter.emit('permission-error', permissionError);
+            });
+        } else {
+            deleteDoc(docRef).then(() => {
+              toast({ title: 'Gruppe erfolgreich gelöscht.' });
+              form.reset({ ...currentFormValues, name: '', deleteId: '' });
+            }).catch(() => {
+              const permissionError = new FirestorePermissionError({
+                path: `groups/${data.deleteId}`,
+                operation: 'delete',
+              });
+              errorEmitter.emit('permission-error', permissionError);
+            });
+        }
+      }
+    };
+
+    const getDeletableItems = () => {
+      if (watchType === 'class') {
+          return classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>);
+      }
+      if (watchType === 'team') {
+          return classes.map(c => {
+              const teamsOfClass = groups?.filter(g => g.type === 'team' && g.parentId === c.id);
+              if (!teamsOfClass || teamsOfClass.length === 0) return null;
+              return (
+                  <SelectGroup key={c.id}>
+                      <SelectLabel>{c.name}</SelectLabel>
+                      {teamsOfClass.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectGroup>
+              )
+          })
+      }
+      return [];
+    };
+    
+    if (isUserLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups]);
   
-  const form = useForm<GroupManagementValues>({
-    resolver: zodResolver(groupManagementSchema),
-    defaultValues: {
-      action: 'add',
-      type: 'class',
-      name: '',
-      parentId: '',
-      deleteId: '',
-    },
-  });
-  const watchAction = form.watch('action');
-  const watchType = form.watch('type');
-  const watchParentId = form.watch('parentId');
-
-  useEffect(() => {
-      const currentValues = form.getValues();
-      form.reset({
-          ...currentValues,
-          deleteId: '',
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchParentId, watchType, watchAction]);
-
-
-  const onManagementSubmit = async (data: GroupManagementValues) => {
-    if (!firestore) return;
-    const groupsRef = collection(firestore, 'groups');
-
-    const currentFormValues = form.getValues();
-
-    if (data.action === 'add') {
-      if (!data.name || data.name.trim() === '') {
-        form.setError('name', {
-          type: 'manual',
-          message: 'Name ist erforderlich.',
-        });
-        return;
-      }
-      if (data.type === 'team' && !data.parentId) {
-        form.setError('parentId', {
-          type: 'manual',
-          message: 'Eine Obergruppe ist erforderlich.',
-        });
-        return;
-      }
-      const newGroup: Omit<Group, 'id'> = {
-        name: data.name,
-        type: data.type,
-        ...(data.type === 'team' && { parentId: data.parentId }),
-      };
-      
-      addDoc(groupsRef, newGroup).then(() => {
-        toast({ title: 'Gruppe erfolgreich erstellt.' });
-        form.reset({ ...currentFormValues, name: '', deleteId: '' });
-      }).catch(() => {
-        const permissionError = new FirestorePermissionError({
-          path: 'groups',
-          operation: 'create',
-          requestResourceData: newGroup
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-
-    } else if (data.action === 'delete') {
-      if (!data.deleteId) {
-        form.setError('deleteId', {
-          type: 'manual',
-          message: 'Bitte wählen Sie ein Element zum Löschen aus.',
-        });
-        return;
-      }
-      
-      const docRef = doc(firestore, 'groups', data.deleteId);
-      const itemToDelete = groups?.find(g => g.id === data.deleteId);
-
-      if (itemToDelete?.type === 'class') {
-          const batch = writeBatch(firestore);
-          const teamQuery = query(collection(firestore, 'groups'), where('parentId', '==', data.deleteId));
-          getDocs(teamQuery).then(teamSnapshot => {
-            teamSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
-            batch.delete(docRef);
-            return batch.commit();
-          }).then(() => {
-            toast({ title: 'Obergruppe und alle zugehörigen Untergruppen gelöscht.' });
-            form.reset({ ...currentFormValues, name: '', deleteId: '' });
-          }).catch(() => {
-            const permissionError = new FirestorePermissionError({
-              path: `groups/${data.deleteId}`,
-              operation: 'delete',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-          });
-      } else {
-          deleteDoc(docRef).then(() => {
-            toast({ title: 'Gruppe erfolgreich gelöscht.' });
-            form.reset({ ...currentFormValues, name: '', deleteId: '' });
-          }).catch(() => {
-            const permissionError = new FirestorePermissionError({
-              path: `groups/${data.deleteId}`,
-              operation: 'delete',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-          });
-      }
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <Users2 className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
     }
-  };
-
-  const getDeletableItems = () => {
-    if (watchType === 'class') {
-        return classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>);
-    }
-    if (watchType === 'team') {
-        return classes.map(c => {
-            const teamsOfClass = groups?.filter(g => g.type === 'team' && g.parentId === c.id);
-            if (!teamsOfClass || teamsOfClass.length === 0) return null;
-            return (
-                <SelectGroup key={c.id}>
-                    <SelectLabel>{c.name}</SelectLabel>
-                    {teamsOfClass.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectGroup>
-            )
-        })
-    }
-    return [];
-  };
 
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
@@ -471,39 +501,4 @@ function AdminGruppenBearbeitenPageContent() {
     </div>
     </div>
   );
-}
-
-export default function AdminGruppenBearbeitenPage() {
-    const { isAdmin, isUserLoading } = useUser();
-
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-  
-    if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <Users2 className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
-    }
-  
-    return <AdminGruppenBearbeitenPageContent />;
 }

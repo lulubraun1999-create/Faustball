@@ -81,108 +81,138 @@ const newsArticleSchema = z.object({
 
 type NewsArticleFormValues = z.infer<typeof newsArticleSchema>;
 
-function AdminNewsPageContent() {
-  const { toast } = useToast();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
-  const firestore = useFirestore();
+export default function AdminNewsPage() {
+    const { toast } = useToast();
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
+    const firestore = useFirestore();
+    const { isAdmin, isUserLoading } = useUser();
 
-  const newsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'news') : null),
-    [firestore]
-  );
-  const { data: newsArticles, isLoading: isLoadingNews } =
-    useCollection<NewsArticle>(newsRef);
-
-  const form = useForm<NewsArticleFormValues>({
-    resolver: zodResolver(newsArticleSchema),
-    defaultValues: {
-      title: '',
-      content: '',
-      imageUrls: '',
-    },
-  });
-
-  const sortedNews = useMemo(() => {
-    if (!newsArticles) return [];
-    return [...newsArticles].sort(
-      (a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()
+    const newsRef = useMemoFirebase(
+      () => (firestore ? collection(firestore, 'news') : null),
+      [firestore]
     );
-  }, [newsArticles]);
+    const { data: newsArticles, isLoading: isLoadingNews } =
+      useCollection<NewsArticle>(newsRef);
 
-  const handleAddNew = () => {
-    form.reset();
-    setSelectedArticle(null);
-    setIsDialogOpen(true);
-  };
-
-  const handleEdit = (article: NewsArticle) => {
-    setSelectedArticle(article);
-    form.reset({
-      title: article.title,
-      content: article.content,
-      imageUrls: article.imageUrls.join('\n'),
+    const form = useForm<NewsArticleFormValues>({
+      resolver: zodResolver(newsArticleSchema),
+      defaultValues: {
+        title: '',
+        content: '',
+        imageUrls: '',
+      },
     });
-    setIsDialogOpen(true);
-  };
 
-  const onSubmit = async (data: NewsArticleFormValues) => {
-    if (!firestore) return;
+    const sortedNews = useMemo(() => {
+      if (!newsArticles) return [];
+      return [...newsArticles].sort(
+        (a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()
+      );
+    }, [newsArticles]);
 
-    const imageUrls = data.imageUrls
-      ? data.imageUrls.split('\n').filter((url) => url.trim() !== '')
-      : [];
-
-    const articleData = {
-      title: data.title,
-      content: data.content,
-      imageUrls: imageUrls,
+    const handleAddNew = () => {
+      form.reset();
+      setSelectedArticle(null);
+      setIsDialogOpen(true);
     };
 
-    try {
-      if (selectedArticle) {
-        // Update existing article
-        const docRef = doc(firestore, 'news', selectedArticle.id!);
-        await updateDoc(docRef, articleData);
-        toast({ title: 'Artikel erfolgreich aktualisiert.' });
-      } else {
-        // Create new article
-        await addDoc(collection(firestore, 'news'), {
-          ...articleData,
-          createdAt: serverTimestamp(),
-        });
-        toast({ title: 'Neuer Artikel erfolgreich erstellt.' });
-      }
-      form.reset();
-      setIsDialogOpen(false);
-      setSelectedArticle(null);
-    } catch (error) {
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: selectedArticle ? `news/${selectedArticle.id}` : 'news',
-          operation: selectedArticle ? 'update' : 'create',
-          requestResourceData: articleData,
-        })
-      );
-    }
-  };
+    const handleEdit = (article: NewsArticle) => {
+      setSelectedArticle(article);
+      form.reset({
+        title: article.title,
+        content: article.content,
+        imageUrls: article.imageUrls.join('\n'),
+      });
+      setIsDialogOpen(true);
+    };
 
-  const handleDeleteArticle = async (articleId: string) => {
-    if (!firestore) return;
-    try {
-      await deleteDoc(doc(firestore, 'news', articleId));
-      toast({ title: 'Artikel gelöscht.' });
-    } catch (error) {
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: `news/${articleId}`,
-          operation: 'delete',
-        })
-      );
+    const onSubmit = async (data: NewsArticleFormValues) => {
+      if (!firestore) return;
+
+      const imageUrls = data.imageUrls
+        ? data.imageUrls.split('\n').filter((url) => url.trim() !== '')
+        : [];
+
+      const articleData = {
+        title: data.title,
+        content: data.content,
+        imageUrls: imageUrls,
+      };
+
+      try {
+        if (selectedArticle) {
+          // Update existing article
+          const docRef = doc(firestore, 'news', selectedArticle.id!);
+          await updateDoc(docRef, articleData);
+          toast({ title: 'Artikel erfolgreich aktualisiert.' });
+        } else {
+          // Create new article
+          await addDoc(collection(firestore, 'news'), {
+            ...articleData,
+            createdAt: serverTimestamp(),
+          });
+          toast({ title: 'Neuer Artikel erfolgreich erstellt.' });
+        }
+        form.reset();
+        setIsDialogOpen(false);
+        setSelectedArticle(null);
+      } catch (error) {
+        errorEmitter.emit(
+          'permission-error',
+          new FirestorePermissionError({
+            path: selectedArticle ? `news/${selectedArticle.id}` : 'news',
+            operation: selectedArticle ? 'update' : 'create',
+            requestResourceData: articleData,
+          })
+        );
+      }
+    };
+
+    const handleDeleteArticle = async (articleId: string) => {
+      if (!firestore) return;
+      try {
+        await deleteDoc(doc(firestore, 'news', articleId));
+        toast({ title: 'Artikel gelöscht.' });
+      } catch (error) {
+        errorEmitter.emit(
+          'permission-error',
+          new FirestorePermissionError({
+            path: `news/${articleId}`,
+            operation: 'delete',
+          })
+        );
+      }
+    };
+    
+    if (isUserLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
     }
-  };
+  
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <Newspaper className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+    }
 
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
@@ -387,39 +417,4 @@ function AdminNewsPageContent() {
       </Card>
     </div>
   );
-}
-
-export default function AdminNewsPage() {
-    const { isAdmin, isUserLoading } = useUser();
-
-    if (isUserLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-  
-    if (!isAdmin) {
-       return (
-          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3 text-destructive">
-                  <Newspaper className="h-8 w-8" />
-                  <span className="text-2xl font-headline">Zugriff verweigert</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                  diesen Bereich zuzugreifen.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        );
-    }
-  
-    return <AdminNewsPageContent />;
 }
