@@ -31,7 +31,7 @@ import { AdminGuard } from '@/components/admin-guard';
 
 function VerwaltungMitgliederPageContent() {
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
+  const { isAdmin, isUserLoading } = useUser();
 
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
@@ -69,7 +69,7 @@ function VerwaltungMitgliederPageContent() {
   };
 
 
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || (isAdmin && (isLoadingMembers || isLoadingGroups));
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
