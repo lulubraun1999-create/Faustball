@@ -428,7 +428,7 @@ export default function AdminMitgliederPage() {
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                         <AlertDialogDescription>
                                             Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Benutzerkonto existiert weiterhin und der Benutzer muss ggf. separat gelöscht werden.
-                                        </Alanine>
+                                        </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Abbrechen</AlertDialogCancel>
