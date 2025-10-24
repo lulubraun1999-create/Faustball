@@ -27,17 +27,18 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(undefin
 // 2. Create the internal Data Provider component
 interface AdminDataProviderProps {
   children: ReactNode;
+  isAdmin: boolean; // Explicitly receive the admin status
 }
 
-function AdminDataProvider({ children }: AdminDataProviderProps) {
+function AdminDataProvider({ children, isAdmin }: AdminDataProviderProps) {
   const firestore = useFirestore();
 
-  // These hooks will only run when this component is rendered,
-  // which is only when the user is confirmed to be an admin by AdminGuard.
-  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  // IMPORTANT: The queries are now conditional on the `isAdmin` prop.
+  // If not an admin, the ref remains null, and no query is executed.
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const value = useMemo(() => ({
@@ -77,8 +78,11 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAdmin) {
-    return (
+  // The AdminDataProvider is now always rendered, but its internal queries are
+  // controlled by the `isAdmin` prop, preventing unauthorized access.
+  return (
+    <AdminDataProvider isAdmin={isAdmin}>
+      {!isAdmin ? (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
           <Card className="border-destructive/50">
             <CardHeader>
@@ -96,13 +100,9 @@ export function AdminGuard({ children }: { children: ReactNode }) {
             </CardContent>
           </Card>
         </div>
-      );
-  }
-
-  // If the user IS an admin, render the provider which will then fetch the data.
-  return (
-    <AdminDataProvider>
-        {children}
+      ) : (
+        children
+      )}
     </AdminDataProvider>
   );
 }
