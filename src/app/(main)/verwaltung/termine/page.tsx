@@ -8,10 +8,13 @@ import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore } from "@/firebase";
 import {
   doc,
-  updateDoc,
+  setDoc,
   serverTimestamp,
   Timestamp,
-  deleteField,
+  deleteDoc,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import {
   Appointment,
@@ -19,6 +22,7 @@ import {
   Group,
   Location,
   MemberProfile,
+  AppointmentResponse,
 } from "@/lib/types";
 import {
   Card,
@@ -59,7 +63,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
 import { collection } from "firebase/firestore";
-import { differenceInMilliseconds, addDays, addWeeks, addMonths } from "date-fns";
+import { differenceInMilliseconds, addDays, addWeeks, addMonths, format as formatDate } from "date-fns";
 import {
   Tooltip,
   TooltipContent,
@@ -71,8 +75,8 @@ import {
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
 type UnrolledAppointment = Appointment & {
-  virtualId?: string; 
-  originalStartDate?: Timestamp; 
+  instanceDate: Date; // The specific date of this virtual instance
+  instanceId: string; // A unique ID for this virtual instance
 };
 
 
@@ -87,9 +91,7 @@ export default function VerwaltungTerminePage() {
 
   // State für Absage-Dialog
   const [isAbsageDialogOpen, setIsAbsageDialogOpen] = useState(false);
-  const [currentAbsageAppId, setCurrentAbsageAppId] = useState<string | null>(
-    null,
-  );
+  const [currentAbsageApp, setCurrentAbsageApp] = useState<UnrolledAppointment | null>(null);
   const [absageGrund, setAbsageGrund] = useState("");
 
   // Daten abrufen
@@ -104,6 +106,22 @@ export default function VerwaltungTerminePage() {
       [firestore]
   );
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
+  
+  const responsesRef = useMemoFirebase(
+      () => auth.user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null,
+      [firestore, auth.user]
+  );
+  const { data: responses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
+
+  const responsesMap = useMemo(() => {
+    const map = new Map<string, AppointmentResponse>();
+    responses?.forEach(res => {
+      // Key by appointmentId and date string
+      map.set(`${res.appointmentId}_${res.date}`, res);
+    });
+    return map;
+  }, [responses]);
+
 
   const appointmentTypesRef = useMemoFirebase(
       () => collection(firestore, 'appointmentTypes'),
@@ -131,7 +149,8 @@ export default function VerwaltungTerminePage() {
     appointmentsLoading ||
     typesLoading ||
     groupsLoading ||
-    locationsLoading;
+    locationsLoading ||
+    responsesLoading;
 
   // Teams für Filter extrahieren
   const { teams, teamsMap } = useMemo(() => {
@@ -155,36 +174,34 @@ export default function VerwaltungTerminePage() {
     const now = new Date();
   
     appointments.forEach(app => {
-      if (!app.startDate || !app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
-        if (app.startDate && app.startDate.toDate() >= now) {
-          allEvents.push(app);
+      if (!app.startDate) return;
+
+      const unroll = (currentDate: Date) => {
+        if (currentDate >= now) {
+          const newStartDate = Timestamp.fromMillis(currentDate.getTime());
+          const instanceId = `${app.id}_${formatDate(currentDate, 'yyyy-MM-dd')}`;
+          
+          allEvents.push({
+            ...app,
+            startDate: newStartDate,
+            instanceDate: currentDate,
+            instanceId: instanceId,
+          });
         }
+      };
+
+      if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
+        unroll(app.startDate.toDate());
       } else {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1);
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-        const rsvpOffset = app.rsvpDeadline ? differenceInMilliseconds(app.startDate.toDate(), app.rsvpDeadline.toDate()) : null;
-  
+        
         let iter = 0;
         const MAX_ITERATIONS = 365;
   
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          if (currentDate >= now) {
-            const newStartDate = Timestamp.fromMillis(currentDate.getTime());
-            const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-            const newRsvpDeadline = rsvpOffset !== null ? Timestamp.fromMillis(currentDate.getTime() - rsvpOffset) : undefined;
-  
-            allEvents.push({
-              ...app,
-              id: `${app.id}-${currentDate.toISOString()}`,
-              virtualId: app.id,
-              startDate: newStartDate,
-              endDate: newEndDate,
-              rsvpDeadline: newRsvpDeadline,
-              originalStartDate: app.startDate
-            });
-          }
-  
+          unroll(currentDate);
+          
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
@@ -246,55 +263,85 @@ export default function VerwaltungTerminePage() {
       );
   }, [unrolledAppointments, selectedType, selectedTeam, profile]);
 
-  // Handler für Zusage / Unsicher (mit Toggle/Entfernen)
-  const handleSimpleResponse = async (
-    appointmentId: string,
-    newStatus: "zugesagt" | "unsicher",
-    currentStatus: UserResponseStatus | undefined,
+  const setResponse = async (
+    appointment: UnrolledAppointment,
+    newStatus: UserResponseStatus,
+    reason = ""
   ) => {
     if (!auth.user || !firestore) return;
-    const docId = appointmentId.includes('-') ? appointmentId.split('-')[0] : appointmentId;
-    const docRef = doc(firestore, "appointments", docId);
+    const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+    const responseId = `${appointment.id}_${auth.user.uid}_${dateString}`;
+    const docRef = doc(firestore, 'appointmentResponses', responseId);
+
+    const responseData: AppointmentResponse = {
+      id: responseId,
+      appointmentId: appointment.id,
+      userId: auth.user.uid,
+      date: dateString,
+      status: newStatus,
+      reason: reason,
+      timestamp: serverTimestamp() as Timestamp,
+    };
 
     try {
-      // Wenn der aktuelle Status dem neuen Status entspricht (Doppelklick), entferne die Antwort
-      if (newStatus === currentStatus) {
-        await updateDoc(docRef, {
-          [`responses.${auth.user.uid}`]: deleteField(),
-        });
-        toast({
-          title: "Antwort entfernt",
-          description: "Deine Teilnahme-Info wurde zurückgesetzt.",
-        });
-      } else {
-        // Normaler Klick: Setze den neuen Status
-        await updateDoc(docRef, {
-          [`responses.${auth.user.uid}`]: {
-            status: newStatus,
-            userId: auth.user.uid,
-            timestamp: serverTimestamp(),
-            reason: "", // Sicherstellen, dass der Grund bei Zusage/Unsicher gelöscht wird
-          },
-        });
-        toast({
-          title: "Antwort gespeichert",
-          description: `Deine Antwort (${newStatus}) wurde gespeichert.`,
-        });
-      }
-    } catch (error) {
-      console.error("Fehler beim Speichern der Antwort:", error);
+      await setDoc(docRef, responseData);
       toast({
-        title: "Fehler",
-        description: "Antwort konnte nicht gespeichert werden.",
-        variant: "destructive",
+        title: 'Antwort gespeichert',
+        description: `Deine Antwort (${newStatus}) wurde gespeichert.`,
+      });
+    } catch (error) {
+      console.error('Fehler beim Speichern der Antwort:', error);
+      toast({
+        title: 'Fehler',
+        description: 'Antwort konnte nicht gespeichert werden.',
+        variant: 'destructive',
       });
     }
   };
 
+  const deleteResponse = async (appointment: UnrolledAppointment) => {
+      if (!auth.user || !firestore) return;
+      const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+      const responseId = `${appointment.id}_${auth.user.uid}_${dateString}`;
+      const docRef = doc(firestore, 'appointmentResponses', responseId);
+
+      // Check if the document exists before trying to delete
+      const existingResponse = responsesMap.get(`${appointment.id}_${dateString}`);
+      if (!existingResponse) return; // Nothing to delete
+
+      try {
+          await deleteDoc(docRef);
+          toast({
+              title: 'Antwort entfernt',
+              description: 'Deine Teilnahme-Info wurde zurückgesetzt.',
+          });
+      } catch (error) {
+          console.error('Fehler beim Entfernen der Antwort:', error);
+          toast({
+              title: 'Fehler',
+              description: 'Antwort konnte nicht entfernt werden.',
+              variant: 'destructive',
+          });
+      }
+  };
+
+
+  const handleSimpleResponse = async (
+    appointment: UnrolledAppointment,
+    newStatus: "zugesagt" | "unsicher",
+    currentStatus: UserResponseStatus | undefined,
+  ) => {
+     if (newStatus === currentStatus) {
+      await deleteResponse(appointment);
+    } else {
+      await setResponse(appointment, newStatus);
+    }
+  };
+
   // Handler für Klick auf "Absage"
-  const handleAbsageClick = (appointmentId: string) => {
-    setCurrentAbsageAppId(appointmentId);
-    setAbsageGrund(""); // Grund zurücksetzen
+  const handleAbsageClick = (appointment: UnrolledAppointment) => {
+    setCurrentAbsageApp(appointment);
+    setAbsageGrund("");
     setIsAbsageDialogOpen(true);
   };
 
@@ -308,37 +355,14 @@ export default function VerwaltungTerminePage() {
       });
       return;
     }
-    if (!currentAbsageAppId || !auth.user || !firestore) return; // Sicherheitscheck
+    if (!currentAbsageApp) return;
 
-    const docId = currentAbsageAppId.includes('-') ? currentAbsageAppId.split('-')[0] : currentAbsageAppId;
-    const docRef = doc(firestore, "appointments", docId);
-
-    try {
-      await updateDoc(docRef, {
-        [`responses.${auth.user.uid}`]: {
-          status: "abgesagt",
-          userId: auth.user.uid,
-          timestamp: serverTimestamp(),
-          reason: absageGrund, // Grund hier direkt eintragen
-        },
-      });
-      toast({
-        title: "Antwort gespeichert",
-        description: "Deine Absage wurde gespeichert.",
-      });
-    } catch (error) {
-      console.error("Fehler beim Speichern der Absage:", error);
-      toast({
-        title: "Fehler",
-        description: "Absage konnte nicht gespeichert werden.",
-        variant: "destructive",
-      });
-    } finally {
-      // Dialog aufräumen
-      setIsAbsageDialogOpen(false);
-      setCurrentAbsageAppId(null);
-      setAbsageGrund(""); // Grund auch hier zurücksetzen
-    }
+    await setResponse(currentAbsageApp, "abgesagt", absageGrund);
+    
+    // Dialog aufräumen
+    setIsAbsageDialogOpen(false);
+    setCurrentAbsageApp(null);
+    setAbsageGrund("");
   };
 
   // Helper zum Nachschlagen von Namen
@@ -448,10 +472,11 @@ export default function VerwaltungTerminePage() {
                     // Geladene Termine
                     filteredAppointments.map((app) => {
                       const canRespond = isUserRelevantForAppointment(app, profile);
-                      // Den aktuellen Status des Benutzers für diesen Termin ermitteln
-                      const userResponse =
-                        auth.user && app.responses?.[auth.user.uid];
+                      
+                      const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
+                      const userResponse = responsesMap.get(`${app.id}_${dateString}`);
                       const userStatus = userResponse?.status;
+
 
                       const location = app.locationId ? locationsMap.get(app.locationId) : null;
                       const teamNames = app.visibility.type === 'all'
@@ -465,7 +490,7 @@ export default function VerwaltungTerminePage() {
                       const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
 
                       return (
-                        <TableRow key={app.id}>
+                        <TableRow key={app.instanceId}>
                           <TableCell className="font-medium">
                             {displayTitle}
                           </TableCell>
@@ -499,7 +524,7 @@ export default function VerwaltungTerminePage() {
                                   }
                                   onClick={() =>
                                     handleSimpleResponse(
-                                      app.id,
+                                      app,
                                       "zugesagt",
                                       userStatus,
                                     )
@@ -516,7 +541,7 @@ export default function VerwaltungTerminePage() {
                                   }
                                   onClick={() =>
                                     handleSimpleResponse(
-                                      app.id,
+                                      app,
                                       "unsicher",
                                       userStatus,
                                     )
@@ -531,7 +556,7 @@ export default function VerwaltungTerminePage() {
                                       ? "destructive"
                                       : "outline"
                                   }
-                                  onClick={() => handleAbsageClick(app.id)}
+                                  onClick={() => handleAbsageClick(app)}
                                 >
                                   Absage
                                 </Button>
@@ -561,7 +586,7 @@ export default function VerwaltungTerminePage() {
         </div>
       </TooltipProvider>
 
-      {/* Absage-Dialog (unverändert) */}
+      {/* Absage-Dialog */}
       <AlertDialog
         open={isAbsageDialogOpen}
         onOpenChange={setIsAbsageDialogOpen}

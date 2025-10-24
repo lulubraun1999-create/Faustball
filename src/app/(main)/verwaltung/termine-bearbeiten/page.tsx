@@ -88,8 +88,8 @@ import { Separator } from '@/components/ui/separator';
 type GroupWithTeams = Group & { teams: Group[] };
 
 type UnrolledAppointment = Appointment & {
-  virtualId?: string; 
-  originalStartDate?: Timestamp; 
+  instanceId: string;
+  instanceDate: Date;
 };
 
 const locationSchema = z.object({
@@ -220,7 +220,6 @@ function AdminTerminePageContent() {
       resolver: zodResolver(appointmentTypeSchema),
       defaultValues: { name: '' },
   });
-
   const watchAppointmentTypeId = appointmentForm.watch('appointmentTypeId');
   const watchVisibilityType = appointmentForm.watch('visibilityType');
   const watchIsAllDay = appointmentForm.watch('isAllDay');
@@ -232,32 +231,30 @@ function AdminTerminePageContent() {
     const allEvents: UnrolledAppointment[] = [];
   
     appointments.forEach(app => {
-      if (!app.startDate || !app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
-        allEvents.push(app);
+      if (!app.startDate) return;
+
+      const unroll = (currentDate: Date) => {
+        const instanceId = `${app.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+        allEvents.push({
+          ...app,
+          startDate: Timestamp.fromDate(currentDate),
+          instanceId: instanceId,
+          instanceDate: currentDate,
+        });
+      };
+
+      if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
+        unroll(app.startDate.toDate());
       } else {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1);
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-        const rsvpOffset = app.rsvpDeadline ? differenceInMilliseconds(app.startDate.toDate(), app.rsvpDeadline.toDate()) : null;
-  
+        
         let iter = 0;
         const MAX_ITERATIONS = 365;
   
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          const newStartDate = Timestamp.fromMillis(currentDate.getTime());
-          const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-          const newRsvpDeadline = rsvpOffset !== null ? Timestamp.fromMillis(currentDate.getTime() - rsvpOffset) : undefined;
-  
-          allEvents.push({
-            ...app,
-            id: `${app.id}-${currentDate.toISOString()}`,
-            virtualId: app.id,
-            startDate: newStartDate,
-            endDate: newEndDate,
-            rsvpDeadline: newRsvpDeadline,
-            originalStartDate: app.startDate
-          });
-  
+          unroll(currentDate);
+          
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
@@ -300,12 +297,19 @@ function AdminTerminePageContent() {
 
     const startDate = new Date(data.startDate);
     const endDate = data.endDate ? new Date(data.endDate) : null;
-    const rsvpDeadline = data.rsvpDeadline ? new Date(data.rsvpDeadline) : null;
+    let rsvpDeadline: Date | null = null;
+    if (data.rsvpDeadline) {
+      try {
+        const rsvpDate = new Date(data.rsvpDeadline);
+        if (isDateValid(rsvpDate)) {
+          rsvpDeadline = rsvpDate;
+        }
+      } catch (e) { /* ignore invalid date */ }
+    }
     const recurrenceEndDate = data.recurrenceEndDate ? new Date(data.recurrenceEndDate) : null;
 
     if (!isDateValid(startDate)) { appointmentForm.setError('startDate', { message: 'Ungültiges Startdatum.' }); setIsSubmitting(false); return; }
     if (endDate && !isDateValid(endDate)) { appointmentForm.setError('endDate', { message: 'Ungültiges Enddatum.' }); setIsSubmitting(false); return; }
-    if (rsvpDeadline && !isDateValid(rsvpDeadline)) { appointmentForm.setError('rsvpDeadline', { message: 'Ungültige Frist.' }); setIsSubmitting(false); return; }
     if (recurrenceEndDate && !isDateValid(recurrenceEndDate)) { appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Enddatum für Wiederholung.' }); setIsSubmitting(false); return; }
 
 
@@ -373,7 +377,7 @@ function AdminTerminePageContent() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    const originalId = appointment.virtualId || appointment.id;
+    const originalId = appointment.id.split('_')[0];
     const originalAppointment = appointments?.find(app => app.id === originalId);
     
     if (!originalAppointment) {
@@ -608,7 +612,7 @@ function AdminTerminePageContent() {
                     />
                   )}
 
-                  <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Rückmeldung bis (optional)</FormLabel><FormControl><Input type={watchIsAllDay ? "date" : "datetime-local"} {...field} /></FormControl><FormMessage /></FormItem> )}/>
+                  <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Rückmeldung bis (optional)</FormLabel><FormControl><Input type={watchIsAllDay ? "date" : "datetime-local"} {...field} max={appointmentForm.getValues("startDate")}/></FormControl><FormMessage /></FormItem> )}/>
 
                   <FormField control={appointmentForm.control} name="locationId" render={({ field }) => (
                     <FormItem>
@@ -795,9 +799,20 @@ function AdminTerminePageContent() {
                     const titleIsDefault = !isSonstiges && app.title === typeName;
                     const showTitle = app.title && (!titleIsDefault || isSonstiges);
                     const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
+                    const originalAppointment = appointments?.find(a => a.id === app.id.split('_')[0]);
+
+                    let rsvpDeadlineString = '-';
+                    if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                        const startMillis = originalAppointment.startDate.toMillis();
+                        const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                        const offset = startMillis - rsvpMillis;
+                        const instanceStartMillis = app.startDate.toMillis();
+                        const instanceRsvpMillis = instanceStartMillis - offset;
+                        rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm', { locale: de });
+                    }
                     
                     return (
-                      <TableRow key={app.id}>
+                      <TableRow key={app.instanceId}>
                         <TableCell className="font-medium max-w-[200px] truncate">{displayTitle}</TableCell>
                         <TableCell>
                           {app.startDate ? format(app.startDate.toDate(), app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm', { locale: de }) : 'N/A'}
@@ -807,7 +822,7 @@ function AdminTerminePageContent() {
                         <TableCell>{app.visibility.type === 'all' ? 'Alle' : (app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ') || '-')}</TableCell>
                         <TableCell>{app.locationId ? (locationsMap.get(app.locationId) || '-') : '-'}</TableCell>
                         <TableCell>{app.recurrence && app.recurrence !== 'none' ? `bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : '...'}` : '-'}</TableCell>
-                        <TableCell>{app.rsvpDeadline ? format(app.rsvpDeadline.toDate(), 'dd.MM.yy HH:mm', { locale: de }) : '-'}</TableCell>
+                        <TableCell>{rsvpDeadlineString}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" onClick={() => handleEditAppointment(app)}> <Edit className="h-4 w-4" /> </Button>
                           <AlertDialog>
@@ -816,13 +831,12 @@ function AdminTerminePageContent() {
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      Diese Aktion kann nicht rückgängig gemacht werden.
-                                      {app.virtualId ? " Hiermit wird die gesamte Serie gelöscht, zu der dieser Termin gehört." : ` Der Termin "${app.title}" wird dauerhaft gelöscht.`}
+                                      Diese Aktion kann nicht rückgängig gemacht werden. Hiermit wird die gesamte Serie gelöscht, zu der dieser Termin gehört.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteAppointment(app.virtualId || app.id)} className="bg-destructive hover:bg-destructive/90">
+                                    <AlertDialogAction onClick={() => handleDeleteAppointment(app.id.split('_')[0])} className="bg-destructive hover:bg-destructive/90">
                                         Löschen
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
@@ -848,9 +862,3 @@ export default function AdminTerminePage() {
     if (!isAdmin) { return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><ListTodo className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen...</p></CardContent></Card></div> ); }
     return <AdminTerminePageContent />;
 }
-
-    
-
-
-
-    

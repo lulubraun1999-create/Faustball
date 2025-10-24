@@ -78,14 +78,15 @@ export interface Location {
 }
 
 /**
- * Represents an event or appointment.
+ * Represents an event or appointment series.
  * Stored in Firestore under the /appointments collection.
+ * Individual responses are stored in the /appointmentResponses collection.
  */
 export interface Appointment {
   id: string;
   title: string;
-  startDate: Timestamp; // Start date and time
-  endDate?: Timestamp; // Optional end date and time
+  startDate: Timestamp; // Start date and time of the first occurrence
+  endDate?: Timestamp; // Optional end date and time of the first occurrence
   isAllDay?: boolean; // Indicates if it's an all-day event
   appointmentTypeId: string; // Reference to AppointmentType ID
   locationId?: string; // Optional reference to Location ID
@@ -96,11 +97,26 @@ export interface Appointment {
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'; // Recurrence rule
   recurrenceEndDate?: Timestamp; // End date for the recurrence
-  rsvpDeadline?: Timestamp; // Optional deadline for responses
+  rsvpDeadline?: Timestamp; // Optional deadline for responses relative to the first occurrence
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
   createdAt?: Timestamp; // Optional: Server timestamp when created
   lastUpdated?: Timestamp;
+}
+
+/**
+ * Represents a single user's response to a specific instance of an appointment.
+ * Stored in Firestore under the /appointmentResponses collection.
+ * Document ID is a composite key, e.g., `${appointmentId}_${userId}_${isoDateString}`.
+ */
+export interface AppointmentResponse {
+  id: string;
+  appointmentId: string; // ID of the parent Appointment
+  userId: string;
+  date: string; // ISO date string (YYYY-MM-DD) of the specific appointment instance
+  status: 'zugesagt' | 'abgesagt' | 'unsicher';
+  reason?: string; // Reason for absence
+  timestamp: Timestamp;
 }
 
 
