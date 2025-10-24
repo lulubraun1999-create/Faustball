@@ -66,7 +66,6 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
-  useUser,
 } from '@/firebase';
 import {
   collection,
@@ -88,7 +87,7 @@ import {
   Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Penalty, TreasuryTransaction, MemberProfile, Group } from '@/lib/types';
+import type { Penalty, TreasuryTransaction } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 

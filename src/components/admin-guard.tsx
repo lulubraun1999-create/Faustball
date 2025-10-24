@@ -40,15 +40,16 @@ export const useAdminData = () => {
 // 3. Create a component that fetches data only if the user is an admin
 function AdminDataProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
 
   // These refs are now created inside the provider, which is only rendered for admins
   const membersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
   );
   const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
   );
 
   const { data: members, isLoading: isLoadingMembers } =

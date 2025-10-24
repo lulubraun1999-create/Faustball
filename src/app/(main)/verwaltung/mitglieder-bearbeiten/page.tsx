@@ -241,7 +241,7 @@ function AdminMitgliederPageContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedMembers.length > 0 ? (
+                  {sortedMembers && sortedMembers.length > 0 ? (
                     sortedMembers.map((member) => {
                        const memberTeams = getTeamNamesForDisplay(member.teams);
                        return (
