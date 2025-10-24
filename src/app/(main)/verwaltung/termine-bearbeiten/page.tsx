@@ -562,74 +562,94 @@ function AdminTerminePageContent() {
                   
                   {/* Sichtbarkeit Teams */}
                   {watchVisibilityType === 'specificTeams' && (
-                    <FormField control={appointmentForm.control} name="visibleTeamIds" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mannschaften auswählen</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button variant="outline" role="combobox" className={cn("w-full justify-between h-auto min-h-10 py-2", !field.value?.length && "text-muted-foreground")}>
-                                <span className="flex flex-wrap gap-1">
-                                    {field.value?.length > 0
-                                    ? field.value.map(id => (<span key={id} className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">{teamsMap.get(id) || id}</span>))
-                                    : "Mannschaften auswählen"}
-                                </span>
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" onInteractOutside={(e) => e.preventDefault()} style={{ zIndex: 9999 }}>
-                             <ScrollArea className="h-48">
-                                <div className="p-2 space-y-1">
-                                  {isLoadingGroups ? <p className="text-sm text-muted-foreground p-2">Lade...</p> : groupedTeams.length > 0 ? (
-                                      groupedTeams.map((group: GroupWithTeams) => (
-                                          <div key={group.id} className="mb-2">
-                                              <h4 className="font-semibold text-sm mb-1.5 px-2">{group.name}</h4>
-                                              <div className="flex flex-col space-y-1 pl-4">
-                                                  {group.teams.map((team: Group) => (
-                                                      <FormField key={team.id} control={appointmentForm.control} name="visibleTeamIds"
-                                                        render={({ field: multiSelectField }) => (
-                                                          <FormItem key={team.id} className="flex flex-row items-center space-x-2 space-y-0 px-2 py-1.5 rounded-sm hover:bg-accent">
-                                                            <FormControl>
-                                                              <Checkbox
-                                                                checked={multiSelectField.value?.includes(team.id)}
-                                                                onCheckedChange={(checked) => {
-                                                                  const newValue = checked
-                                                                    ? [...(multiSelectField.value || []), team.id]
-                                                                    : (multiSelectField.value || []).filter((id) => id !== team.id);
-                                                                  multiSelectField.onChange(newValue);
-                                                                }}
-                                                              />
-                                                            </FormControl>
-                                                            <FormLabel 
-                                                              className="text-sm font-normal cursor-pointer w-full"
-                                                              onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                const newValue = multiSelectField.value?.includes(team.id)
-                                                                  ? (multiSelectField.value || []).filter(id => id !== team.id)
-                                                                  : [...(multiSelectField.value || []), team.id];
-                                                                multiSelectField.onChange(newValue);
-                                                              }}
-                                                            >
-                                                                {team.name}
-                                                            </FormLabel>
-                                                          </FormItem>
-                                                        )}
-                                                      />
-                                                  ))}
-                                              </div>
-                                          </div>
-                                      ))
-                                  ) : (
-                                      <p className="text-sm text-muted-foreground p-2 text-center">Keine Mannschaften erstellt.</p>
-                                  )}
-                                </div>
-                             </ScrollArea>
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField
+                        control={appointmentForm.control}
+                        name="visibleTeamIds"
+                        render={() => (
+                        <FormItem>
+                            <FormLabel>Mannschaften auswählen</FormLabel>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between h-auto min-h-10 py-2",
+                                        !appointmentForm.getValues("visibleTeamIds")?.length && "text-muted-foreground"
+                                    )}
+                                    >
+                                    <span className="flex flex-wrap gap-1">
+                                        {appointmentForm.getValues("visibleTeamIds")?.length > 0
+                                        ? appointmentForm.getValues("visibleTeamIds").map(id => (
+                                            <span key={id} className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">
+                                                {teamsMap.get(id) || id}
+                                            </span>
+                                            ))
+                                        : "Mannschaften auswählen"}
+                                    </span>
+                                    </Button>
+                                </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start"
+                                    onInteractOutside={(e) => e.preventDefault()}
+                                >
+                                <Controller
+                                    control={appointmentForm.control}
+                                    name="visibleTeamIds"
+                                    render={({ field }) => (
+                                    <ScrollArea className="h-48">
+                                        <div className="p-2 space-y-1">
+                                        {isLoadingGroups ? (
+                                            <p className="text-sm text-muted-foreground p-2">Lade...</p>
+                                        ) : groupedTeams.length > 0 ? (
+                                            groupedTeams.map((group) => (
+                                            <div key={group.id} className="mb-2">
+                                                <h4 className="font-semibold text-sm mb-1.5 px-2">{group.name}</h4>
+                                                <div className="flex flex-col space-y-1 pl-4">
+                                                {group.teams.map((team) => (
+                                                    <FormItem key={team.id} className="flex flex-row items-center space-x-2 space-y-0 px-2 py-1.5 rounded-sm hover:bg-accent">
+                                                    <FormControl>
+                                                        <Checkbox
+                                                        checked={field.value?.includes(team.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            const newValue = checked
+                                                            ? [...(field.value || []), team.id]
+                                                            : (field.value || []).filter((id) => id !== team.id);
+                                                            field.onChange(newValue);
+                                                        }}
+                                                        />
+                                                    </FormControl>
+                                                    <FormLabel className="text-sm font-normal cursor-pointer w-full"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            const newValue = field.value?.includes(team.id)
+                                                                ? (field.value || []).filter(id => id !== team.id)
+                                                                : [...(field.value || []), team.id];
+                                                            field.onChange(newValue);
+                                                        }}
+                                                    >
+                                                        {team.name}
+                                                    </FormLabel>
+                                                    </FormItem>
+                                                ))}
+                                                </div>
+                                            </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground p-2 text-center">Keine Mannschaften erstellt.</p>
+                                        )}
+                                        </div>
+                                    </ScrollArea>
+                                    )}
+                                />
+                                </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
                   )}
 
                   {/* Rückmeldefrist */}
@@ -819,7 +839,6 @@ function AdminTerminePageContent() {
               </TableBody>
             </Table>
           </div>
-          )}
         </CardContent>
       </Card>
     </div>
