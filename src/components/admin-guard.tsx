@@ -38,14 +38,12 @@ export const useAdminData = () => {
   return context;
 };
 
-// 3. Create a component that fetches data only if the user is an admin
-function AdminDataProvider({ children }: { children: ReactNode }) {
+// 3. Create a component that fetches data only if it receives an explicit isAdmin prop
+function AdminDataProvider({ children, isAdmin }: { children: ReactNode, isAdmin: boolean }) {
   const firestore = useFirestore();
-  // We can safely use isAdmin here because AdminGuard ensures this component only renders for admins.
-  const { isAdmin } = useUser();
 
-  // CRITICAL FIX: The query is ONLY created if firestore is available AND the user is an admin.
-  // If not, it remains null, and useCollection will not execute a query.
+  // CRITICAL FIX: The query is ONLY created if firestore is available AND the isAdmin prop is explicitly true.
+  // This prevents the query from being created during the initial loading state or for non-admins.
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -60,8 +58,8 @@ function AdminDataProvider({ children }: { children: ReactNode }) {
   const { data: groups, isLoading: isLoadingGroups } =
     useCollection<Group>(groupsRef);
 
-  // The overall loading state depends on whether the queries are active.
-  const isLoading = (isAdmin && (isLoadingMembers || isLoadingGroups));
+  // The overall loading state depends on whether the queries are active (i.e., isAdmin is true).
+  const isLoading = isAdmin && (isLoadingMembers || isLoadingGroups);
 
   const value = useMemo(
     () => ({
@@ -86,7 +84,7 @@ function AdminDataProvider({ children }: { children: ReactNode }) {
 }
 
 
-// 4. Update AdminGuard to use the new provider
+// 4. Update AdminGuard to use the new provider logic correctly
 export function AdminGuard({ children }: { children: ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
@@ -120,6 +118,6 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // Only if the user is verified as an admin, render the provider which fetches the data.
-  return <AdminDataProvider>{children}</AdminDataProvider>;
+  // Only if the user is verified as an admin, render the provider and explicitly pass isAdmin={true}.
+  return <AdminDataProvider isAdmin={true}>{children}</AdminDataProvider>;
 }
