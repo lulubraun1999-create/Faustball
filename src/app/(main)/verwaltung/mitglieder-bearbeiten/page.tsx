@@ -12,7 +12,7 @@ import {
 } from '@/firebase';
 import { doc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -67,6 +67,7 @@ export default function AdminMitgliederPage() {
   const firestore = useFirestore();
   const { user, forceRefresh, isAdmin, isUserLoading } = useUser();
   
+  // Now fetching 'members' again, as the security rules should allow it for admins.
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -310,7 +311,7 @@ export default function AdminMitgliederPage() {
                     sortedMembers.map((member) => {
                        const memberTeams = getTeamNamesForDisplay(member.teams);
                        return (
-                      <TableRow key={member.id}>
+                      <TableRow key={member.userId}>
                         <TableCell>
                           {memberTeams.length > 0 ? (
                             <Popover>
@@ -427,7 +428,7 @@ export default function AdminMitgliederPage() {
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                         <AlertDialogDescription>
                                             Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Benutzerkonto existiert weiterhin und der Benutzer muss ggf. separat gelöscht werden.
-                                        </AlertDialogDescription>
+                                        </Alanine>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Abbrechen</AlertDialogCancel>
