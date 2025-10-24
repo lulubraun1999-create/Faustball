@@ -6,7 +6,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import type { MemberProfile, Group } from '@/lib/types';
-import { collection } from 'firebase/firestore';
+import { collection, CollectionReference, DocumentData, Firestore } from 'firebase/firestore';
 
 // 1. Context für die Admin-Daten erstellen
 interface AdminDataContextType {
@@ -29,33 +29,29 @@ export const useAdminData = () => {
 // 3. AdminDataProvider, der die Daten nur für Admins lädt
 function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const firestore = useFirestore();
-    const { isAdmin } = useUser();
-
+    
     // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
+    // Wichtig: Die useCollection-Hooks sind jetzt hier, sicher innerhalb des Providers.
     const membersRef = useMemoFirebase(
-        () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-        [firestore, isAdmin]
+        () => (firestore ? collection(firestore, 'members') : null),
+        [firestore]
     );
     const groupsRef = useMemoFirebase(
-        () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-        [firestore, isAdmin]
+        () => (firestore ? collection(firestore, 'groups') : null),
+        [firestore]
     );
 
     const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-    // Die Gesamtladezeit ist die Ladezeit beider Abfragen, aber nur wenn der Benutzer Admin ist.
-    const isLoading = isAdmin ? (isLoadingMembers || isLoadingGroups) : false;
+    // Die Gesamtladezeit ist die Ladezeit beider Abfragen.
+    const isLoading = isLoadingMembers || isLoadingGroups;
     const members = membersData || [];
     const groups = groupsData || [];
     
     return (
         <AdminDataContext.Provider value={{ members, groups, isLoading }}>
-            {isLoading ? (
-                 <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                 </div>
-            ) : children}
+            {children}
         </AdminDataContext.Provider>
     );
 }

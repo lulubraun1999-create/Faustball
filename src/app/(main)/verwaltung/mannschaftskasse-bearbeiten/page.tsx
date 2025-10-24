@@ -113,7 +113,6 @@ function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { members, groups, isLoading: isLoadingAdminData } = useAdminData(); 
-  const { isAdmin } = useUser();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
