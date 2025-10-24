@@ -12,7 +12,7 @@ import {
 } from '@/firebase';
 import { doc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -67,6 +67,12 @@ export default function AdminMitgliederPage() {
   const firestore = useFirestore();
   const { user, forceRefresh, isAdmin, isUserLoading } = useUser();
   
+  const usersRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
+    [firestore, isAdmin]
+  );
+  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
+
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -79,15 +85,24 @@ export default function AdminMitgliederPage() {
   );
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
+  const combinedData = useMemo(() => {
+    if (!users || !members) return [];
+    const memberMap = new Map(members.map(m => [m.userId, m]));
+    return users.map(user => ({
+      ...user,
+      ...(memberMap.get(user.id) || {}),
+    }));
+  }, [users, members]);
+
   const sortedMembers = useMemo(() => {
-    if (!members) return [];
-    return [...members].sort((a, b) => {
+    if (!combinedData) return [];
+    return [...combinedData].sort((a, b) => {
         const lastNameA = a.lastName || '';
         const lastNameB = b.lastName || '';
         if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -95,7 +110,7 @@ export default function AdminMitgliederPage() {
         }
         return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [members]);
+  }, [combinedData]);
 
   const { teams, groupedTeams } = useMemo(() => {
     const allGroups = groups || [];
@@ -111,7 +126,7 @@ export default function AdminMitgliederPage() {
   }, [groups]);
 
   const handleTeamsChange = async (member: MemberProfile, teamId: string, isChecked: boolean) => {
-    if (!firestore || !member) return;
+    if (!firestore || !member || !member.userId) return;
   
     const { userId, firstName, lastName, position, role } = member;
     setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
@@ -163,6 +178,8 @@ export default function AdminMitgliederPage() {
     if (!memberToEdit || !newRole || !firestore) return;
   
     const { userId, firstName, lastName, role: currentRole } = memberToEdit;
+    
+    if (!userId) return;
   
     setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
   
@@ -197,7 +214,7 @@ export default function AdminMitgliederPage() {
   };
 
   const handleDeleteMember = async (member: MemberProfile) => {
-    if(!firestore) return;
+    if(!firestore || !member.userId) return;
     const { userId, firstName, lastName } = member;
     setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: true }));
 
@@ -308,7 +325,7 @@ export default function AdminMitgliederPage() {
                     sortedMembers.map((member) => {
                        const memberTeams = getTeamNamesForDisplay(member.teams);
                        return (
-                      <TableRow key={member.userId}>
+                      <TableRow key={member.id}>
                         <TableCell>
                           {memberTeams.length > 0 ? (
                             <Popover>
@@ -361,7 +378,7 @@ export default function AdminMitgliederPage() {
                                                                 id={`team-${member.userId}-${team.id}`}
                                                                 checked={member.teams?.includes(team.id)}
                                                                 onCheckedChange={(checked) => {
-                                                                    handleTeamsChange(member, team.id, !!checked);
+                                                                    handleTeamsChange(member as MemberProfile, team.id, !!checked);
                                                                 }}
                                                             />
                                                             <label htmlFor={`team-${member.userId}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
@@ -430,7 +447,7 @@ export default function AdminMitgliederPage() {
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Abbrechen</AlertDialogCancel>
                                         <AlertDialogAction
-                                            onClick={() => handleDeleteMember(member)}
+                                            onClick={() => handleDeleteMember(member as MemberProfile)}
                                             className="bg-destructive hover:bg-destructive/90"
                                         >
                                             Löschen

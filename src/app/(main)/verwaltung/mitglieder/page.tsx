@@ -21,12 +21,18 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
+import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 
 
 export default function VerwaltungMitgliederPage() {
   const { isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
+
+  const usersRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
+    [firestore, isAdmin]
+  );
+  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
 
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
@@ -42,12 +48,21 @@ export default function VerwaltungMitgliederPage() {
 
 
   // The query is only active when isAdmin is true, so isLoading is accurate.
-  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups;
+
+  const combinedData = useMemo(() => {
+    if (!users || !members) return [];
+    const memberMap = new Map(members.map(m => [m.userId, m]));
+    return users.map(user => ({
+      ...user,
+      ...(memberMap.get(user.id) || {}),
+    }));
+  }, [users, members]);
 
   const sortedMembers = useMemo(() => {
-    if (!members) return [];
+    if (!combinedData) return [];
     
-    return [...members].sort((a, b) => {
+    return [...combinedData].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -55,7 +70,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [members]);
+  }, [combinedData]);
 
   const teamsMap = useMemo(() => {
     if (!groups) return new Map();
@@ -132,7 +147,7 @@ export default function VerwaltungMitgliederPage() {
                     sortedMembers.map((member) => {
                       const memberTeams = getTeamNames(member.teams);
                       return (
-                      <TableRow key={member.userId}>
+                      <TableRow key={member.id}>
                         <TableCell>
                           {memberTeams.length > 0 ? (
                             <Popover>
