@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -66,7 +66,6 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
-  useUser,
 } from '@/firebase';
 import {
   collection,

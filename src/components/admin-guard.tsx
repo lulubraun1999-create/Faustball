@@ -6,7 +6,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import type { MemberProfile, Group } from '@/lib/types';
-import { collection, CollectionReference, DocumentData, Firestore } from 'firebase/firestore';
+import { collection, Firestore } from 'firebase/firestore';
 
 // 1. Context für die Admin-Daten erstellen
 interface AdminDataContextType {
@@ -29,22 +29,22 @@ export const useAdminData = () => {
 // 3. AdminDataProvider, der die Daten nur für Admins lädt
 function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const firestore = useFirestore();
-    
+    const { isAdmin } = useUser(); // We need isAdmin to decide if we should fetch
+
     // Lade Mitglieder und Gruppen nur, wenn der Benutzer Admin ist
-    // Wichtig: Die useCollection-Hooks sind jetzt hier, sicher innerhalb des Providers.
+    // Wichtig: Die Hooks werden nur mit einer gültigen Referenz aktiv, wenn isAdmin true ist.
     const membersRef = useMemoFirebase(
-        () => (firestore ? collection(firestore, 'members') : null),
-        [firestore]
+        () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+        [firestore, isAdmin]
     );
     const groupsRef = useMemoFirebase(
-        () => (firestore ? collection(firestore, 'groups') : null),
-        [firestore]
+        () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+        [firestore, isAdmin]
     );
 
     const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-    // Die Gesamtladezeit ist die Ladezeit beider Abfragen.
     const isLoading = isLoadingMembers || isLoadingGroups;
     const members = membersData || [];
     const groups = groupsData || [];
