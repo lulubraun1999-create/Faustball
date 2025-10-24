@@ -1,204 +1,167 @@
-/**
- * @fileoverview Firestore Security Rules for FaustApp.
- *
- * Core Philosophy:
- * This ruleset enforces a combination of user-ownership and admin-controlled access.
- * User-specific data is protected using the Ownership pattern, while global data
- * is primarily controlled by administrators.  Schema validation is relaxed to
- * facilitate rapid prototyping.
- *
- * Data Structure:
- * - /users/{userId}:  User authentication and profile data, accessible only by the user or admins.
- * - /members/{memberId}:  Editable user profile information, accessible only by the user or admins.
- * - /groups/{groupId}: Represents teams or classes; publicly readable, admin-writeable.
- * - /groups/{groupId}/members/{memberId}: Denormalized member list for quick access.
- * - /appointments/{appointmentId}: Publicly readable, admin-writeable events.
- * - /polls/{pollId}: Publicly readable (or team-specific), admin-writeable polls.
- * - /news/{newsId}: Publicly readable, admin-writeable news articles.
- * - /treasury/{transactionId}:  Team financial transactions; admin-writeable only.
- * - /penalties/{penaltyId}: Team penalty rules; admin-writeable only.
- *
- * Key Security Decisions:
- * - No user listing is allowed to prevent email harvesting.
- * - Public read access is granted for non-sensitive data like appointments and news.
- * - Admin privileges are not explicitly defined in this initial version and should be
- *   added based on a role-based system in a production environment.
- *
- * Denormalization for Authorization:
- * - No denormalization is performed in this version due to admin-centric write security and public read access on most collections.
- *   Future iterations could benefit from denormalizing team membership into polls for more efficient read rules if polls are not globally visible.
- *
- * Structural Segregation:
- * - No explicit segregation is used.  Admin-controlled write access largely negates the need for private/public collections.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      // Prüft, ob der Benutzer den Admin-Claim im Token hat
+      return request.auth.token.admin == true;
+    }
+
     /**
-     * @description Controls access to user accounts. Only the user or an admin can read/write.
+     * @description Controls access to user accounts.
+     * Only the user or an admin can read/write.
      * @path /users/{userId}
-     * @allow (create) User with matching UID creates their own document.
-     * @allow (get, update, delete) User with matching UID reads/modifies their own document.
-     * @deny (create) User tries to create a document with a mismatched UID.
-     * @deny (get, update, delete) User tries to read/modify another user's document.
-     * @principle Enforces document ownership for user data and prevents unauthorized access.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
-      function isExistingOwner(userId) {
-        return isOwner(userId) && exists(resource);
+      function isCreatingOwnDocument(userId) {
+         // Stellt sicher, dass die ID des Dokuments mit der UID des Erstellers übereinstimmt
+         // und dass die Rolle beim Erstellen standardmäßig 'user' ist (oder nicht gesetzt)
+        return request.auth.uid == userId &&
+               request.resource.data.id == userId &&
+               (request.resource.data.role == 'user' || !('role' in request.resource.data));
       }
+       function isUpdatingOwnDocument(userId) {
+         // Erlaubt dem Besitzer, sein eigenes Dokument zu aktualisieren,
+         // aber NICHT die Rolle zu ändern (außer Admins).
+         return isOwner(userId) && !('role' in request.resource.data);
+       }
+       function isAdminUpdatingDocument(userId) {
+         // Erlaubt Admins, jedes Benutzerdokument zu aktualisieren (einschließlich der Rolle).
+         return isAdmin();
+       }
+       function isOwnerDeleting(userId) {
+          // Stellt sicher, dass der Benutzer nur sein eigenes Dokument löschen kann
+          return isOwner(userId);
+       }
 
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if false; // Niemand darf alle Benutzer auflisten
+      allow create: if isSignedIn() && isCreatingOwnDocument(userId);
+      allow update: if isSignedIn() && (isUpdatingOwnDocument(userId) || isAdminUpdatingDocument(userId));
+      allow delete: if isSignedIn() && (isOwnerDeleting(userId) || isAdmin()); // Admins dürfen auch löschen
     }
 
     /**
-     * @description Controls access to member profiles.  Only the user or an admin can read/write.
+     * @description Controls access to member profiles.
+     * Only the user or an admin can read/write/list.
      * @path /members/{memberId}
-     * @allow (create) User with matching UID creates their own profile.
-     * @allow (get, update, delete) User with matching UID reads/modifies their own profile.
-     * @deny (create) User tries to create a profile with a mismatched UID.
-     * @deny (get, update, delete) User tries to read/modify another user's profile.
-     * @principle Enforces document ownership for profile data and prevents unauthorized access.
      */
     match /members/{memberId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
+        // isOwner prüft, ob die Auth-UID mit der ID des Dokuments übereinstimmt (für get)
+        // oder mit der userId im bestehenden Dokument (für update/delete)
         function isOwner(memberId) {
-            return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
+            return request.auth.uid == memberId;
+        }
+         function isExistingOwner(memberId) {
+           // Überprüft, ob der Benutzer der Eigentümer des vorhandenen Dokuments ist
+           return isSignedIn() && exists(/databases/$(database)/documents/members/$(memberId)) && resource.data.userId == request.auth.uid;
+         }
+        function isCreatingOwnProfile(memberId) {
+            // Stellt sicher, dass die Dokument-ID mit der userId im Request übereinstimmt
+            // und dass diese userId die des angemeldeten Benutzers ist.
+            return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid;
         }
 
-        function isCreatingOwnProfile() {
-            return request.auth.uid == request.resource.data.userId;
-        }
-        function isExistingOwner(memberId) {
-          return isOwner(memberId) && exists(resource);
-        }
-
-        allow get: if isSignedIn() && isOwner(memberId);
-        allow list: if false;
-        allow create: if isSignedIn() && isCreatingOwnProfile();
-        allow update: if isSignedIn() && isOwner(memberId);
-        allow delete: if isSignedIn() && isOwner(memberId);
+        // Lesen: Erlaubt für den Besitzer ODER einen Admin
+        allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        // Auflisten: Erlaubt NUR für Admins
+        allow list: if isSignedIn() && isAdmin(); // << KORRIGIERT
+        // Erstellen: Erlaubt für den Benutzer, der sein eigenes Profil erstellt
+        allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
+        // Aktualisieren/Löschen: Erlaubt NUR für den Besitzer ODER einen Admin
+        allow update, delete: if isSignedIn() && (isExistingOwner(memberId) || isAdmin());
     }
 
        /**
-        * @description Controls access to the list of group members. This is publicly readable to allow quick access to team rosters. Admins can write.
+        * @description Controls access to the list of group members.
+        * Publicly readable, admin-writeable.
         * @path /groups/{groupId}/members/{memberId}
-        * @allow (get, list) Anyone can read group members.
-        * @deny (create, update, delete) Only admins can modify group members.
-        * @principle Allows public access for team roster lookup, but restricts writes to admins only.
         */
       match /groups/{groupId}/members/{memberId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
+        // Lesen ist öffentlich erlaubt
         allow get, list: if true;
-        allow create, update, delete: if isAdmin();
-    }
+        // Schreiben (Erstellen, Ändern, Löschen) nur für Admins
+        allow write: if isSignedIn() && isAdmin();
+      }
 
     /**
-     * @description Controls access to appointments.  Publicly readable, admin-writeable.
+     * @description Controls access to appointments. Publicly readable, admin-writeable.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Anyone can read appointments.
-     * @deny (create, update, delete) Only admins can modify appointments.
-     * @principle Allows public visibility of appointments, but restricts modifications to admins.
      */
     match /appointments/{appointmentId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if isAdmin();
+        allow get, list: if true; // Jeder kann lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins können schreiben
     }
 
     /**
-     * @description Controls access to groups (classes and teams). Publicly readable, admin-writeable.
+     * @description Controls access to groups (classes and teams).
+     * Publicly readable, admin-writeable.
      * @path /groups/{groupId}
-     * @allow (get, list) Anyone can read groups.
-     * @deny (create, update, delete) Only admins can modify groups.
-     * @principle Allows public visibility of groups, but restricts modifications to admins.
      */
     match /groups/{groupId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if isAdmin();
+        allow get, list: if true; // Jeder kann lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins können schreiben
     }
 
     /**
-     * @description Controls access to polls. Publicly readable, admin-writeable.  Visibility can be configured to specific teams.
+     * @description Controls access to polls.
+     * Read access depends on poll visibility. Admin-writeable.
+     * Users can update votes.
      * @path /polls/{pollId}
-     * @allow (get, list) Anyone can read polls.
-     * @deny (create, update, delete) Only admins can modify polls.
-     * @principle Allows public visibility of polls, but restricts modifications to admins.  Team-specific visibility not yet enforced.
      */
     match /polls/{pollId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
+        // Hilfsfunktion: Prüft, ob der Benutzer Mitglied mindestens eines Teams ist, für das die Umfrage sichtbar ist
+        function isMemberOfVisibleTeam() {
+          let memberTeams = get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams;
+          // Prüft auf Überschneidung zwischen den Teams des Mitglieds und den sichtbaren Teams der Umfrage
+          return resource.data.visibility.teamIds.hasAny(memberTeams);
         }
-        allow get, list: if true;
-        allow create, update, delete: if isAdmin();
+
+        // Lesen: Erlaubt, wenn die Umfrage für alle sichtbar ist ODER der Benutzer Mitglied eines sichtbaren Teams ist
+        allow get, list: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeam());
+
+        // Erstellen/Löschen: Nur Admins
+        allow create, delete: if isSignedIn() && isAdmin();
+
+        // Aktualisieren: Admins dürfen alles ändern. Benutzer dürfen nur das 'votes'-Array ändern (ihre Stimme abgeben/zurückziehen)
+        allow update: if isSignedIn() && (
+                      isAdmin() ||
+                      (isMemberOfVisibleTeam() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']))
+                    );
     }
 
     /**
      * @description Controls access to news articles. Publicly readable, admin-writeable.
      * @path /news/{newsId}
-     * @allow (get, list) Anyone can read news articles.
-     * @deny (create, update, delete) Only admins can modify news articles.
-     * @principle Allows public visibility of news articles, but restricts modifications to admins.
      */
     match /news/{newsId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if isAdmin();
+        allow get, list: if true; // Jeder kann lesen
+        allow write: if isSignedIn() && isAdmin(); // Nur Admins können schreiben
     }
 
     /**
-     * @description Controls access to treasury transactions.  Admin-writeable only.
+     * @description Controls access to treasury transactions. Admin access only.
      * @path /treasury/{transactionId}
-     * @deny (get, list, create, update, delete) Only admins can access treasury transactions.
-     * @principle Restricts all access to treasury data to admins only.
      */
     match /treasury/{transactionId} {
-        function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
-        allow get, list, create, update, delete: if isAdmin();
+        // Nur Admins dürfen lesen und schreiben
+        allow read, write: if isSignedIn() && isAdmin();
     }
 
     /**
-     * @description Controls access to penalty rules. Admin-writeable only.
+     * @description Controls access to penalty rules. Admin access only.
      * @path /penalties/{penaltyId}
-     * @deny (get, list, create, update, delete) Only admins can access penalty rules.
-     * @principle Restricts all access to penalty rules to admins only.
      */
     match /penalties/{penaltyId} {
-       function isAdmin() {
-            // Replace with your actual admin check (e.g., from a /users/{uid} document)
-            return false;
-        }
-        allow get, list, create, update, delete: if isAdmin();
+       // Nur Admins dürfen lesen und schreiben
+       allow read, write: if isSignedIn() && isAdmin();
     }
   }
 }

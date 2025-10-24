@@ -166,23 +166,29 @@ export default function AdminKassePage() {
   const onAddTransaction = async (data: TransactionFormValues) => {
     if (!firestore || !selectedTeamId) return;
 
-    let finalAmount = data.amount;
-    let finalDescription = data.description;
+    let finalAmount: number;
+    let finalDescription: string;
     let finalStatus: 'paid' | 'unpaid' = 'paid';
-
+    
     if (data.type === 'penalty') {
-      if (!data.memberId || !data.penaltyId) {
-        toast({ variant: 'destructive', title: 'Fehler', description: 'Für eine Strafe müssen Mitglied und Strafenart ausgewählt werden.' });
-        return;
-      }
-      const penalty = penalties?.find(p => p.id === data.penaltyId);
-      const member = membersOfSelectedTeam.find(m => m.userId === data.memberId)
-      if (!penalty || !member) return;
-      finalAmount = -penalty.amount;
-      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
-      finalStatus = 'unpaid';
-    } else if (data.type === 'expense') {
-      finalAmount = -data.amount;
+        if (!data.memberId || !data.penaltyId) {
+            toast({ variant: 'destructive', title: 'Fehler', description: 'Für eine Strafe müssen Mitglied und Strafenart ausgewählt werden.' });
+            return;
+        }
+        const penalty = penalties?.find(p => p.id === data.penaltyId);
+        const member = membersOfSelectedTeam.find(m => m.userId === data.memberId);
+        if (!penalty || !member) return;
+
+        finalAmount = -penalty.amount;
+        finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
+        finalStatus = 'unpaid';
+    } else {
+        finalDescription = data.description;
+        if (data.type === 'expense') {
+            finalAmount = -Math.abs(data.amount);
+        } else {
+            finalAmount = Math.abs(data.amount);
+        }
     }
     
     const treasuryCollectionRef = collection(firestore, 'treasury');
@@ -192,14 +198,14 @@ export default function AdminKassePage() {
       amount: finalAmount,
       date: serverTimestamp(),
       type: data.type,
-      memberId: data.memberId,
+      ...(data.type === 'penalty' && { memberId: data.memberId }),
       status: finalStatus,
     };
     
     addDoc(treasuryCollectionRef, txData).then(() => {
       toast({ title: 'Transaktion hinzugefügt' });
       setIsTxDialogOpen(false);
-      transactionForm.reset({type: 'income', description: '', amount: 0});
+      transactionForm.reset({type: 'income', description: '', amount: 0, memberId: undefined, penaltyId: undefined});
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'treasury', operation: 'create', requestResourceData: txData })));
   };
 
