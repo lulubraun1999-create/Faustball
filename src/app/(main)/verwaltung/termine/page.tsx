@@ -117,10 +117,10 @@ export default function VerwaltungTerminePage() {
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
   const responsesRef = useMemoFirebase(
-      () => collection(firestore, 'appointmentResponses'),
-      [firestore]
+    () => auth.user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null,
+    [firestore, auth.user]
   );
-  const { data: allResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
+  const { data: userResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
 
   const allMembersRef = useMemoFirebase(
     () => collection(firestore, 'members'),
@@ -128,13 +128,21 @@ export default function VerwaltungTerminePage() {
   );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
+  const allResponsesRef = useMemoFirebase(
+      () => collection(firestore, 'appointmentResponses'),
+      [firestore]
+  );
+  const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
+
+
   const responsesMap = useMemo(() => {
     const map = new Map<string, AppointmentResponse>();
-    allResponses?.forEach(res => {
-      map.set(`${res.appointmentId}_${res.date}_${res.userId}`, res);
+    userResponses?.forEach(res => {
+      map.set(`${res.appointmentId}_${res.date}`, res);
     });
     return map;
-  }, [allResponses]);
+  }, [userResponses]);
+
 
   const membersMap = useMemo(() => {
     const map = new Map<string, MemberProfile>();
@@ -171,15 +179,25 @@ export default function VerwaltungTerminePage() {
     groupsLoading ||
     locationsLoading ||
     responsesLoading ||
-    membersLoading;
+    membersLoading ||
+    allResponsesLoading;
 
-  // Teams für Filter extrahieren
-  const { teams, teamsMap } = useMemo(() => {
-      const allGroups = groups || [];
-      const teams = allGroups.filter((g: Group) => g.type === 'team');
-      const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
-      return { teams, teamsMap };
-  }, [groups]);
+  // Teams für Filter extrahieren, nur die, in denen der User Mitglied ist
+  const { userTeams, teamsMap } = useMemo(() => {
+    const allGroups = groups || [];
+    const teamsMap = new Map(allGroups.filter(g => g.type === 'team').map((t: Group) => [t.id, t.name]));
+    
+    if (!profile || !profile.teams) {
+        return { userTeams: [], teamsMap };
+    }
+
+    const userTeamIds = new Set(profile.teams);
+    const userTeams = allGroups.filter(g => g.type === 'team' && userTeamIds.has(g.id))
+                               .sort((a, b) => a.name.localeCompare(b.name));
+
+    return { userTeams, teamsMap };
+  }, [groups, profile]);
+  
   
   // Locations-Map
    const locationsMap = useMemo(() => {
@@ -192,23 +210,19 @@ export default function VerwaltungTerminePage() {
   const unrolledAppointments = useMemo(() => {
     if (!appointments) return [];
     const allEvents: UnrolledAppointment[] = [];
-    const now = new Date();
   
     appointments.forEach(app => {
       if (!app.startDate) return;
 
       const unroll = (currentDate: Date) => {
-        if (currentDate >= now) {
-          const newStartDate = Timestamp.fromMillis(currentDate.getTime());
-          const instanceId = `${app.id}_${formatDate(currentDate, 'yyyy-MM-dd')}`;
-          
-          allEvents.push({
-            ...app,
-            startDate: newStartDate,
-            instanceDate: currentDate,
-            instanceId: instanceId,
-          });
-        }
+        const instanceId = `${app.id}_${formatDate(currentDate, 'yyyy-MM-dd')}`;
+        
+        allEvents.push({
+          ...app,
+          startDate: Timestamp.fromDate(currentDate),
+          instanceDate: currentDate,
+          instanceId: instanceId,
+        });
       };
 
       if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
@@ -234,7 +248,7 @@ export default function VerwaltungTerminePage() {
         }
       }
     });
-    return allEvents;
+    return allEvents.filter(event => event.instanceDate >= new Date());
   }, [appointments]);
 
 
@@ -291,7 +305,7 @@ export default function VerwaltungTerminePage() {
   ) => {
     if (!auth.user || !firestore) return;
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responseId = `${appointment.id}_${auth.user.uid}_${dateString}`;
+    const responseId = `${appointment.id}_${dateString}_${auth.user.uid}`;
     const docRef = doc(firestore, 'appointmentResponses', responseId);
 
     const responseData: AppointmentResponse = {
@@ -323,7 +337,7 @@ export default function VerwaltungTerminePage() {
   const deleteResponse = async (appointment: UnrolledAppointment) => {
       if (!auth.user || !firestore) return;
       const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-      const responseId = `${appointment.id}_${auth.user.uid}_${dateString}`;
+      const responseId = `${appointment.id}_${dateString}_${auth.user.uid}`;
       const docRef = doc(firestore, 'appointmentResponses', responseId);
 
       const existingResponse = allResponses?.find(r => r.id === responseId);
@@ -361,7 +375,7 @@ export default function VerwaltungTerminePage() {
   // Handler für Klick auf "Absage"
   const handleAbsageClick = (appointment: UnrolledAppointment) => {
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const userResponse = allResponses?.find(r => r.id === `${appointment.id}_${auth.user?.uid}_${dateString}`);
+    const userResponse = allResponses?.find(r => r.id === `${appointment.id}_${dateString}_${auth.user?.uid}`);
     setCurrentAbsageApp(appointment);
     setAbsageGrund(userResponse?.reason || "");
     setIsAbsageDialogOpen(true);
@@ -392,9 +406,10 @@ export default function VerwaltungTerminePage() {
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
   // Formatiert Datum und Uhrzeit
-  const formatDateTime = (timestamp: Timestamp) => {
+  const formatDateTime = (timestamp: Timestamp | Date) => {
     if (!timestamp) return "Kein Datum";
-    return timestamp.toDate().toLocaleString("de-DE", {
+    const date = timestamp instanceof Timestamp ? timestamp.toDate() : timestamp;
+    return date.toLocaleString("de-DE", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -440,14 +455,14 @@ export default function VerwaltungTerminePage() {
               <Select
                 value={selectedTeam}
                 onValueChange={setSelectedTeam}
-                disabled={isLoading}
+                disabled={isLoading || userTeams.length === 0}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Nach Mannschaft filtern..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle Mannschaften</SelectItem>
-                  {teams.map((team) => (
+                  <SelectItem value="all">Alle meine Mannschaften</SelectItem>
+                  {userTeams.map((team) => (
                     <SelectItem key={team.id} value={team.id}>
                       {team.name}
                     </SelectItem>
@@ -463,7 +478,9 @@ export default function VerwaltungTerminePage() {
                   <TableRow>
                     <TableHead>Titel</TableHead>
                     <TableHead>Datum & Uhrzeit</TableHead>
+                    <TableHead>Mannschaft</TableHead>
                     <TableHead>Ort</TableHead>
+                    <TableHead>Rückmeldung</TableHead>
                     <TableHead>Teilnehmer</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
@@ -478,6 +495,12 @@ export default function VerwaltungTerminePage() {
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-5 w-28" />
+                        </TableCell>
+                         <TableCell>
+                          <Skeleton className="h-5 w-28" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-24" />
                         </TableCell>
                         <TableCell>
                           <Skeleton className="h-5 w-24" />
@@ -496,7 +519,7 @@ export default function VerwaltungTerminePage() {
                       const canRespond = isUserRelevantForAppointment(app, profile);
                       
                       const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
-                      const userResponse = allResponses?.find(r => r.id === `${app.id}_${auth.user?.uid}_${dateString}`);
+                      const userResponse = responsesMap.get(`${app.id}_${dateString}`);
                       const userStatus = userResponse?.status;
 
 
@@ -507,6 +530,18 @@ export default function VerwaltungTerminePage() {
                       const titleIsDefault = !isSonstiges && app.title === typeName;
                       const showTitle = app.title && (!titleIsDefault || isSonstiges);
                       const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
+                      
+                      const originalAppointment = appointments?.find(a => a.id === app.id);
+                      let rsvpDeadlineString = '-';
+                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                            const startMillis = originalAppointment.startDate.toMillis();
+                            const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                            const offset = startMillis - rsvpMillis;
+                            const instanceStartMillis = app.instanceDate.getTime();
+                            const instanceRsvpMillis = instanceStartMillis - offset;
+                            rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                        }
+
 
                       return (
                         <TableRow key={app.instanceId}>
@@ -514,7 +549,12 @@ export default function VerwaltungTerminePage() {
                             {displayTitle}
                           </TableCell>
                           <TableCell>
-                            {formatDateTime(app.startDate as Timestamp)} Uhr
+                            {formatDateTime(app.startDate)} Uhr
+                          </TableCell>
+                           <TableCell>
+                            {app.visibility.type === 'all' 
+                              ? 'Alle' 
+                              : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                           </TableCell>
                           <TableCell>
                             {location ? (
@@ -530,6 +570,7 @@ export default function VerwaltungTerminePage() {
                               '-'
                             )}
                           </TableCell>
+                          <TableCell>{rsvpDeadlineString}</TableCell>
                           <TableCell>
                             <ResponseStatus
                               appointment={app}
@@ -599,7 +640,7 @@ export default function VerwaltungTerminePage() {
                   ) : (
                     // Keine Termine gefunden
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">
+                      <TableCell colSpan={7} className="text-center">
                         Keine Termine gefunden, die den Filtern entsprechen.
                       </TableCell>
                     </TableRow>
