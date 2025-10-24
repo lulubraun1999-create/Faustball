@@ -420,17 +420,33 @@ export default function VerwaltungTerminePage() {
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
   // Formatiert Datum und Uhrzeit
-  const formatDateTime = (timestamp: Timestamp | Date) => {
-    if (!timestamp) return "Kein Datum";
-    const date = timestamp instanceof Timestamp ? timestamp.toDate() : timestamp;
-    return date.toLocaleString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+    const formatDateTime = (app: Appointment) => {
+    if (!app.startDate) return "Kein Datum";
+    const start = app.startDate instanceof Timestamp ? app.startDate.toDate() : app.startDate;
+    const end = app.endDate instanceof Timestamp ? app.endDate.toDate() : app.endDate;
+
+    const dateFormat = "dd.MM.yyyy";
+    const timeFormat = "HH:mm";
+    
+    let datePart = formatDate(start, dateFormat, { locale: de });
+    
+    if (app.isAllDay) {
+        if (end) {
+             const endDatePart = formatDate(end, dateFormat, { locale: de });
+             if (datePart !== endDatePart) {
+                 return `${datePart} - ${endDatePart}`;
+             }
+        }
+        return datePart;
+    }
+    
+    let timePart = `${formatDate(start, timeFormat, { locale: de })}`;
+    if (end) {
+        timePart += ` - ${formatDate(end, timeFormat, { locale: de })}`;
+    }
+    
+    return `${datePart} ${timePart} Uhr`;
+};
 
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
 
@@ -440,7 +456,7 @@ export default function VerwaltungTerminePage() {
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
-            <CardTitle>Termin Verwaltung</CardTitle>
+            <CardTitle>Termine</CardTitle>
             <CardDescription>
               Hier kannst du alle anstehenden Termine einsehen und deine Teilnahme
               bestätigen oder absagen.
@@ -544,7 +560,7 @@ export default function VerwaltungTerminePage() {
                                                 {displayTitle}
                                             </TableCell>
                                             <TableCell>
-                                                {formatDateTime(app.startDate)} Uhr
+                                                {formatDateTime(app)}
                                             </TableCell>
                                             <TableCell>
                                                 {app.visibility.type === 'all' 
@@ -780,5 +796,7 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
+
+    
 
     
