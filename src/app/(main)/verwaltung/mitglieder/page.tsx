@@ -106,7 +106,7 @@ export default function VerwaltungMitgliederPage() {
         </CardHeader>
         <CardContent>
             <div className="overflow-x-auto">
-              {isLoadingMembers || isLoadingGroups ? (
+              {isLoading ? (
                  <div className="flex h-64 items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                  </div>

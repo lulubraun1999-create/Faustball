@@ -131,7 +131,11 @@ export default function AdminKassePage() {
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
   
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);
-  const membersOfSelectedTeam = useMemo(() => members?.filter(m => m.teams?.includes(selectedTeamId || '')) || [], [members, selectedTeamId]);
+  const membersOfSelectedTeam = useMemo(() => {
+    if (!members || !selectedTeamId) return [];
+    return members.filter(m => m.teams?.includes(selectedTeamId));
+  }, [members, selectedTeamId]);
+  
   const totalBalance = useMemo(() => transactions?.reduce((acc, tx) => acc + tx.amount, 0) || 0, [transactions]);
 
   // Forms
@@ -214,8 +218,8 @@ export default function AdminKassePage() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoadingInitial = isUserLoading || isLoadingMembers || isLoadingGroups;
-  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
+  const isLoadingInitial = isUserLoading || isLoadingGroups;
+  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions || isLoadingMembers);
 
     if (isUserLoading) {
         return (
