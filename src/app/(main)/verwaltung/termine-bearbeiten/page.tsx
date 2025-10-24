@@ -220,7 +220,6 @@ function AdminTerminePageContent() {
       defaultValues: { name: '' },
   });
 
-  const watchAppointmentTypeId = appointmentForm.watch('appointmentTypeId');
   const watchVisibilityType = appointmentForm.watch('visibilityType');
   const watchIsAllDay = appointmentForm.watch('isAllDay');
   const watchRecurrence = appointmentForm.watch('recurrence');
@@ -229,47 +228,40 @@ function AdminTerminePageContent() {
   const unrolledAppointments = useMemo(() => {
     if (!appointments) return [];
     const allEvents: UnrolledAppointment[] = [];
-
+  
     appointments.forEach(app => {
-      if (app.recurrence === 'none' || !app.recurrenceEndDate || !app.startDate) {
+      if (!app.startDate || app.recurrence === 'none' || !app.recurrenceEndDate) {
         allEvents.push(app);
       } else {
         let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1); 
+        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1);
         const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-
+        const rsvpOffset = app.rsvpDeadline ? differenceInMilliseconds(app.startDate.toDate(), app.rsvpDeadline.toDate()) : null;
+  
         let iter = 0;
-        const MAX_ITERATIONS = 365; 
-
+        const MAX_ITERATIONS = 365;
+  
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          const newStartDate = Timestamp.fromDate(currentDate);
+          const newStartDate = Timestamp.fromMillis(currentDate.getTime());
           const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-          
+          const newRsvpDeadline = rsvpOffset !== null ? Timestamp.fromMillis(currentDate.getTime() - rsvpOffset) : undefined;
+  
           allEvents.push({
             ...app,
             id: `${app.id}-${currentDate.toISOString()}`,
             virtualId: app.id,
             startDate: newStartDate,
             endDate: newEndDate,
+            rsvpDeadline: newRsvpDeadline,
             originalStartDate: app.startDate
           });
-
+  
           switch (app.recurrence) {
-            case 'daily':
-              currentDate = addDays(currentDate, 1);
-              break;
-            case 'weekly':
-              currentDate = addWeeks(currentDate, 1);
-              break;
-            case 'bi-weekly':
-              currentDate = addWeeks(currentDate, 2);
-              break;
-            case 'monthly':
-              currentDate = addMonths(currentDate, 1);
-              break;
-            default:
-              currentDate = addDays(recurrenceEndDate, 1);
-              break;
+            case 'daily': currentDate = addDays(currentDate, 1); break;
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            default: currentDate = addDays(recurrenceEndDate, 1); break;
           }
           iter++;
         }
@@ -539,60 +531,59 @@ function AdminTerminePageContent() {
                   <FormField control={appointmentForm.control} name="visibilityType" render={({ field }) => ( <FormItem><FormLabel>Sichtbar für</FormLabel><Select onValueChange={(value) => { field.onChange(value); if (value === 'all') appointmentForm.setValue('visibleTeamIds', []); }} value={field.value}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="all">Alle Mitglieder</SelectItem> <SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem> </SelectContent> </Select><FormMessage /></FormItem> )}/>
                   
                   {watchVisibilityType === 'specificTeams' && (
-                     <FormField
-                        control={appointmentForm.control}
-                        name="visibleTeamIds"
-                        render={() => (
-                           <FormItem>
-                              <FormLabel>Mannschaften auswählen</FormLabel>
-                               <ScrollArea className="h-40 w-full rounded-md border p-4">
-                                {isLoadingGroups ? (
-                                    <div className="flex items-center justify-center h-full">
-                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                    </div>
-                                ) : groupedTeams.length > 0 ? (
-                                    groupedTeams.map((group) => (
-                                        <div key={group.id} className="mb-2">
-                                            <h4 className="mb-1.5 border-b px-2 pb-1 text-sm font-semibold">{group.name}</h4>
-                                            <div className="flex flex-col space-y-1 pl-2">
-                                                {group.teams.map((team) => (
-                                                    <FormField
-                                                        key={team.id}
-                                                        control={appointmentForm.control}
-                                                        name="visibleTeamIds"
-                                                        render={({ field }) => {
-                                                            return (
-                                                                <FormItem
-                                                                    key={team.id}
-                                                                    className="flex flex-row items-start space-x-3 space-y-0"
-                                                                >
-                                                                    <FormControl>
-                                                                        <Checkbox
-                                                                            checked={field.value?.includes(team.id)}
-                                                                            onCheckedChange={(checked) => {
-                                                                                return checked
-                                                                                    ? field.onChange([...field.value, team.id])
-                                                                                    : field.onChange(field.value?.filter((value) => value !== team.id));
-                                                                            }}
-                                                                        />
-                                                                    </FormControl>
-                                                                    <FormLabel className="font-normal">{team.name}</FormLabel>
-                                                                </FormItem>
-                                                            );
-                                                        }}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="p-2 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>
-                                )}
-                               </ScrollArea>
-                              <FormMessage />
-                           </FormItem>
-                        )}
-                      />
+                    <FormField
+                      control={appointmentForm.control}
+                      name="visibleTeamIds"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Mannschaften auswählen</FormLabel>
+                          <ScrollArea className="h-40 w-full rounded-md border p-4">
+                            {isLoadingGroups ? (
+                              <div className="flex items-center justify-center h-full">
+                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                              </div>
+                            ) : groupedTeams.length > 0 ? (
+                              groupedTeams.map((group) => (
+                                <div key={group.id} className="mb-2">
+                                  <h4 className="mb-1.5 border-b px-2 pb-1 text-sm font-semibold">{group.name}</h4>
+                                  <div className="flex flex-col space-y-1 pl-2">
+                                    {group.teams.map((team) => (
+                                      <FormField
+                                        key={team.id}
+                                        control={appointmentForm.control}
+                                        name="visibleTeamIds"
+                                        render={({ field }) => (
+                                          <FormItem
+                                            key={team.id}
+                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                          >
+                                            <FormControl>
+                                              <Checkbox
+                                                checked={field.value?.includes(team.id)}
+                                                onCheckedChange={(checked) => {
+                                                  const newValue = checked
+                                                    ? [...field.value, team.id]
+                                                    : field.value?.filter((value) => value !== team.id);
+                                                  field.onChange(newValue);
+                                                }}
+                                              />
+                                            </FormControl>
+                                            <FormLabel className="font-normal">{team.name}</FormLabel>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="p-2 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>
+                            )}
+                          </ScrollArea>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
 
                   <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Rückmeldung bis (optional)</FormLabel><FormControl><Input type={watchIsAllDay ? "date" : "datetime-local"} {...field} /></FormControl><FormMessage /></FormItem> )}/>

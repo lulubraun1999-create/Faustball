@@ -153,44 +153,44 @@ export default function VerwaltungTerminePage() {
     if (!appointments) return [];
     const allEvents: UnrolledAppointment[] = [];
     const now = new Date();
-
+  
     appointments.forEach(app => {
-      const originalStartDate = app.startDate.toDate();
-
-      // Nur Termine anzeigen, deren erste Instanz noch nicht zu lange her ist oder in der Zukunft liegt
-      if (app.recurrence === 'none' || !app.recurrenceEndDate) {
-        if (originalStartDate >= now) {
+      if (!app.startDate || app.recurrence === 'none' || !app.recurrenceEndDate) {
+        if (app.startDate && app.startDate.toDate() >= now) {
           allEvents.push(app);
         }
       } else {
-        let currentDate = originalStartDate;
-        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1); 
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), originalStartDate) : 0;
-
+        let currentDate = app.startDate.toDate();
+        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1);
+        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
+        const rsvpOffset = app.rsvpDeadline ? differenceInMilliseconds(app.startDate.toDate(), app.rsvpDeadline.toDate()) : null;
+  
         let iter = 0;
         const MAX_ITERATIONS = 365;
-
+  
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= now) {
-              const newStartDate = Timestamp.fromDate(currentDate);
-              const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-              
-              allEvents.push({
-                ...app,
-                id: `${app.id}-${currentDate.toISOString()}`, // Eindeutige ID für die virtuelle Instanz
-                virtualId: app.id,
-                startDate: newStartDate,
-                endDate: newEndDate,
-                originalStartDate: app.startDate
-              });
+            const newStartDate = Timestamp.fromMillis(currentDate.getTime());
+            const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
+            const newRsvpDeadline = rsvpOffset !== null ? Timestamp.fromMillis(currentDate.getTime() - rsvpOffset) : undefined;
+  
+            allEvents.push({
+              ...app,
+              id: `${app.id}-${currentDate.toISOString()}`,
+              virtualId: app.id,
+              startDate: newStartDate,
+              endDate: newEndDate,
+              rsvpDeadline: newRsvpDeadline,
+              originalStartDate: app.startDate
+            });
           }
-
+  
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
             case 'monthly': currentDate = addMonths(currentDate, 1); break;
-            default: currentDate = addDays(recurrenceEndDate, 1); break; // Stop loop
+            default: currentDate = addDays(recurrenceEndDate, 1); break;
           }
           iter++;
         }
@@ -232,6 +232,11 @@ export default function VerwaltungTerminePage() {
             return false;
           }
         }
+        // Nur relevante Termine für den Benutzer anzeigen
+        if (!isUserRelevantForAppointment(app, profile)) {
+          return false;
+        }
+
         return true;
       })
       .sort(
@@ -239,7 +244,7 @@ export default function VerwaltungTerminePage() {
           (a.startDate as Timestamp).toMillis() -
           (b.startDate as Timestamp).toMillis(),
       );
-  }, [unrolledAppointments, selectedType, selectedTeam]);
+  }, [unrolledAppointments, selectedType, selectedTeam, profile]);
 
   // Handler für Zusage / Unsicher (mit Toggle/Entfernen)
   const handleSimpleResponse = async (
@@ -588,3 +593,5 @@ export default function VerwaltungTerminePage() {
     </>
   );
 }
+
+    
