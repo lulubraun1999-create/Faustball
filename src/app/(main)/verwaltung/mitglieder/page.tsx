@@ -19,7 +19,7 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { MemberProfile, Group } from '@/lib/types';
 
@@ -28,17 +28,12 @@ export default function VerwaltungMitgliederPage() {
   const { isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
 
-  // Conditionally create the reference only if the user is an admin.
-  const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
-  );
+  // The collection reference is now created directly.
+  // The useCollection hook internally waits for `firestore` and `isAdmin` to be ready.
+  const membersRef = (firestore && isAdmin) ? collection(firestore, 'members') : null;
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
-  );
+  const groupsRef = (firestore && isAdmin) ? collection(firestore, 'groups') : null;
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
 
