@@ -15,6 +15,7 @@ import {
   query,
   where,
   getDocs,
+  collection,
 } from "firebase/firestore";
 import {
   Appointment,
@@ -46,6 +47,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -62,14 +70,15 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
-import { collection } from "firebase/firestore";
-import { differenceInMilliseconds, addDays, addWeeks, addMonths, format as formatDate } from "date-fns";
+import { addDays, addMonths, addWeeks, format as formatDate } from "date-fns";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Users } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
@@ -108,19 +117,30 @@ export default function VerwaltungTerminePage() {
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
   const responsesRef = useMemoFirebase(
-      () => auth.user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null,
-      [firestore, auth.user]
+      () => collection(firestore, 'appointmentResponses'),
+      [firestore]
   );
-  const { data: responses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
+  const { data: allResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
+
+  const allMembersRef = useMemoFirebase(
+    () => collection(firestore, 'members'),
+    [firestore]
+  );
+  const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
   const responsesMap = useMemo(() => {
     const map = new Map<string, AppointmentResponse>();
-    responses?.forEach(res => {
-      // Key by appointmentId and date string
-      map.set(`${res.appointmentId}_${res.date}`, res);
+    allResponses?.forEach(res => {
+      map.set(`${res.appointmentId}_${res.date}_${res.userId}`, res);
     });
     return map;
-  }, [responses]);
+  }, [allResponses]);
+
+  const membersMap = useMemo(() => {
+    const map = new Map<string, MemberProfile>();
+    allMembers?.forEach(mem => map.set(mem.userId, mem));
+    return map;
+  }, [allMembers]);
 
 
   const appointmentTypesRef = useMemoFirebase(
@@ -150,7 +170,8 @@ export default function VerwaltungTerminePage() {
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
-    responsesLoading;
+    responsesLoading ||
+    membersLoading;
 
   // Teams für Filter extrahieren
   const { teams, teamsMap } = useMemo(() => {
@@ -284,7 +305,7 @@ export default function VerwaltungTerminePage() {
     };
 
     try {
-      await setDoc(docRef, responseData);
+      await setDoc(docRef, responseData, { merge: true });
       toast({
         title: 'Antwort gespeichert',
         description: `Deine Antwort (${newStatus}) wurde gespeichert.`,
@@ -305,8 +326,7 @@ export default function VerwaltungTerminePage() {
       const responseId = `${appointment.id}_${auth.user.uid}_${dateString}`;
       const docRef = doc(firestore, 'appointmentResponses', responseId);
 
-      // Check if the document exists before trying to delete
-      const existingResponse = responsesMap.get(`${appointment.id}_${dateString}`);
+      const existingResponse = allResponses?.find(r => r.id === responseId);
       if (!existingResponse) return; // Nothing to delete
 
       try {
@@ -340,8 +360,10 @@ export default function VerwaltungTerminePage() {
 
   // Handler für Klick auf "Absage"
   const handleAbsageClick = (appointment: UnrolledAppointment) => {
+    const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+    const userResponse = allResponses?.find(r => r.id === `${appointment.id}_${auth.user?.uid}_${dateString}`);
     setCurrentAbsageApp(appointment);
-    setAbsageGrund("");
+    setAbsageGrund(userResponse?.reason || "");
     setIsAbsageDialogOpen(true);
   };
 
@@ -442,7 +464,7 @@ export default function VerwaltungTerminePage() {
                     <TableHead>Titel</TableHead>
                     <TableHead>Datum & Uhrzeit</TableHead>
                     <TableHead>Ort</TableHead>
-                    <TableHead>Sichtbar für</TableHead>
+                    <TableHead>Teilnehmer</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -474,14 +496,11 @@ export default function VerwaltungTerminePage() {
                       const canRespond = isUserRelevantForAppointment(app, profile);
                       
                       const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
-                      const userResponse = responsesMap.get(`${app.id}_${dateString}`);
+                      const userResponse = allResponses?.find(r => r.id === `${app.id}_${auth.user?.uid}_${dateString}`);
                       const userStatus = userResponse?.status;
 
 
                       const location = app.locationId ? locationsMap.get(app.locationId) : null;
-                      const teamNames = app.visibility.type === 'all'
-                        ? 'Alle'
-                        : app.visibility.teamIds.map(id => teamsMap.get(id) || 'Unbekannt').join(', ');
 
                       const typeName = getTypeName(app.appointmentTypeId);
                       const isSonstiges = typeName === 'Sonstiges';
@@ -511,7 +530,14 @@ export default function VerwaltungTerminePage() {
                               '-'
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[200px] truncate">{teamNames}</TableCell>
+                          <TableCell>
+                            <ResponseStatus
+                              appointment={app}
+                              allMembers={allMembers || []}
+                              allResponses={allResponses || []}
+                              groups={groups || []}
+                            />
+                          </TableCell>
                           <TableCell className="text-right">
                             {canRespond && auth.user ? (
                               <div className="flex justify-end gap-2">
@@ -617,5 +643,103 @@ export default function VerwaltungTerminePage() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+// Sub-component to display response status and details
+interface ResponseStatusProps {
+  appointment: UnrolledAppointment;
+  allMembers: MemberProfile[];
+  allResponses: AppointmentResponse[];
+  groups: Group[];
+}
+
+const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers, allResponses, groups }) => {
+  const { relevantMembers, responsesForInstance, accepted, rejected, unsure, pending } = useMemo(() => {
+    const relevantMemberIds = new Set<string>();
+    const visibility = appointment.visibility;
+
+    if (visibility.type === 'all') {
+      allMembers.forEach(m => relevantMemberIds.add(m.userId));
+    } else {
+      visibility.teamIds.forEach(teamId => {
+        allMembers.forEach(member => {
+          if (member.teams?.includes(teamId)) {
+            relevantMemberIds.add(member.userId);
+          }
+        });
+      });
+    }
+
+    const relevantMembers = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter(Boolean) as MemberProfile[];
+    const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.id && r.date === dateString);
+
+    const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
+    const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');
+    const unsure = responsesForInstance.filter(r => r.status === 'unsicher');
+
+    const respondedUserIds = new Set(responsesForInstance.map(r => r.userId));
+    const pending = relevantMembers.filter(m => !respondedUserIds.has(m.userId));
+
+    return { relevantMembers, responsesForInstance, accepted, rejected, unsure, pending };
+  }, [appointment, allMembers, allResponses, groups]);
+  
+  const membersMap = useMemo(() => new Map(allMembers.map(m => [m.userId, m])), [allMembers]);
+
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="link" className="h-auto p-0">
+          <Users className="mr-2 h-4 w-4" />
+          {accepted.length} / {relevantMembers.length}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Teilnehmerliste</DialogTitle>
+        </DialogHeader>
+        <ScrollArea className="max-h-[60vh]">
+        <div className="space-y-4 p-4">
+          <div>
+            <h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3>
+            <ul className="list-disc pl-5 text-sm">
+              {accepted.map(r => (
+                <li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3>
+            <ul className="list-disc pl-5 text-sm">
+                {rejected.map(r => (
+                    <li key={r.userId}>
+                        {membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}
+                        {r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}
+                    </li>
+                ))}
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3>
+            <ul className="list-disc pl-5 text-sm">
+              {unsure.map(r => (
+                <li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold text-muted-foreground mb-2">Ausstehend ({pending.length})</h3>
+            <ul className="list-disc pl-5 text-sm">
+              {pending.map(m => (
+                <li key={m.userId}>{m.firstName} {m.lastName}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
 }
