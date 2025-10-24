@@ -98,13 +98,31 @@ const penaltySchema = z.object({
   amount: z.coerce.number().positive('Betrag muss eine positive Zahl sein.'),
 });
 
-const transactionSchema = z.object({
-  type: z.enum(['income', 'expense', 'penalty']),
-  description: z.string().min(1, 'Beschreibung ist erforderlich.'),
-  amount: z.coerce.number().min(0.01, 'Betrag ist erforderlich.'),
-  memberId: z.string().optional(),
-  penaltyId: z.string().optional(),
-});
+// Verbessertes Zod Schema für Transaktionen
+const transactionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('income'),
+    description: z.string().min(1, 'Beschreibung ist erforderlich.'),
+    amount: z.coerce.number().positive('Betrag muss positiv sein.'),
+    memberId: z.string().optional(), // Optional für Einnahme/Ausgabe
+    penaltyId: z.string().optional(), // Optional für Einnahme/Ausgabe
+  }),
+  z.object({
+    type: z.literal('expense'),
+    description: z.string().min(1, 'Beschreibung ist erforderlich.'),
+    amount: z.coerce.number().positive('Betrag muss positiv sein.'),
+    memberId: z.string().optional(),
+    penaltyId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('penalty'),
+    description: z.string().optional(), // Wird automatisch generiert
+    amount: z.coerce.number().optional(), // Wird automatisch aus Strafe geholt
+    memberId: z.string().min(1, 'Mitglied ist erforderlich.'), // Erforderlich für Strafe
+    penaltyId: z.string().min(1, 'Strafenart ist erforderlich.'), // Erforderlich für Strafe
+  }),
+]);
+
 
 type PenaltyFormValues = z.infer<typeof penaltySchema>;
 type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -121,6 +139,11 @@ export default function AdminKassePage() {
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
+  const membersMap = useMemo(() => {
+      if (!members) return new Map<string, MemberProfile>();
+      return new Map(members.map(m => [m.userId, m]));
+  }, [members]);
+
   const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
@@ -129,14 +152,28 @@ export default function AdminKassePage() {
 
   const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
-  
+
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);
   const membersOfSelectedTeam = useMemo(() => {
     if (!members || !selectedTeamId) return [];
+    // This logic might need adjustment if a member can be in multiple teams but a team can only have one member from `members` collection.
+    // For now, let's assume `m.teams` is an array of team IDs.
     return members.filter(m => m.teams?.includes(selectedTeamId));
   }, [members, selectedTeamId]);
-  
-  const totalBalance = useMemo(() => transactions?.reduce((acc, tx) => acc + tx.amount, 0) || 0, [transactions]);
+
+  const totalBalance = useMemo(() => {
+    return transactions?.reduce((acc, tx) => {
+      if (tx.type === 'income') {
+        return acc + tx.amount;
+      } else if (tx.type === 'expense') {
+        return acc + tx.amount; // Already stored as negative
+      } else if (tx.type === 'penalty' && tx.status === 'paid') {
+        return acc + Math.abs(tx.amount); // Penalties are stored negative, add positive value on payment
+      }
+      return acc;
+    }, 0) || 0;
+  }, [transactions]);
+
 
   // Forms
   const penaltyForm = useForm<PenaltyFormValues>({ resolver: zodResolver(penaltySchema), defaultValues: { description: '', amount: 0 } });
@@ -166,31 +203,34 @@ export default function AdminKassePage() {
   const onAddTransaction = async (data: TransactionFormValues) => {
     if (!firestore || !selectedTeamId) return;
 
-    let finalAmount: number;
-    let finalDescription: string;
+    let finalAmount = 0;
+    let finalDescription = '';
     let finalStatus: 'paid' | 'unpaid' = 'paid';
-    
-    if (data.type === 'penalty') {
-        if (!data.memberId || !data.penaltyId) {
-            toast({ variant: 'destructive', title: 'Fehler', description: 'Für eine Strafe müssen Mitglied und Strafenart ausgewählt werden.' });
-            return;
-        }
-        const penalty = penalties?.find(p => p.id === data.penaltyId);
-        const member = membersOfSelectedTeam.find(m => m.userId === data.memberId);
-        if (!penalty || !member) return;
+    let finalMemberId = data.type === 'penalty' ? data.memberId : undefined;
 
-        finalAmount = -penalty.amount;
-        finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
-        finalStatus = 'unpaid';
-    } else {
-        finalDescription = data.description;
-        if (data.type === 'expense') {
-            finalAmount = -Math.abs(data.amount);
-        } else {
-            finalAmount = Math.abs(data.amount);
-        }
+    if (data.type === 'penalty') {
+      const penalty = penalties?.find(p => p.id === data.penaltyId);
+      const member = membersOfSelectedTeam.find(m => m.userId === data.memberId);
+      if (!penalty || !member) {
+         toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe oder Mitglied nicht gefunden.' });
+         return;
+      }
+      finalAmount = -penalty.amount; // Penalties are always stored as negative
+      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
+      finalStatus = 'unpaid';
+    } else if (data.type === 'expense') {
+      finalAmount = -(data.amount ?? 0); // Expenses are stored as negative
+      finalDescription = data.description ?? '';
+    } else { // income
+      finalAmount = data.amount ?? 0; // Incomes are stored as positive
+      finalDescription = data.description ?? '';
     }
-    
+
+     if (isNaN(finalAmount)) {
+        toast({ variant: 'destructive', title: 'Fehler', description: 'Ungültiger Betrag.' });
+        return;
+    }
+
     const treasuryCollectionRef = collection(firestore, 'treasury');
     const txData = {
       teamId: selectedTeamId,
@@ -198,16 +238,17 @@ export default function AdminKassePage() {
       amount: finalAmount,
       date: serverTimestamp(),
       type: data.type,
-      ...(data.type === 'penalty' && { memberId: data.memberId }),
+      memberId: finalMemberId, // Can be undefined
       status: finalStatus,
     };
-    
+
     addDoc(treasuryCollectionRef, txData).then(() => {
       toast({ title: 'Transaktion hinzugefügt' });
       setIsTxDialogOpen(false);
-      transactionForm.reset({type: 'income', description: '', amount: 0, memberId: undefined, penaltyId: undefined});
+      transactionForm.reset({type: 'income', description: '', amount: 0, memberId: undefined, penaltyId: undefined });
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'treasury', operation: 'create', requestResourceData: txData })));
   };
+
 
   const onUpdateTransactionStatus = (id: string, status: 'paid' | 'unpaid') => {
     if (!firestore) return;
@@ -234,7 +275,7 @@ export default function AdminKassePage() {
             </div>
         );
     }
-  
+
     if (!isAdmin) {
        return (
           <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -292,7 +333,7 @@ export default function AdminKassePage() {
               <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                       <CardTitle className="flex items-center gap-2"><Coins className="h-6 w-6" /> Mannschaftskasse</CardTitle>
-                      <CardDescription>Aktueller Saldo: 
+                      <CardDescription>Aktueller Saldo:
                           <span className={cn("font-bold", totalBalance >= 0 ? "text-green-600" : "text-red-600")}>
                               {totalBalance.toFixed(2)} €
                           </span>
@@ -321,13 +362,13 @@ export default function AdminKassePage() {
                                           </Select>
                                       </FormItem>
                                   )} />
-                                  
+
                                   {watchTxType === 'penalty' ? (
                                       <>
                                           <FormField control={transactionForm.control} name="memberId" render={({ field }) => (
                                               <FormItem>
                                                   <FormLabel>Mitglied</FormLabel>
-                                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
                                                       <FormControl><SelectTrigger><SelectValue placeholder="Mitglied auswählen..."/></SelectTrigger></FormControl>
                                                       <SelectContent>
                                                           {membersOfSelectedTeam.map(m => <SelectItem key={m.userId} value={m.userId}>{m.firstName} {m.lastName}</SelectItem>)}
@@ -339,7 +380,7 @@ export default function AdminKassePage() {
                                           <FormField control={transactionForm.control} name="penaltyId" render={({ field }) => (
                                               <FormItem>
                                                   <FormLabel>Strafenart</FormLabel>
-                                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
                                                       <FormControl><SelectTrigger><SelectValue placeholder="Strafe auswählen..."/></SelectTrigger></FormControl>
                                                       <SelectContent>
                                                           {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.description} ({p.amount.toFixed(2)} €)</SelectItem>)}
@@ -361,7 +402,7 @@ export default function AdminKassePage() {
                                           <FormField control={transactionForm.control} name="amount" render={({ field }) => (
                                               <FormItem>
                                                   <FormLabel>Betrag (€)</FormLabel>
-                                                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                                                  <FormControl><Input type="number" step="0.01" {...field} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl>
                                                   <FormMessage />
                                               </FormItem>
                                           )} />
@@ -381,20 +422,34 @@ export default function AdminKassePage() {
               <CardContent>
                  <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Datum</TableHead><TableHead>Beschreibung</TableHead><TableHead>Betrag</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aktion</TableHead></TableRow></TableHeader>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Datum</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Beschreibung</TableHead>
+                            <TableHead>Betrag</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Aktion</TableHead>
+                        </TableRow>
+                    </TableHeader>
                     <TableBody>
                         {isLoadingTransactions ? (
-                            <TableRow><TableCell colSpan={5} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
+                            <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
                         ) : transactions && transactions.length > 0 ? (
-                           [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => (
+                           [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
+                            const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
+                            return (
                             <TableRow key={tx.id}>
-                                <TableCell>{format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de })}</TableCell>
+                                <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
+                                <TableCell>{memberName}</TableCell>
                                 <TableCell className="font-medium">{tx.description}</TableCell>
-                                <TableCell className={cn(tx.amount > 0 ? "text-green-600" : "text-red-600")}>
+                                <TableCell className={cn(
+                                    tx.amount >= 0 ? "text-green-600" : "text-red-600"
+                                    )}>
                                   {tx.amount.toFixed(2)} €
                                 </TableCell>
                                 <TableCell>
-                                    {tx.type === 'penalty' ? (
+                                    {(tx.type === 'penalty' || tx.status === 'unpaid') ? (
                                         <Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'}
                                             onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>
                                             {tx.status === 'paid' ? 'Bezahlt' : 'Offen'}
@@ -411,9 +466,9 @@ export default function AdminKassePage() {
                                     </AlertDialog>
                                 </TableCell>
                             </TableRow>
-                           ))
+                           )})
                         ) : (
-                            <TableRow><TableCell colSpan={5} className="text-center h-24">Keine Transaktionen gefunden.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={6} className="text-center h-24">Keine Transaktionen gefunden.</TableCell></TableRow>
                         )}
                     </TableBody>
                   </Table>
@@ -464,7 +519,7 @@ export default function AdminKassePage() {
                             <FormItem><FormControl><Input placeholder="Neue Strafbeschreibung" {...field}/></FormControl><FormMessage/></FormItem>
                           )} />
                            <FormField control={penaltyForm.control} name="amount" render={({ field }) => (
-                            <FormItem><FormControl><Input type="number" step="0.5" placeholder="Betrag in €" {...field}/></FormControl><FormMessage/></FormItem>
+                            <FormItem><FormControl><Input type="number" step="0.5" placeholder="Betrag in €" {...field} onChange={event => field.onChange(event.target.value === '' ? '' : +event.target.value)} /></FormControl><FormMessage/></FormItem>
                           )} />
                         </div>
                         <Button type="submit" disabled={penaltyForm.formState.isSubmitting}>
