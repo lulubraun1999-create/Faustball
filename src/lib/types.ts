@@ -22,6 +22,14 @@ export interface MemberProfile {
   role?: 'user' | 'admin'; // Add role to member profile
 }
 
+export interface GroupMember {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  role: 'user' | 'admin';
+  position: string[];
+}
+
 export interface FullUserProfile extends UserProfile, Omit<MemberProfile, 'userId'> {}
 
 export interface Appointment {

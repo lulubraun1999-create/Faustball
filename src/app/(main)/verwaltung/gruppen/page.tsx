@@ -3,26 +3,36 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Loader2, Users, Users2 } from 'lucide-react';
+import { Loader2, Users, Users2, ArrowLeft } from 'lucide-react';
 import {
   useFirestore,
   useCollection,
   useMemoFirebase,
 } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import type { Group } from '@/lib/types';
+import type { GroupMember } from '@/lib/types';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 
 export default function VerwaltungGruppenPage() {
   const firestore = useFirestore();
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<Group | null>(null);
 
   const groupsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'groups') : null),
     [firestore]
   );
   const { data: groups, isLoading } = useCollection<Group>(groupsRef);
+
+  const groupMembersRef = useMemoFirebase(() => 
+    (firestore && selectedTeam ? collection(firestore, 'groups', selectedTeam.id, 'members') : null), 
+    [firestore, selectedTeam]
+  );
+  const { data: groupMembers, isLoading: isLoadingMembers } = useCollection<GroupMember>(groupMembersRef);
 
   const classes =
     groups?.filter((g) => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name)) || [];
@@ -43,6 +53,12 @@ export default function VerwaltungGruppenPage() {
         }
     }
   }, [groups, classes, selectedClass]);
+  
+  useEffect(() => {
+    setSelectedTeam(null);
+  }, [selectedClass]);
+
+  const sortedMembers = groupMembers?.sort((a, b) => a.lastName.localeCompare(b.lastName));
 
 
   return (
@@ -91,27 +107,77 @@ export default function VerwaltungGruppenPage() {
       <div className="md:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">
-              {selectedClass ? selectedClass.name : (isLoading ? 'Laden...' : 'Keine Obergruppe ausgewählt')}
-            </CardTitle>
+            {selectedTeam ? (
+                 <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedTeam(null)}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <CardTitle className="text-xl">{selectedTeam.name}</CardTitle>
+                        <CardDescription>Mitgliederliste</CardDescription>
+                    </div>
+                </div>
+            ) : (
+                <CardTitle className="text-xl">
+                {selectedClass ? selectedClass.name : (isLoading ? 'Laden...' : 'Keine Obergruppe ausgewählt')}
+                </CardTitle>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
                <div className="flex justify-center p-12">
                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
                </div>
+            ) : selectedTeam ? (
+                // Member List View
+                isLoadingMembers ? (
+                    <div className="flex justify-center p-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                ) : sortedMembers && sortedMembers.length > 0 ? (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nachname</TableHead>
+                                <TableHead>Vorname</TableHead>
+                                <TableHead>Rolle</TableHead>
+                                <TableHead>Position</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {sortedMembers.map(member => (
+                                <TableRow key={member.userId}>
+                                    <TableCell>{member.lastName}</TableCell>
+                                    <TableCell>{member.firstName}</TableCell>
+                                    <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                                    <TableCell>{member.position?.join(', ') || 'N/A'}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                ) : (
+                     <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
+                        <Users className="h-10 w-10 text-muted-foreground" />
+                        <p className="mt-4 text-muted-foreground">
+                            Dieser Mannschaft wurden noch keine Mitglieder zugewiesen.
+                        </p>
+                    </div>
+                )
             ) : teams.length > 0 ? (
+                // Team List View
               <div className="space-y-2">
                 {teams.map((team) => (
                   <div
                     key={team.id}
-                    className="rounded-md border p-3 hover:bg-accent/50"
+                    onClick={() => setSelectedTeam(team)}
+                    className="rounded-md border p-3 hover:bg-accent/50 cursor-pointer"
                   >
                     {team.name}
                   </div>
                 ))}
               </div>
             ) : (
+              // Empty State for Teams
               <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
                 <Users className="h-10 w-10 text-muted-foreground" />
                 <p className="mt-4 text-muted-foreground">
