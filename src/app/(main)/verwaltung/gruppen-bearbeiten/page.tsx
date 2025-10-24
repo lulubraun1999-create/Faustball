@@ -68,7 +68,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Group } from '@/lib/types';
-import { AdminGuard } from '@/components/admin-guard';
+import React from 'react';
 
 const groupManagementSchema = z.object({
   action: z.enum(['add', 'delete']),
@@ -83,13 +83,12 @@ type GroupManagementValues = z.infer<typeof groupManagementSchema>;
 function AdminGruppenBearbeitenPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
   const [isEditingOpen, setIsEditingOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
 
   const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
   );
   const { data: groups, isLoading } = useCollection<Group>(groupsRef);
 
@@ -475,9 +474,36 @@ function AdminGruppenBearbeitenPageContent() {
 }
 
 export default function AdminGruppenBearbeitenPage() {
-  return (
-    <AdminGuard>
-      <AdminGruppenBearbeitenPageContent />
-    </AdminGuard>
-  );
+    const { isAdmin, isUserLoading } = useUser();
+
+    if (isUserLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+  
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <Users2 className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+    }
+  
+    return <AdminGruppenBearbeitenPageContent />;
 }

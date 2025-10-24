@@ -1,11 +1,10 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, FC } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AdminGuard } from '@/components/admin-guard';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -113,19 +112,18 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
-  // Use admin status to conditionally enable queries
+  // Data fetching is now conditional on admin status.
+  const { isAdmin } = useUser();
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
   const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  // Data fetching - Defer heavy queries until a team is selected and user is admin
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
@@ -216,9 +214,10 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingMembers || isLoadingGroups || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
+  const isLoadingInitial = isLoadingMembers || isLoadingGroups;
+  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
 
-  if (isLoadingMembers || isLoadingGroups) {
+  if (isLoadingInitial) {
     return (
         <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -250,7 +249,7 @@ function AdminKassePageContent() {
             <h2 className="mt-4 text-xl font-semibold">Keine Mannschaft ausgewählt</h2>
             <p className="mt-2 text-muted-foreground">Bitte wählen Sie eine Mannschaft aus, um die Kasse zu verwalten.</p>
         </Card>
-      ) : isLoading ? (
+      ) : isLoadingTeamData ? (
          <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -452,9 +451,36 @@ function AdminKassePageContent() {
 }
 
 export default function AdminKassePage() {
-  return (
-    <AdminGuard>
-      <AdminKassePageContent />
-    </AdminGuard>
-  );
+    const { isAdmin, isUserLoading } = useUser();
+
+    if (isUserLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+  
+    if (!isAdmin) {
+       return (
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <PiggyBank className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+    }
+  
+    return <AdminKassePageContent />;
 }
