@@ -7,10 +7,8 @@ import {
   FirestorePermissionError,
   useUser,
   initializeFirebase,
-  useCollection,
-  useMemoFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch, collection } from 'firebase/firestore';
+import { doc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile, Group } from '@/lib/types';
 import {
@@ -57,7 +55,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard } from '@/components/admin-guard';
+import { AdminGuard, useAdminData } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -66,17 +64,8 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, forceRefresh, isAdmin } = useUser();
-
-  // --- Data Fetching ---
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
-  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-  // --- End Data Fetching ---
-
-  const isLoading = isLoadingMembers || isLoadingGroups;
+  const { user, forceRefresh } = useUser();
+  const { members, groups, isLoading } = useAdminData();
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
@@ -94,7 +83,7 @@ function AdminMitgliederPageContent() {
     });
   }, [members]);
 
-  const { classes, teams, groupedTeams } = useMemo(() => {
+  const { teams, groupedTeams } = useMemo(() => {
     const allGroups = groups || [];
     const classes = allGroups.filter(g => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name));
     const teams = allGroups.filter(g => g.type === 'team');
@@ -104,7 +93,7 @@ function AdminMitgliederPageContent() {
         teams: teams.filter(t => t.parentId === c.id).sort((a, b) => a.name.localeCompare(b.name)),
     })).filter(c => c.teams.length > 0);
 
-    return { classes, teams, groupedTeams: grouped };
+    return { teams, groupedTeams: grouped };
   }, [groups]);
 
   const handleTeamsChange = async (member: MemberProfile, teamId: string, isChecked: boolean) => {

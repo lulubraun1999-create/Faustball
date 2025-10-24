@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AdminGuard } from '@/components/admin-guard';
+import { AdminGuard, useAdminData } from '@/components/admin-guard';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -88,7 +88,7 @@ import {
   Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Penalty, TreasuryTransaction, Group, MemberProfile } from '@/lib/types';
+import type { Penalty, TreasuryTransaction, MemberProfile } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -112,16 +112,7 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 function AdminKassePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { isAdmin } = useUser();
-
-  // --- Data Fetching ---
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
-  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-  // --- End Data Fetching ---
-
+  const { groups, members, isLoading: isLoadingAdminData } = useAdminData();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
@@ -217,7 +208,7 @@ function AdminKassePageContent() {
     }).catch(e => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `treasury/${id}`, operation: 'delete' })));
   };
 
-  const isLoading = isLoadingGroups || isLoadingMembers || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
+  const isLoading = isLoadingAdminData || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
 
   if (isLoading && !selectedTeamId) {
     return (
@@ -239,7 +230,7 @@ function AdminKassePageContent() {
             <SelectValue placeholder="Mannschaft auswählen..." />
           </SelectTrigger>
           <SelectContent>
-            {isLoadingGroups ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
+            {isLoadingAdminData ? <SelectItem value="loading" disabled>Lade...</SelectItem> :
               teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
           </SelectContent>
         </Select>
