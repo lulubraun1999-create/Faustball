@@ -8,7 +8,7 @@ import {
   useUser,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile } from '@/lib/types';
 import {
@@ -96,23 +96,52 @@ function AdminMitgliederPageContent() {
     return { classes, teams, groupedTeams: grouped };
   }, [groups]);
 
-  const handleTeamsChange = async (userId: string, newTeams: string[]) => {
-    if (!firestore) return;
+  const handleTeamsChange = async (member: MemberProfile, teamId: string, isChecked: boolean) => {
+    if (!firestore || !member) return;
+  
+    const { userId, firstName, lastName, position, role } = member;
     setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
+  
+    const currentTeams = member.teams || [];
+    const newTeams = isChecked
+      ? [...currentTeams, teamId]
+      : currentTeams.filter(id => id !== teamId);
+  
     const memberDocRef = doc(firestore, 'members', userId);
+    const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
+    
+    const batch = writeBatch(firestore);
+  
+    // 1. Update the 'teams' array in the main member document
+    batch.set(memberDocRef, { teams: newTeams }, { merge: true });
+  
+    // 2. Add or remove the denormalized document in the group's subcollection
+    if (isChecked) {
+      const groupMemberData = {
+        userId,
+        firstName,
+        lastName,
+        position: position || [],
+        role: role || 'user',
+      };
+      batch.set(groupMemberDocRef, groupMemberData);
+    } else {
+      batch.delete(groupMemberDocRef);
+    }
+  
     try {
-      await setDoc(memberDocRef, { teams: newTeams }, { merge: true });
+      await batch.commit();
       toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
     } catch (error) {
-       const permissionError = new FirestorePermissionError({
-          path: memberDocRef.path,
-          operation: 'update',
-          requestResourceData: { teams: newTeams },
-        });
-        errorEmitter.emit('permission-error', permissionError);
+      const permissionError = new FirestorePermissionError({
+        path: memberDocRef.path, // We can just report one of the paths for the error
+        operation: 'update',
+        requestResourceData: { teams: newTeams },
+      });
+      errorEmitter.emit('permission-error', permissionError);
       toast({ variant: 'destructive', title: 'Fehler', description: 'Mannschaften konnten nicht aktualisiert werden.' });
     } finally {
-       setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: false }));
+      setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: false }));
     }
   };
 
@@ -174,6 +203,14 @@ function AdminMitgliederPageContent() {
 
         batch.delete(memberDocRef);
         batch.delete(userDocRef);
+
+        // Also delete from all groupMembers subcollections
+        if (member.teams) {
+            member.teams.forEach(teamId => {
+                const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
+                batch.delete(groupMemberDocRef);
+            });
+        }
 
         await batch.commit();
         
@@ -298,11 +335,7 @@ function AdminMitgliederPageContent() {
                                                                 id={`team-${member.userId}-${team.id}`}
                                                                 checked={member.teams?.includes(team.id)}
                                                                 onCheckedChange={(checked) => {
-                                                                    const currentTeams = member.teams || [];
-                                                                    const newTeams = checked
-                                                                        ? [...currentTeams, team.id]
-                                                                        : currentTeams.filter(id => id !== team.id);
-                                                                    handleTeamsChange(member.userId, newTeams);
+                                                                    handleTeamsChange(member, team.id, !!checked);
                                                                 }}
                                                             />
                                                             <label htmlFor={`team-${member.userId}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">

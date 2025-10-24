@@ -92,6 +92,22 @@
         "userId"
       ]
     },
+    "GroupMember": {
+      "title": "Group Member",
+      "type": "object",
+      "description": "A denormalized, lightweight record representing a member within a specific group/team.",
+      "properties": {
+        "userId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "position": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["userId", "firstName", "lastName", "role"]
+    },
     "Appointment": {
       "title": "Appointment",
       "type": "object",
@@ -324,6 +340,10 @@
         "$ref": "#/backend/entities/Member"
       },
       "description": "Stores editable user profile data. Accessible by admins or the owning user."
+    },
+     "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/backend/entities/GroupMember" },
+      "description": "Denormalized, lightweight list of members for a specific group. Used for fast lookups of team rosters."
     },
     "/appointments/{appointmentId}": {
       "schema": {
