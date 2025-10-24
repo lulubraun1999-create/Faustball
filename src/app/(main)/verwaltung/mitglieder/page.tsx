@@ -21,19 +21,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 
 
 export default function VerwaltungMitgliederPage() {
   const { isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
 
-  const usersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
-    [firestore, isAdmin]
-  );
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
-
+  // This query is only active when the user is an admin.
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -46,23 +41,12 @@ export default function VerwaltungMitgliederPage() {
   );
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-
-  // The query is only active when isAdmin is true, so isLoading is accurate.
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups;
-
-  const combinedData = useMemo(() => {
-    if (!users || !members) return [];
-    const memberMap = new Map(members.map(m => [m.userId, m]));
-    return users.map(user => ({
-      ...user,
-      ...(memberMap.get(user.id) || {}),
-    }));
-  }, [users, members]);
+  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
 
   const sortedMembers = useMemo(() => {
-    if (!combinedData) return [];
+    if (!members) return [];
     
-    return [...combinedData].sort((a, b) => {
+    return [...members].sort((a, b) => {
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -70,7 +54,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData]);
+  }, [members]);
 
   const teamsMap = useMemo(() => {
     if (!groups) return new Map();

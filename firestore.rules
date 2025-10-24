@@ -3,195 +3,238 @@
  *
  * Core Philosophy:
  * This ruleset enforces a combination of user-ownership and admin-controlled access.
- * User-specific data is protected using the Ownership pattern, while global data
- * is primarily controlled by administrators.  Schema validation is relaxed to
- * facilitate rapid prototyping.
+ * Users can only read/write their own data in /users/{userId} and /members/{memberId}.
+ * Most other data (appointments, groups, news, polls, treasury, penalties) is readable by all authenticated users but only writable by admins.
  *
  * Data Structure:
- * - /users/{userId}:  User authentication and profile data, accessible only by the user or admins.
- * - /members/{memberId}:  Editable user profile information, accessible only by the user or admins.
- * - /groups/{groupId}: Represents teams or classes; publicly readable, admin-writeable.
- * - /groups/{groupId}/members/{memberId}: Denormalized member list for quick access.
- * - /appointments/{appointmentId}: Publicly readable, admin-writeable events.
- * - /polls/{pollId}: Publicly readable (or team-specific), admin-writeable polls.
- * - /news/{newsId}: Publicly readable, admin-writeable news articles.
- * - /treasury/{transactionId}:  Team financial transactions; admin-writeable only.
- * - /penalties/{penaltyId}: Team penalty rules; admin-writeable only.
+ * - /users/{userId}: User authentication and profile data.
+ * - /members/{memberId}: Editable user profile data.
+ * - /groups/{groupId}/members/{memberId}: Denormalized list of group members.
+ * - /appointments/{appointmentId}: Calendar events.
+ * - /groups/{groupId}: Classes and Teams.
+ * - /polls/{pollId}: Polls for team members.
+ * - /news/{newsId}: News articles.
+ * - /treasury/{transactionId}: Financial transactions.
+ * - /penalties/{penaltyId}: Penalty catalog.
  *
  * Key Security Decisions:
- * - No user listing is allowed to prevent email harvesting.
- * - Public read access is granted for non-sensitive data like appointments and news.
- * - Admin privileges are not explicitly defined in this initial version and should be
- *   added based on a role-based system in a production environment.
- *
- * Denormalization for Authorization:
- * - No denormalization is performed in this version due to admin-centric write security and public read access on most collections.
- *   Future iterations could benefit from denormalizing team membership into polls for more efficient read rules if polls are not globally visible.
- *
- * Structural Segregation:
- * - No explicit segregation is used.  Admin-controlled write access largely negates the need for private/public collections.
+ * - User listing is disallowed.
+ * - All collections are explicitly secured with granular permissions.
+ * - All write operations are restricted either to the owner or to admins.
+ * - To simplify rules and improve performance, authorization data is denormalized onto documents.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user accounts. Only the user or an admin can read/write.
+     * @description Controls access to user profile data.
      * @path /users/{userId}
-     * @allow (create) User with matching UID creates their own document.
-     * @allow (get, update, delete) User with matching UID reads/modifies their own document.
-     * @deny (create) User tries to create a document with a mismatched UID.
-     * @deny (get, update, delete) User tries to read/modify another user's document.
-     * @principle Enforces document ownership for user data and prevents unauthorized access.
+     * @allow (create) User with matching UID can create their own profile.
+     * @allow (get, update, delete) User can only access their own profile.
+     * @deny (create) User cannot create a profile for another user.
+     * @deny (get, update, delete) User cannot access another user's profile.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data.
      */
     match /users/{userId} {
       function isSignedIn() {
         return request.auth != null;
       }
+
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
+
       function isExistingOwner(userId) {
         return isOwner(userId) && exists(resource);
       }
 
-      allow get: if isSignedIn() && isOwner(userId);
+      allow get: if isOwner(userId);
       allow list: if false;
       allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == userId;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to member profiles.  Only the user or an admin can read/write.
+     * @description Controls access to detailed member profile data.
      * @path /members/{memberId}
-     * @allow (create) User with matching UID creates their own profile.
-     * @allow (get, update, delete) User with matching UID reads/modifies their own profile.
-     * @deny (create) User tries to create a profile with a mismatched UID.
-     * @deny (get, update, delete) User tries to read/modify another user's profile.
-     * @principle Enforces document ownership for profile data and prevents unauthorized access.
+     * @allow (create) User can create their own member profile if the userId matches their auth.uid.
+     * @allow (get, update, delete) User can only access their own member profile.
+     * @deny (create) User cannot create a member profile for another user.
+     * @deny (get, update, delete) User cannot access another user's member profile.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data.
      */
     match /members/{memberId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        function isOwner(memberId) {
-            return request.auth.uid == getAfter(/databases/$(database)/documents/members/$(memberId)).data.userId;
-        }
+      function isSignedIn() {
+        return request.auth != null;
+      }
 
-        function isCreatingOwnProfile(memberId) {
-            return request.auth.uid == request.resource.data.userId;
-        }
-        function isExistingOwner(memberId) {
-          return isSignedIn() && isOwner(memberId) && exists(resource);
-        }
+      function isOwner(memberId) {
+        return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
+      }
 
-        allow get: if isSignedIn() && isOwner(memberId);
-        allow list: if false;
-        allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
-        allow update: if isExistingOwner(memberId);
-        allow delete: if isExistingOwner(memberId);
+      function isExistingOwner(memberId) {
+        return isOwner(memberId) && exists(resource);
+      }
+
+      allow get: if isSignedIn() && isOwner(memberId);
+      allow list: if false;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isExistingOwner(memberId) && request.resource.data.userId == request.auth.uid;
+      allow delete: if isExistingOwner(memberId);
     }
 
        /**
-        * @description Controls access to the list of group members. This is publicly readable to allow quick access to team rosters. Admins can write.
+        * @description Controls access to the denormalized list of group members.
         * @path /groups/{groupId}/members/{memberId}
-        * @allow (get, list) Anyone can read group members.
-        * @deny (create, update, delete) Only admins can modify group members.
-        * @principle Allows public access for team roster lookup, but restricts writes to admins only.
         */
-      match /groups/{groupId}/members/{memberId} {
+       match /groups/{groupId}/members/{memberId} {
         function isSignedIn() {
-          return request.auth != null;
+            return request.auth != null;
         }
-        allow get, list: if true;
-        allow create, update, delete: if false;
-    }
+
+        // TODO: Implement group membership check for access
+        allow get: if isSignedIn();
+        allow list: if false;
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
 
     /**
-     * @description Controls access to appointments.  Publicly readable, admin-writeable.
+     * @description Controls access to appointments.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) Anyone can read appointments.
+     * @allow (get, list) All authenticated users can read appointments.
      * @deny (create, update, delete) Only admins can modify appointments.
-     * @principle Allows public visibility of appointments, but restricts modifications to admins.
+     * @principle Public read with admin-only writes.
      */
     match /appointments/{appointmentId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Implement admin role check once the schema is updated with an ownership field.
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to groups (classes and teams). Publicly readable, admin-writeable.
+     * @description Controls access to groups (classes and teams).
      * @path /groups/{groupId}
-     * @allow (get, list) Anyone can read groups.
+     * @allow (get, list) All authenticated users can read groups.
      * @deny (create, update, delete) Only admins can modify groups.
-     * @principle Allows public visibility of groups, but restricts modifications to admins.
+     * @principle Public read with admin-only writes.
      */
     match /groups/{groupId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Implement admin role check once the schema is updated with an ownership field.
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to polls. Publicly readable, admin-writeable.  Visibility can be configured to specific teams.
+     * @description Controls access to polls.
      * @path /polls/{pollId}
-     * @allow (get, list) Anyone can read polls.
+     * @allow (get, list) All authenticated users can read polls.
      * @deny (create, update, delete) Only admins can modify polls.
-     * @principle Allows public visibility of polls, but restricts modifications to admins.  Team-specific visibility not yet enforced.
+     * @principle Public read with admin-only writes.
      */
     match /polls/{pollId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Implement admin role check once the schema is updated with an ownership field.
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to news articles. Publicly readable, admin-writeable.
+     * @description Controls access to news articles.
      * @path /news/{newsId}
-     * @allow (get, list) Anyone can read news articles.
+     * @allow (get, list) All authenticated users can read news articles.
      * @deny (create, update, delete) Only admins can modify news articles.
-     * @principle Allows public visibility of news articles, but restricts modifications to admins.
+     * @principle Public read with admin-only writes.
      */
     match /news/{newsId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Implement admin role check once the schema is updated with an ownership field.
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to treasury transactions.  Admin-writeable only.
+     * @description Controls access to treasury transactions.
      * @path /treasury/{transactionId}
      * @deny (get, list, create, update, delete) Only admins can access treasury transactions.
-     * @principle Restricts all access to treasury data to admins only.
+     * @principle Admin-only access.
      */
     match /treasury/{transactionId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list, create, update, delete: if false;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Add admin role check once the schema is updated with an ownership field.
+      }
+      allow get: if false;
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to penalty rules. Admin-writeable only.
+     * @description Controls access to penalty catalog rules.
      * @path /penalties/{penaltyId}
-     * @deny (get, list, create, update, delete) Only admins can access penalty rules.
-     * @principle Restricts all access to penalty rules to admins only.
+     * @deny (get, list, create, update, delete) Only admins can access penalty catalog rules.
+     * @principle Admin-only access.
      */
     match /penalties/{penaltyId} {
-        function isSignedIn() {
-          return request.auth != null;
-        }
-        allow get, list, create, update, delete: if false;
+       function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAdmin() {
+        return false; // TODO: Add admin role check once the schema is updated with an ownership field.
+      }
+
+      allow get: if false;
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

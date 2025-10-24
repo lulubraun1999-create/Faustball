@@ -12,7 +12,7 @@ import {
 } from '@/firebase';
 import { doc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -67,12 +67,6 @@ export default function AdminMitgliederPage() {
   const firestore = useFirestore();
   const { user, forceRefresh, isAdmin, isUserLoading } = useUser();
   
-  const usersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
-    [firestore, isAdmin]
-  );
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
-
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -85,24 +79,15 @@ export default function AdminMitgliederPage() {
   );
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups;
+  const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
-  const [memberToEdit, setMemberToEdit] = useState<(MemberProfile & { role?: 'user' | 'admin' }) | null>(null);
+  const [memberToEdit, setMemberToEdit] = useState<MemberProfile | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
 
-  const combinedData = useMemo(() => {
-    if (!users || !members) return [];
-    const memberMap = new Map(members.map(m => [m.userId, m]));
-    return users.map(user => ({
-      ...user,
-      ...(memberMap.get(user.id) || {}),
-    }));
-  }, [users, members]);
-
   const sortedMembers = useMemo(() => {
-    if (!combinedData) return [];
-    return [...combinedData].sort((a, b) => {
+    if (!members) return [];
+    return [...members].sort((a, b) => {
         const lastNameA = a.lastName || '';
         const lastNameB = b.lastName || '';
         if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -110,7 +95,7 @@ export default function AdminMitgliederPage() {
         }
         return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData]);
+  }, [members]);
 
   const { teams, groupedTeams } = useMemo(() => {
     const allGroups = groups || [];
