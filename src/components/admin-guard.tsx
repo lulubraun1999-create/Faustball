@@ -27,16 +27,19 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(undefin
 // 2. Create the internal Data Provider component
 interface AdminDataProviderProps {
   children: ReactNode;
+  // Explicitly pass isAdmin to ensure it's evaluated before this component renders.
+  isAdmin: boolean; 
 }
 
-function AdminDataProvider({ children }: AdminDataProviderProps) {
+function AdminDataProvider({ children, isAdmin }: AdminDataProviderProps) {
   const firestore = useFirestore();
 
-  // These hooks are now safe because this component is ONLY rendered when the user is an admin.
-  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  // These hooks are now safe because the `isAdmin` prop is guaranteed to be true
+  // before this component is even rendered by the AdminGuard.
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const value = useMemo(() => ({
@@ -64,7 +67,7 @@ export function useAdminData(): AdminDataContextType {
 }
 
 
-// 4. Update the AdminGuard to use the provider
+// 4. Update the AdminGuard to use the provider correctly
 export function AdminGuard({ children }: { children: ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
@@ -98,10 +101,10 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // If the user IS an admin, render the provider which then fetches the data,
-  // and then render the children.
+  // If the user IS an admin, render the provider *and pass the isAdmin status*.
+  // This ensures the provider doesn't start fetching until this check has passed.
   return (
-    <AdminDataProvider>
+    <AdminDataProvider isAdmin={isAdmin}>
         {children}
     </AdminDataProvider>
   );
