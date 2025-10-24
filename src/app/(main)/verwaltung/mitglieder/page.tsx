@@ -1,7 +1,6 @@
 
 'use client';
 
-import { AdminGuard } from '@/components/admin-guard';
 import {
   Card,
   CardContent,
@@ -23,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { MemberProfile, Group } from '@/lib/types';
+import { AdminGuard } from '@/components/admin-guard';
 
 
 function VerwaltungMitgliederPageContent() {

@@ -77,6 +77,7 @@ import {
   doc,
   serverTimestamp,
   updateDoc,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   Edit,
@@ -117,23 +118,18 @@ function AdminKassePageContent() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
-  const membersRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
-    [firestore, isAdmin]
-  );
+  // Use admin status to conditionally enable queries
+  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
-    [firestore, isAdmin]
-  );
+  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  // Data fetching - Defer heavy queries until a team is selected
-  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
+  // Data fetching - Defer heavy queries until a team is selected and user is admin
+  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
-  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
+  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
   
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a, b) => a.name.localeCompare(b.name)) || [], [groups]);
@@ -360,9 +356,9 @@ function AdminKassePageContent() {
                         {isLoadingTransactions ? (
                             <TableRow><TableCell colSpan={5} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
                         ) : transactions && transactions.length > 0 ? (
-                           [...transactions].sort((a,b) => b.date.toMillis() - a.date.toMillis()).map(tx => (
+                           [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => (
                             <TableRow key={tx.id}>
-                                <TableCell>{format(tx.date.toDate(), 'dd.MM.yy', { locale: de })}</TableCell>
+                                <TableCell>{format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de })}</TableCell>
                                 <TableCell className="font-medium">{tx.description}</TableCell>
                                 <TableCell className={cn(tx.amount > 0 ? "text-green-600" : "text-red-600")}>
                                   {tx.amount.toFixed(2)} €
