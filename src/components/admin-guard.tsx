@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext } from 'react';
@@ -44,21 +45,18 @@ function AdminDataProvider({ children }: { children: React.ReactNode }) {
     const { data: membersData, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
     const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-    const isLoading = isLoadingMembers || isLoadingGroups;
+    // If the user is not an admin, we are technically not "loading" admin data.
+    const isLoading = isAdmin ? (isLoadingMembers || isLoadingGroups) : false;
     const members = membersData || [];
     const groups = groupsData || [];
-
-    if (isLoading) {
-        return (
-            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
     
     return (
         <AdminDataContext.Provider value={{ members, groups, isLoading }}>
-            {children}
+            {isLoading ? (
+                 <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                 </div>
+            ) : children}
         </AdminDataContext.Provider>
     );
 }
@@ -66,7 +64,7 @@ function AdminDataProvider({ children }: { children: React.ReactNode }) {
 
 // 4. AdminGuard, der den Provider nur rendert, wenn der Benutzer Admin ist
 export function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { isUserLoading, isAdmin, userProfile } = useUser();
+  const { isUserLoading, isAdmin } = useUser();
 
   if (isUserLoading) {
     return (
@@ -76,9 +74,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const isAuthorized = isAdmin || userProfile?.role === 'admin';
-
-  if (!isAuthorized) {
+  if (!isAdmin) {
     return (
       <div className="container mx-auto p-4 sm:p-6 lg:p-8">
         <Card className="border-destructive/50">
@@ -98,5 +94,6 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Only render the provider and its children if the user is a confirmed admin
   return <AdminDataProvider>{children}</AdminDataProvider>;
 }
