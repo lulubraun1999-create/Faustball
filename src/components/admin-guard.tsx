@@ -1,12 +1,81 @@
-
 'use client';
 
-import { ReactNode } from 'react';
-import { useUser } from '@/firebase';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ReactNode, createContext, useContext, useMemo } from 'react';
+import {
+  useUser,
+  useCollection,
+  useFirestore,
+  useMemoFirebase,
+} from '@/firebase';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
+import { collection } from 'firebase/firestore';
+import type { MemberProfile, Group } from '@/lib/types';
 
-export function AdminGuard({ children }: { children: React.ReactNode }) {
+// 1. Define the context for Admin Data
+interface AdminDataContextType {
+  members: MemberProfile[] | null;
+  groups: Group[] | null;
+  isLoading: boolean;
+}
+
+const AdminDataContext = createContext<AdminDataContextType | undefined>(
+  undefined
+);
+
+// 2. Create a hook to consume the context
+export const useAdminData = () => {
+  const context = useContext(AdminDataContext);
+  if (!context) {
+    throw new Error('useAdminData must be used within an AdminGuard');
+  }
+  return context;
+};
+
+// 3. Create a component that fetches data only if the user is an admin
+function AdminDataProvider({ children }: { children: ReactNode }) {
+  const firestore = useFirestore();
+
+  // These refs are now created inside the provider, which is only rendered for admins
+  const membersRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'members') : null),
+    [firestore]
+  );
+  const groupsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
+  );
+
+  const { data: members, isLoading: isLoadingMembers } =
+    useCollection<MemberProfile>(membersRef);
+  const { data: groups, isLoading: isLoadingGroups } =
+    useCollection<Group>(groupsRef);
+
+  const isLoading = isLoadingMembers || isLoadingGroups;
+
+  const value = useMemo(
+    () => ({
+      members,
+      groups,
+      isLoading,
+    }),
+    [members, groups, isLoading]
+  );
+
+  return (
+    <AdminDataContext.Provider value={value}>
+      {children}
+    </AdminDataContext.Provider>
+  );
+}
+
+// 4. Update AdminGuard to use the new provider
+export function AdminGuard({ children }: { children: ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
   if (isUserLoading) {
@@ -29,13 +98,16 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              Sie verfügen nicht über die erforderlichen Berechtigungen, um auf diesen Bereich zuzugreifen. Bitte wenden Sie sich an einen Administrator, wenn Sie glauben, dass dies ein Fehler ist.
+              Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+              diesen Bereich zuzugreifen. Bitte wenden Sie sich an einen
+              Administrator, wenn Sie glauben, dass dies ein Fehler ist.
             </p>
           </CardContent>
         </Card>
       </div>
     );
   }
-  
-  return <>{children}</>;
+
+  // Only if the user is an admin, render the provider which fetches data
+  return <AdminDataProvider>{children}</AdminDataProvider>;
 }
