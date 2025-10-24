@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -50,8 +49,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   useFirestore,
-  useCollection,
-  useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
 } from '@/firebase';
@@ -67,7 +64,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Group } from '@/lib/types';
-import { AdminGuard } from '@/components/admin-guard';
+import { AdminGuard, useAdminData } from '@/components/admin-guard';
 
 const groupManagementSchema = z.object({
   action: z.enum(['add', 'delete']),
@@ -85,11 +82,8 @@ function AdminGruppenBearbeitenPageContent() {
   const [isEditingOpen, setIsEditingOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
 
-  const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
-  );
-  const { data: groups, isLoading } = useCollection<Group>(groupsRef);
+  // Fetch groups safely from admin context
+  const { groups, isLoadingGroups: isLoading } = useAdminData();
 
   const classes =
     groups?.filter((g) => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name)) || [];
@@ -139,7 +133,8 @@ function AdminGruppenBearbeitenPageContent() {
 
 
   const onManagementSubmit = async (data: GroupManagementValues) => {
-    if (!firestore || !groupsRef) return;
+    if (!firestore) return;
+    const groupsRef = collection(firestore, 'groups');
 
     const currentFormValues = form.getValues();
 
