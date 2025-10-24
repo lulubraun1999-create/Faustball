@@ -27,18 +27,17 @@ const AdminDataContext = createContext<AdminDataContextType | undefined>(undefin
 // 2. Create the internal Data Provider component
 interface AdminDataProviderProps {
   children: ReactNode;
-  isAdmin: boolean; // Explicitly receive the admin status
 }
 
-function AdminDataProvider({ children, isAdmin }: AdminDataProviderProps) {
+function AdminDataProvider({ children }: AdminDataProviderProps) {
   const firestore = useFirestore();
 
-  // IMPORTANT: The queries are now conditional on the `isAdmin` prop.
-  // If not an admin, the ref remains null, and no query is executed.
-  const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  // The queries are now implicitly safe because this component is only ever
+  // rendered when the parent AdminGuard has confirmed isAdmin is true.
+  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'groups') : null), [firestore, isAdmin]);
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const value = useMemo(() => ({
@@ -78,11 +77,8 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  // The AdminDataProvider is now always rendered, but its internal queries are
-  // controlled by the `isAdmin` prop, preventing unauthorized access.
-  return (
-    <AdminDataProvider isAdmin={isAdmin}>
-      {!isAdmin ? (
+  if (!isAdmin) {
+     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
           <Card className="border-destructive/50">
             <CardHeader>
@@ -100,9 +96,15 @@ export function AdminGuard({ children }: { children: ReactNode }) {
             </CardContent>
           </Card>
         </div>
-      ) : (
-        children
-      )}
+      );
+  }
+
+  // Only if the user is an admin, render the provider and the children.
+  // This prevents any data fetching from starting for non-admin users.
+  return (
+    <AdminDataProvider>
+      {children}
     </AdminDataProvider>
   );
 }
+

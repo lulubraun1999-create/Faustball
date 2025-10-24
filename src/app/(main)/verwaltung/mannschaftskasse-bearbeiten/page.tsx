@@ -211,7 +211,7 @@ function AdminKassePageContent() {
 
   const isLoading = isLoadingMembers || isLoadingGroups || (selectedTeamId && (isLoadingPenalties || isLoadingTransactions));
 
-  if (isLoading && !selectedTeamId) {
+  if (isLoadingMembers || isLoadingGroups) {
     return (
         <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
