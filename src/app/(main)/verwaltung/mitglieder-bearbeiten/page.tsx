@@ -242,7 +242,7 @@ export default function AdminMitgliederPage() {
     return teamIds.map(id => teams.find(t => t.id === id)?.name || id)
   };
   
-    if (isLoading && !members) {
+    if (isUserLoading) {
         return (
             <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

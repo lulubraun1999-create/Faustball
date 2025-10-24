@@ -217,7 +217,7 @@ export default function AdminKassePage() {
   const isLoadingInitial = isUserLoading || isLoadingMembers || isLoadingGroups;
   const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
 
-    if (isLoadingInitial && !members && !groups) {
+    if (isUserLoading) {
         return (
             <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -270,7 +270,7 @@ export default function AdminKassePage() {
             <h2 className="mt-4 text-xl font-semibold">Keine Mannschaft ausgewählt</h2>
             <p className="mt-2 text-muted-foreground">Bitte wählen Sie eine Mannschaft aus, um die Kasse zu verwalten.</p>
         </Card>
-      ) : isLoadingTeamData ? (
+      ) : isLoadingInitial || isLoadingTeamData ? (
          <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
