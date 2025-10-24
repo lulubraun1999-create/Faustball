@@ -399,7 +399,7 @@ function AdminMitgliederPageContent() {
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} ${lastName} dauerhaft gelöscht. Das Benutzerkonto existiert weiterhin und der Benutzer muss ggf. separat gelöscht werden.
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Benutzerkonto existiert weiterhin und der Benutzer muss ggf. separat gelöscht werden.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
