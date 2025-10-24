@@ -117,7 +117,7 @@ export default function AdminKassePage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
 
-  // Data fetching
+  // Data fetching - ensure queries are only made if user is admin
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 

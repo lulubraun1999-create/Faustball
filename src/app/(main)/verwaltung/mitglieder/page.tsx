@@ -28,6 +28,7 @@ export default function VerwaltungMitgliederPage() {
   const { isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
 
+  // Conditionally create the reference only if the user is an admin.
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
@@ -41,6 +42,7 @@ export default function VerwaltungMitgliederPage() {
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
 
+  // The query is only active when isAdmin is true, so isLoading is accurate.
   const isLoading = isUserLoading || isLoadingMembers || isLoadingGroups;
 
   const sortedMembers = useMemo(() => {
