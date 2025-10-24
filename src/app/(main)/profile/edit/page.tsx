@@ -728,7 +728,7 @@ export default function ProfileEditPage() {
                             divers (Damenteam)
                           </SelectItem>
                           <SelectItem value="divers (Herrenteam)">
-                            divers (herrenteam)
+                            divers (Herrenteam)
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -779,5 +779,7 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
 
     
