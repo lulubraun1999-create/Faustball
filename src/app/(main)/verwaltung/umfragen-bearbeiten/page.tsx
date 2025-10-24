@@ -102,8 +102,8 @@ export default function AdminUmfragenBearbeitenPage() {
   const { data: groupsData, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
   const pollsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'polls') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'polls') : null),
+    [firestore, isAdmin]
   );
   const { data: polls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
 
