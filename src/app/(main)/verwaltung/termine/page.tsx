@@ -71,6 +71,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
 import { addDays, addMonths, addWeeks, format as formatDate } from "date-fns";
+import { de } from 'date-fns/locale';
 import {
   Tooltip,
   TooltipContent,
@@ -79,6 +80,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Users } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
@@ -298,6 +300,18 @@ export default function VerwaltungTerminePage() {
       );
   }, [unrolledAppointments, selectedType, selectedTeam, profile]);
 
+  const groupedAppointments = useMemo(() => {
+    const groups: Record<string, UnrolledAppointment[]> = {};
+    filteredAppointments.forEach(app => {
+      const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
+      if (!groups[monthYear]) {
+        groups[monthYear] = [];
+      }
+      groups[monthYear].push(app);
+    });
+    return groups;
+  }, [filteredAppointments]);
+
   const setResponse = async (
     appointment: UnrolledAppointment,
     newStatus: UserResponseStatus,
@@ -418,6 +432,8 @@ export default function VerwaltungTerminePage() {
     });
   };
 
+  const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
+
   return (
     <>
       <TooltipProvider>
@@ -471,183 +487,163 @@ export default function VerwaltungTerminePage() {
               </Select>
             </div>
 
-            {/* Termin-Tabelle */}
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Titel</TableHead>
-                    <TableHead>Datum & Uhrzeit</TableHead>
-                    <TableHead>Mannschaft</TableHead>
-                    <TableHead>Ort</TableHead>
-                    <TableHead>Rückmeldung</TableHead>
-                    <TableHead>Teilnehmer</TableHead>
-                    <TableHead className="text-right">Aktionen</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    // Skeleton-Loading-Ansicht
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-5 w-32" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-28" />
-                        </TableCell>
-                         <TableCell>
-                          <Skeleton className="h-5 w-28" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-24" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-24" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-24" />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Skeleton className="h-8 w-48 ml-auto" />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : filteredAppointments.length > 0 ? (
-                    // Geladene Termine
-                    filteredAppointments.map((app) => {
-                      const canRespond = isUserRelevantForAppointment(app, profile);
-                      
-                      const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
-                      const userResponse = responsesMap.get(`${app.id}_${dateString}`);
-                      const userStatus = userResponse?.status;
+            {isLoading ? (
+                // Skeleton-Loading-Ansicht
+                <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                </div>
+            ) : Object.keys(groupedAppointments).length > 0 ? (
+                <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
+                {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                    <AccordionItem value={monthYear} key={monthYear}>
+                        <AccordionTrigger className="text-lg font-semibold">
+                            {monthYear} ({appointmentsInMonth.length})
+                        </AccordionTrigger>
+                        <AccordionContent>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Titel</TableHead>
+                                        <TableHead>Datum & Uhrzeit</TableHead>
+                                        <TableHead>Mannschaft</TableHead>
+                                        <TableHead>Ort</TableHead>
+                                        <TableHead>Rückmeldung</TableHead>
+                                        <TableHead>Teilnehmer</TableHead>
+                                        <TableHead className="text-right">Aktionen</TableHead>
+                                    </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {appointmentsInMonth.map((app) => {
+                                        const canRespond = isUserRelevantForAppointment(app, profile);
+                                        const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
+                                        const userResponse = responsesMap.get(`${app.id}_${dateString}`);
+                                        const userStatus = userResponse?.status;
+                                        const location = app.locationId ? locationsMap.get(app.locationId) : null;
+                                        const typeName = getTypeName(app.appointmentTypeId);
+                                        const isSonstiges = typeName === 'Sonstiges';
+                                        const titleIsDefault = !isSonstiges && app.title === typeName;
+                                        const showTitle = app.title && (!titleIsDefault || isSonstiges);
+                                        const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
+                                        const originalAppointment = appointments?.find(a => a.id === app.id);
+                                        let rsvpDeadlineString = '-';
+                                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                                            const startMillis = originalAppointment.startDate.toMillis();
+                                            const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                                            const offset = startMillis - rsvpMillis;
+                                            const instanceStartMillis = app.instanceDate.getTime();
+                                            const instanceRsvpMillis = instanceStartMillis - offset;
+                                            rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                                        }
 
-
-                      const location = app.locationId ? locationsMap.get(app.locationId) : null;
-
-                      const typeName = getTypeName(app.appointmentTypeId);
-                      const isSonstiges = typeName === 'Sonstiges';
-                      const titleIsDefault = !isSonstiges && app.title === typeName;
-                      const showTitle = app.title && (!titleIsDefault || isSonstiges);
-                      const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
-                      
-                      const originalAppointment = appointments?.find(a => a.id === app.id);
-                      let rsvpDeadlineString = '-';
-                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
-                            const startMillis = originalAppointment.startDate.toMillis();
-                            const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
-                            const offset = startMillis - rsvpMillis;
-                            const instanceStartMillis = app.instanceDate.getTime();
-                            const instanceRsvpMillis = instanceStartMillis - offset;
-                            rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
-                        }
-
-
-                      return (
-                        <TableRow key={app.instanceId}>
-                          <TableCell className="font-medium">
-                            {displayTitle}
-                          </TableCell>
-                          <TableCell>
-                            {formatDateTime(app.startDate)} Uhr
-                          </TableCell>
-                           <TableCell>
-                            {app.visibility.type === 'all' 
-                              ? 'Alle' 
-                              : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
-                          </TableCell>
-                          <TableCell>
-                            {location ? (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <span className="underline decoration-dotted cursor-help">{location.name}</span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{location.address || 'Keine Adresse hinterlegt'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              '-'
-                            )}
-                          </TableCell>
-                          <TableCell>{rsvpDeadlineString}</TableCell>
-                          <TableCell>
-                            <ResponseStatus
-                              appointment={app}
-                              allMembers={allMembers || []}
-                              allResponses={allResponses || []}
-                              groups={groups || []}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {canRespond && auth.user ? (
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  size="sm"
-                                  variant={
-                                    userStatus === "zugesagt"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  onClick={() =>
-                                    handleSimpleResponse(
-                                      app,
-                                      "zugesagt",
-                                      userStatus,
-                                    )
-                                  }
-                                >
-                                  Zusage
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant={
-                                    userStatus === "unsicher"
-                                      ? "secondary"
-                                      : "outline"
-                                  }
-                                  onClick={() =>
-                                    handleSimpleResponse(
-                                      app,
-                                      "unsicher",
-                                      userStatus,
-                                    )
-                                  }
-                                >
-                                  Unsicher
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant={
-                                    userStatus === "abgesagt"
-                                      ? "destructive"
-                                      : "outline"
-                                  }
-                                  onClick={() => handleAbsageClick(app)}
-                                >
-                                  Absage
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                Nicht relevant
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    // Keine Termine gefunden
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center">
-                        Keine Termine gefunden, die den Filtern entsprechen.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                                        return (
+                                            <TableRow key={app.instanceId}>
+                                            <TableCell className="font-medium">
+                                                {displayTitle}
+                                            </TableCell>
+                                            <TableCell>
+                                                {formatDateTime(app.startDate)} Uhr
+                                            </TableCell>
+                                            <TableCell>
+                                                {app.visibility.type === 'all' 
+                                                ? 'Alle' 
+                                                : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
+                                            </TableCell>
+                                            <TableCell>
+                                                {location ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                    <span className="underline decoration-dotted cursor-help">{location.name}</span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                    <p>{location.address || 'Keine Adresse hinterlegt'}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                                ) : (
+                                                '-'
+                                                )}
+                                            </TableCell>
+                                            <TableCell>{rsvpDeadlineString}</TableCell>
+                                            <TableCell>
+                                                <ResponseStatus
+                                                appointment={app}
+                                                allMembers={allMembers || []}
+                                                allResponses={allResponses || []}
+                                                groups={groups || []}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {canRespond && auth.user ? (
+                                                <div className="flex justify-end gap-2">
+                                                    <Button
+                                                    size="sm"
+                                                    variant={
+                                                        userStatus === "zugesagt"
+                                                        ? "default"
+                                                        : "outline"
+                                                    }
+                                                    onClick={() =>
+                                                        handleSimpleResponse(
+                                                        app,
+                                                        "zugesagt",
+                                                        userStatus,
+                                                        )
+                                                    }
+                                                    >
+                                                    Zusage
+                                                    </Button>
+                                                    <Button
+                                                    size="sm"
+                                                    variant={
+                                                        userStatus === "unsicher"
+                                                        ? "secondary"
+                                                        : "outline"
+                                                    }
+                                                    onClick={() =>
+                                                        handleSimpleResponse(
+                                                        app,
+                                                        "unsicher",
+                                                        userStatus,
+                                                        )
+                                                    }
+                                                    >
+                                                    Unsicher
+                                                    </Button>
+                                                    <Button
+                                                    size="sm"
+                                                    variant={
+                                                        userStatus === "abgesagt"
+                                                        ? "destructive"
+                                                        : "outline"
+                                                    }
+                                                    onClick={() => handleAbsageClick(app)}
+                                                    >
+                                                    Absage
+                                                    </Button>
+                                                </div>
+                                                ) : (
+                                                <span className="text-xs text-muted-foreground">
+                                                    Nicht relevant
+                                                </span>
+                                                )}
+                                            </TableCell>
+                                            </TableRow>
+                                        );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+                </Accordion>
+            ) : (
+                <div className="text-center py-10">
+                    Keine Termine gefunden, die den Filtern entsprechen.
+                </div>
+            )}
           </CardContent>
         </Card>
         </div>
@@ -784,3 +780,5 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
+
+    
