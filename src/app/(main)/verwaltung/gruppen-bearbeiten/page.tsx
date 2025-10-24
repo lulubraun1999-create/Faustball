@@ -52,6 +52,9 @@ import {
   useFirestore,
   errorEmitter,
   FirestorePermissionError,
+  useUser,
+  useCollection,
+  useMemoFirebase,
 } from '@/firebase';
 import {
   collection,
@@ -65,7 +68,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Group } from '@/lib/types';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 
 const groupManagementSchema = z.object({
   action: z.enum(['add', 'delete']),
@@ -80,11 +83,15 @@ type GroupManagementValues = z.infer<typeof groupManagementSchema>;
 function AdminGruppenBearbeitenPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { isAdmin } = useUser();
   const [isEditingOpen, setIsEditingOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Group | null>(null);
 
-  // Fetch groups safely from admin context
-  const { groups, isLoadingGroups: isLoading } = useAdminData();
+  const groupsRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
+  );
+  const { data: groups, isLoading } = useCollection<Group>(groupsRef);
 
   const classes =
     groups?.filter((g) => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name)) || [];

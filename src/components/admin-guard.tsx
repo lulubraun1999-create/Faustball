@@ -1,8 +1,8 @@
 
 'use client';
 
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import React, { ReactNode } from 'react';
+import { useUser } from '@/firebase';
 import {
   Card,
   CardContent,
@@ -10,62 +10,11 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { collection } from 'firebase/firestore';
-import type { MemberProfile, Group } from '@/lib/types';
 
+// The AdminDataProvider and useAdminData hook have been removed to simplify the logic
+// and fix the race condition. Data fetching is now handled directly in the components
+// that need it, conditioned on the isAdmin flag from useUser.
 
-// 1. Define the context for Admin Data
-interface AdminDataContextType {
-  members: MemberProfile[] | null;
-  groups: Group[] | null;
-  isLoadingMembers: boolean;
-  isLoadingGroups: boolean;
-}
-
-const AdminDataContext = createContext<AdminDataContextType | undefined>(undefined);
-
-// 2. Create the internal Data Provider component
-interface AdminDataProviderProps {
-  children: ReactNode;
-}
-
-function AdminDataProvider({ children }: AdminDataProviderProps) {
-  const firestore = useFirestore();
-
-  // The queries are now implicitly safe because this component is only ever
-  // rendered when the parent AdminGuard has confirmed isAdmin is true.
-  const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
-
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
-  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-
-  const value = useMemo(() => ({
-    members,
-    groups,
-    isLoadingMembers,
-    isLoadingGroups,
-  }), [members, groups, isLoadingMembers, isLoadingGroups]);
-
-  return (
-    <AdminDataContext.Provider value={value}>
-      {children}
-    </AdminDataContext.Provider>
-  );
-}
-
-
-// 3. Create the public hook to access the data
-export function useAdminData(): AdminDataContextType {
-  const context = useContext(AdminDataContext);
-  if (context === undefined) {
-    throw new Error('useAdminData must be used within an AdminGuard');
-  }
-  return context;
-}
-
-
-// 4. Update the AdminGuard to use the provider correctly
 export function AdminGuard({ children }: { children: ReactNode }) {
   const { isUserLoading, isAdmin } = useUser();
 
@@ -99,12 +48,6 @@ export function AdminGuard({ children }: { children: ReactNode }) {
       );
   }
 
-  // Only if the user is an admin, render the provider and the children.
-  // This prevents any data fetching from starting for non-admin users.
-  return (
-    <AdminDataProvider>
-      {children}
-    </AdminDataProvider>
-  );
+  // If the user is an admin, render the children directly.
+  return <>{children}</>;
 }
-

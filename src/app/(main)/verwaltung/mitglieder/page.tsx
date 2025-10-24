@@ -1,7 +1,7 @@
 
 'use client';
 
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import {
   Card,
   CardContent,
@@ -20,10 +20,27 @@ import { Loader2, Users2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+import type { MemberProfile, Group } from '@/lib/types';
+
 
 function VerwaltungMitgliederPageContent() {
-  // Use the safe hook to get admin-only data
-  const { members, groups, isLoadingMembers, isLoadingGroups } = useAdminData();
+  const { isAdmin } = useUser();
+  const firestore = useFirestore();
+
+  const membersRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
+  );
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+
+  const groupsRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
+  );
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
 
   const isLoading = isLoadingMembers || isLoadingGroups;
 

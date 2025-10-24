@@ -7,10 +7,12 @@ import {
   FirestorePermissionError,
   useUser,
   initializeFirebase,
+  useCollection,
+  useMemoFirebase,
 } from '@/firebase';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch, collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -55,7 +57,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Edit, Users, Shield, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AdminGuard, useAdminData } from '@/components/admin-guard';
+import { AdminGuard } from '@/components/admin-guard';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -64,11 +66,20 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { forceRefresh } = useUser();
+  const { user: authUser, forceRefresh, isAdmin } = useUser();
   
-  // Fetch data safely from the admin context
-  const { members, groups, isLoadingMembers, isLoadingGroups } = useAdminData();
-  
+  const membersRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'members') : null),
+    [firestore, isAdmin]
+  );
+  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+
+  const groupsRef = useMemoFirebase(
+    () => (firestore && isAdmin ? collection(firestore, 'groups') : null),
+    [firestore, isAdmin]
+  );
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
   const isLoading = isLoadingMembers || isLoadingGroups;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
