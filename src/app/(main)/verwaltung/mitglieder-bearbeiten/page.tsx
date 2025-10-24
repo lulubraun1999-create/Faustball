@@ -66,7 +66,7 @@ import { Label } from '@/components/ui/label';
 function AdminMitgliederPageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user: authUser, forceRefresh, isAdmin } = useUser();
+  const { forceRefresh, isAdmin } = useUser();
   
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
