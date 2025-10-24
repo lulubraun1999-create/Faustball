@@ -713,8 +713,7 @@ export default function ProfileEditPage() {
                       <FormLabel>Geschlecht</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={member?.gender}
-                        key={member?.gender}
+                        value={field.value || ''}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -779,6 +778,8 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
 
     
 
