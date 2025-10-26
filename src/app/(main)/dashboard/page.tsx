@@ -1,131 +1,273 @@
-"use client";
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight, Calendar, MessageSquare, Shield } from "lucide-react";
+'use client';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
+import React, { useMemo } from 'react';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
+import { CalendarDays, Newspaper, BarChart3, Users, Loader2 } from 'lucide-react';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase'; // useDoc hinzugefügt
+import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore'; // Imports hinzugefügt
+import type { Appointment, NewsArticle, Poll, MemberProfile, Group } from '@/lib/types'; // Typen importiert
+import Link from 'next/link';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 export default function DashboardPage() {
-  const heroImage = PlaceHolderImages.find((img) => img.id === "dashboard-hero");
+    const { user, isUserLoading } = useUser();
+    const firestore = useFirestore();
 
-  return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="space-y-8">
-        <Card className="overflow-hidden">
-          <CardHeader className="p-0">
-            <div className="relative h-48 w-full sm:h-64">
-              {heroImage && (
-                <Image
-                  src={heroImage.imageUrl}
-                  alt={heroImage.description}
-                  layout="fill"
-                  objectFit="cover"
-                  className="bg-muted"
-                  data-ai-hint={heroImage.imageHint}
-                />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-0 left-0 p-6">
-                <h1 className="font-headline text-3xl font-bold text-white md:text-4xl">
-                  Willkommen!
-                </h1>
-                <p className="mt-2 text-lg text-gray-200">
-                  Dein zentraler Hub für alles rund um Faustball.
-                </p>
-              </div>
+    // Lade das Profil des aktuellen Benutzers, um seine Teams zu bekommen
+    const memberRef = useMemoFirebase(
+        () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
+        [firestore, user]
+    );
+    const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
+    const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
+
+    // --- Angepasste Datenabfragen ---
+
+    // 1. Nächste Termine (nur die sichtbaren)
+    //    - Query 1: Termine für 'all'
+    const nextAppointmentsAllQuery = useMemoFirebase(
+        () => (firestore && user ? query(
+            collection(firestore, 'appointments'),
+            where('visibility.type', '==', 'all'),
+            where('startDate', '>=', Timestamp.now()), // Nur zukünftige
+            orderBy('startDate', 'asc'),
+            limit(5)
+        ) : null),
+        [firestore, user]
+    );
+    //    - Query 2: Termine für die eigenen Teams (nur wenn Teams vorhanden)
+    const nextAppointmentsTeamsQuery = useMemoFirebase(
+        () => (firestore && user && userTeamIds.length > 0 ? query(
+            collection(firestore, 'appointments'),
+            where('visibility.type', '==', 'specificTeams'),
+            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('startDate', '>=', Timestamp.now()),
+            orderBy('startDate', 'asc'),
+            limit(5)
+        ) : null),
+        [firestore, user, userTeamIds]
+    );
+
+    const { data: appointmentsAll, isLoading: isLoadingAppAll } = useCollection<Appointment>(nextAppointmentsAllQuery);
+    const { data: appointmentsTeams, isLoading: isLoadingAppTeams } = useCollection<Appointment>(nextAppointmentsTeamsQuery);
+
+    // Kombiniere und sortiere die nächsten Termine
+    const nextAppointments = useMemo(() => {
+        const combined = [...(appointmentsAll || []), ...(appointmentsTeams || [])];
+        // Deduplizieren (falls ein Termin fälschlicherweise in beiden Queries landet)
+        const uniqueAppointments = Array.from(new Map(combined.map(app => [app.id, app])).values());
+        // Sortieren und auf 5 begrenzen
+        return uniqueAppointments.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis()).slice(0, 5);
+    }, [appointmentsAll, appointmentsTeams]);
+
+
+    // 2. Neueste Nachrichten (öffentlich)
+    const latestNewsQuery = useMemoFirebase(
+        () => (firestore && user ? query(
+            collection(firestore, 'news'),
+            orderBy('createdAt', 'desc'),
+            limit(3)
+        ) : null),
+        [firestore, user]
+    );
+    const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
+
+    // 3. Aktuelle Umfragen (nur die sichtbaren)
+     //    - Query 1: Umfragen für 'all'
+    const currentPollsAllQuery = useMemoFirebase(
+        () => (firestore && user ? query(
+            collection(firestore, 'polls'),
+            where('visibility.type', '==', 'all'),
+            where('endDate', '>=', Timestamp.now()), // Nur aktive
+            orderBy('endDate', 'asc'), // Sortiere nach Enddatum
+            limit(3)
+        ) : null),
+        [firestore, user]
+    );
+    //    - Query 2: Umfragen für die eigenen Teams
+    const currentPollsTeamsQuery = useMemoFirebase(
+        () => (firestore && user && userTeamIds.length > 0 ? query(
+            collection(firestore, 'polls'),
+            where('visibility.type', '==', 'specificTeams'),
+            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('endDate', '>=', Timestamp.now()),
+            orderBy('endDate', 'asc'),
+            limit(3)
+        ) : null),
+        [firestore, user, userTeamIds]
+    );
+    const { data: pollsAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(currentPollsAllQuery);
+    const { data: pollsTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(currentPollsTeamsQuery);
+
+    // Kombiniere und sortiere Umfragen
+    const currentPolls = useMemo(() => {
+        const combined = [...(pollsAll || []), ...(pollsTeams || [])];
+        const uniquePolls = Array.from(new Map(combined.map(poll => [poll.id, poll])).values());
+        return uniquePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
+    }, [pollsAll, pollsTeams]);
+
+
+    // 4. Eigene Teams (basierend auf dem Member-Profil)
+    const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+    const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+    const myTeams = useMemo(() => {
+        if (!allGroups || !memberProfile?.teams) return [];
+        const userTeamIdsSet = new Set(memberProfile.teams);
+        return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
+    }, [allGroups, memberProfile]);
+
+    const isLoading = isUserLoading || isLoadingMember || isLoadingAppAll || isLoadingAppTeams || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
+
+    if (isLoading) {
+        return (
+            <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          </CardHeader>
-        </Card>
+        );
+    }
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="flex flex-col">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-6 w-6 text-primary" />
-                <span>Kalender</span>
-              </CardTitle>
-              <CardDescription>
-                Überprüfe anstehende Spiele, Trainingseinheiten und Events.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className="rounded-lg bg-muted p-4 text-center">
-                 <p className="font-semibold">Nächstes Spiel: Sonntag, 14:00</p>
-                 <p className="text-sm text-muted-foreground">gegen TV Eibach 03</p>
-              </div>
-            </CardContent>
-            <CardContent>
-              <Link href="/kalender">
-                <Button className="w-full">
-                  Zum Kalender <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+    return (
+        <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2 lg:p-8 xl:grid-cols-3">
+            {/* Nächste Termine */}
+            <Card className="xl:col-span-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
+                    </CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href="/kalender">Alle anzeigen</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {nextAppointments && nextAppointments.length > 0 ? (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Datum</TableHead>
+                                    <TableHead>Uhrzeit</TableHead>
+                                    <TableHead>Titel</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {nextAppointments.map((app) => (
+                                    <TableRow key={app.id}>
+                                        <TableCell>
+                                            {format(app.startDate.toDate(), 'eee, dd.MM.yy', { locale: de })}
+                                        </TableCell>
+                                        <TableCell>
+                                            {app.isAllDay ? 'Ganztags' : format(app.startDate.toDate(), 'HH:mm', { locale: de })}
+                                        </TableCell>
+                                        <TableCell className="font-medium">{app.title}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Keine bevorstehenden Termine.</p>
+                    )}
+                </CardContent>
+            </Card>
 
-          <Card className="flex flex-col">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-6 w-6 text-primary" />
-                <span>Team-Chat</span>
-              </CardTitle>
-              <CardDescription>
-                Kommuniziere mit deinen Teamkollegen in Echtzeit.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className="rounded-lg bg-muted p-4">
-                 <p className="text-sm"><span className="font-semibold">Trainer:</span> Denkt an die Trikots für Sonntag!</p>
-                 <p className="mt-2 text-sm text-right"><span className="font-semibold">Du:</span> Verstanden!</p>
-              </div>
-            </CardContent>
-            <CardContent>
-              <Link href="/chat">
-                <Button className="w-full">
-                  Chat öffnen <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-          
-          <Card className="flex flex-col">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-6 w-6 text-primary" />
-                <span>Verwaltung</span>
-              </CardTitle>
-              <CardDescription>
-                Verwalte Mitglieder, Umfragen, Finanzen und mehr.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className="rounded-lg bg-muted p-4">
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex justify-between"><span>Mitglieder:</span> <span className="font-semibold">23 Aktiv</span></li>
-                  <li className="flex justify-between"><span>Aktive Umfragen:</span> <span className="font-semibold">2</span></li>
-                  <li className="flex justify-between"><span>Mannschaftskasse:</span> <span className="font-semibold">458,50 €</span></li>
-                </ul>
-              </div>
-            </CardContent>
-            <CardContent>
-              <Link href="/verwaltung/mitglieder">
-                <Button className="w-full">
-                  Zur Verwaltung <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+            {/* Neueste Nachrichten */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
+                    </CardTitle>
+                     {/* Optional: Link zur News-Seite */}
+                     {/* <Button variant="outline" size="sm" asChild>
+                         <Link href="/news">Alle anzeigen</Link>
+                     </Button> */}
+                </CardHeader>
+                <CardContent>
+                    {latestNews && latestNews.length > 0 ? (
+                        <ul className="space-y-3">
+                            {latestNews.map((news) => (
+                                <li key={news.id} className="text-sm font-medium hover:underline">
+                                    {/* Link zum News-Artikel, falls Detailseite existiert */}
+                                    {/* <Link href={`/news/${news.id}`}> */}
+                                        {news.title}
+                                    {/* </Link> */}
+                                     <p className="text-xs text-muted-foreground">
+                                         {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                     </p>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
+                    )}
+                </CardContent>
+            </Card>
 
+            {/* Aktuelle Umfragen */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-primary" /> Aktuelle Umfragen
+                    </CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                         <Link href="/verwaltung/umfragen">Alle anzeigen</Link> {/* Link angepasst */}
+                     </Button>
+                </CardHeader>
+                <CardContent>
+                    {currentPolls && currentPolls.length > 0 ? (
+                         <ul className="space-y-3">
+                            {currentPolls.map((poll) => (
+                                <li key={poll.id} className="text-sm font-medium hover:underline">
+                                    <Link href={`/verwaltung/umfragen?pollId=${poll.id}`}> {/* Link zur Umfragen-Seite mit ID */}
+                                        {poll.title}
+                                    </Link>
+                                     <p className="text-xs text-muted-foreground">
+                                         Endet am: {format(poll.endDate.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                     </p>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktiven Umfragen.</p>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Meine Teams */}
+            <Card>
+                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" /> Meine Teams
+                    </CardTitle>
+                     <Button variant="outline" size="sm" asChild>
+                         <Link href="/verwaltung/gruppen">Alle anzeigen</Link> {/* Link angepasst */}
+                     </Button>
+                </CardHeader>
+                <CardContent>
+                     {myTeams.length > 0 ? (
+                        <ul className="space-y-2">
+                            {myTeams.map((team) => (
+                                <li key={team.id} className="text-sm font-medium">
+                                    {team.name}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                         <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
+                    )}
+                </CardContent>
+            </Card>
+
+             {/* Platzhalter für zukünftige Widgets */}
+             {/* <Card className="xl:col-span-1">
+                 <CardHeader>
+                     <CardTitle>Weitere Infos</CardTitle>
+                     <CardDescription>Hier könnten weitere Widgets platziert werden.</CardDescription>
+                 </CardHeader>
+                 <CardContent>
+                     <p>...</p>
+                 </CardContent>
+             </Card> */}
         </div>
-      </div>
-    </div>
-  );
+    );
 }
