@@ -196,8 +196,16 @@ function AdminTerminePageContent() {
   // Data fetching
   const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
-  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  
+  const appointmentIds = useMemo(() => appointments?.map(app => app.id) || [], [appointments]);
+
+  const exceptionsRef = useMemoFirebase(() => {
+    if (!firestore || appointmentIds.length === 0) return null;
+    return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
+  }, [firestore, appointmentIds]);
+
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
+
   const typesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(typesRef);
   const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);

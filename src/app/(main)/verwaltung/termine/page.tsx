@@ -118,11 +118,11 @@ export default function VerwaltungTerminePage() {
   );
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
-  const responsesRef = useMemoFirebase(
+  const userResponsesRef = useMemoFirebase(
     () => auth.user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null,
     [firestore, auth.user]
   );
-  const { data: userResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(responsesRef);
+  const { data: userResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(userResponsesRef);
 
   const allMembersRef = useMemoFirebase(
     () => collection(firestore, 'members'),
@@ -526,7 +526,7 @@ export default function VerwaltungTerminePage() {
                                         <TableHead>Datum & Uhrzeit</TableHead>
                                         <TableHead>Mannschaft</TableHead>
                                         <TableHead>Ort</TableHead>
-                                        <TableHead>Rückmeldung</TableHead>
+                                        <TableHead>Rückmeldung bis</TableHead>
                                         <TableHead>Teilnehmer</TableHead>
                                         <TableHead className="text-right">Aktionen</TableHead>
                                     </TableRow>
@@ -796,7 +796,3 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
-
-    
-
-    
