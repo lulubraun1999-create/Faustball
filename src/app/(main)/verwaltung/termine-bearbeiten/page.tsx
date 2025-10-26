@@ -75,6 +75,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
     Dialog,
@@ -581,6 +582,22 @@ function AdminTerminePageContent() {
              </DialogFooter>
           </DialogContent>
       </Dialog>
+      
+      <Dialog open={isInstanceDialogOpen} onOpenChange={setIsInstanceDialogOpen}>
+          <DialogContent>
+             <DialogHeader><DialogTitle>Einzelnen Termin bearbeiten</DialogTitle></DialogHeader>
+             <Form {...instanceForm}>
+                <form onSubmit={instanceForm.handleSubmit(onSubmitSingleInstance)} className="space-y-4">
+                    <FormField control={instanceForm.control} name="title" render={({ field }) => ( <FormItem><FormLabel>Titel</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem> )}/>
+                    <FormField control={instanceForm.control} name="startDate" render={({ field }) => ( <FormItem><FormLabel>Beginn</FormLabel><FormControl><Input type={instanceForm.getValues("isAllDay") ? "date" : "datetime-local"} {...field} /></FormControl></FormItem> )}/>
+                    <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost">Abbrechen</Button></DialogClose>
+                        <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Speichern</Button>
+                    </DialogFooter>
+                </form>
+             </Form>
+          </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <h1 className="flex items-center gap-3 text-3xl font-bold font-headline">Termine bearbeiten</h1>
@@ -661,3 +678,5 @@ export default function AdminTerminePage() {
 
   return <AdminTerminePageContent />;
 }
+
+    
