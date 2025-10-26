@@ -22,110 +22,72 @@ export default function DashboardPage() {
         [firestore, user]
     );
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-
+    
     // --- Angepasste Datenabfragen ---
-
-    // 1. Nächste Termine (nur die sichtbaren)
-    const nextAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore || !memberProfile || !memberProfile.teams || memberProfile.teams.length === 0) {
-            // Wenn der User in keinem Team ist, keine Abfrage durchführen
-            return null;
-        }
-        // Hole nur Termine, die für eines der User-Teams sichtbar sind.
-        return query(
-            collection(firestore, 'appointments'),
-            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
-            where('startDate', '>=', Timestamp.now()),
-            orderBy('startDate', 'asc'),
-            limit(10)
-        );
-    }, [firestore, memberProfile]);
-
-    const { data: teamAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(nextAppointmentsQuery);
-
-    const allPublicAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        // Separate query for 'all' visible appointments
-        return query(
-             collection(firestore, 'appointments'),
-             where('visibility.type', '==', 'all'),
-             where('startDate', '>=', Timestamp.now()),
-             orderBy('startDate', 'asc'),
-             limit(10)
-         );
-     }, [firestore]);
-     const { data: publicAppointments, isLoading: isLoadingPublicApp } = useCollection<Appointment>(allPublicAppointmentsQuery);
-
-
+    
+    // Nächste Termine: Holt alle Termine (öffentlich + Team-spezifisch) und filtert clientseitig
+    const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+    const { data: allAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(appointmentsRef);
+    
     const nextAppointments = useMemo(() => {
-        const allAppointments = [...(teamAppointments || []), ...(publicAppointments || [])];
-        const uniqueAppointments = Array.from(new Map(allAppointments.map(app => [app.id, app])).values());
-        
-        return uniqueAppointments
+        if (!allAppointments || !memberProfile) return [];
+        const userTeams = new Set(memberProfile.teams || []);
+        return allAppointments
+            .filter(app => app.startDate && app.startDate.toDate() >= new Date()) // Nur zukünftige
+            .filter(app => {
+                if (app.visibility.type === 'all') return true;
+                if (app.visibility.teamIds) {
+                    return app.visibility.teamIds.some(teamId => userTeams.has(teamId));
+                }
+                return false;
+            })
             .sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis())
             .slice(0, 5);
-    }, [teamAppointments, publicAppointments]);
+    }, [allAppointments, memberProfile]);
 
-
-    // 2. Neueste Nachrichten (öffentlich)
+    // Neueste Nachrichten (öffentlich)
     const latestNewsQuery = useMemoFirebase(
-        () => (firestore && user ? query(
+        () => (firestore ? query(
             collection(firestore, 'news'),
             orderBy('createdAt', 'desc'),
             limit(3)
         ) : null),
-        [firestore, user]
+        [firestore]
     );
     const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
 
-    // 3. Aktuelle Umfragen (nur die sichtbaren)
-    const currentPollsQuery = useMemoFirebase(() => {
-        if (!firestore || !memberProfile || !memberProfile.teams || memberProfile.teams.length === 0) {
-            return null;
-        }
-        
-        return query(
-            collection(firestore, 'polls'),
-            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
-            where('endDate', '>=', Timestamp.now()),
-            orderBy('endDate', 'asc'),
-            limit(6)
-        );
-    }, [firestore, memberProfile]);
-    const { data: teamPolls, isLoading: isLoadingTeamPolls } = useCollection<Poll>(currentPollsQuery);
-
-    const allPublicPollsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(
-             collection(firestore, 'polls'),
-             where('visibility.type', '==', 'all'),
-             where('endDate', '>=', Timestamp.now()),
-             orderBy('endDate', 'asc'),
-             limit(6)
-         );
-     }, [firestore]);
-    const { data: publicPolls, isLoading: isLoadingPublicPolls } = useCollection<Poll>(allPublicPollsQuery);
-
+    // Aktuelle Umfragen: Holt alle Umfragen und filtert clientseitig
+    const pollsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'polls') : null), [firestore]);
+    const { data: allPolls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
 
     const currentPolls = useMemo(() => {
-        const allPolls = [...(teamPolls || []), ...(publicPolls || [])];
-        const uniquePolls = Array.from(new Map(allPolls.map(poll => [poll.id, poll])).values());
-        return uniquePolls
+        if (!allPolls || !memberProfile) return [];
+        const userTeams = new Set(memberProfile.teams || []);
+        return allPolls
+            .filter(poll => poll.endDate && poll.endDate.toDate() >= new Date()) // Nur aktive
+            .filter(poll => {
+                if (poll.visibility.type === 'all') return true;
+                if (poll.visibility.teamIds) {
+                    return poll.visibility.teamIds.some(teamId => userTeams.has(teamId));
+                }
+                return false;
+            })
             .sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis())
             .slice(0, 3);
-    }, [teamPolls, publicPolls]);
+    }, [allPolls, memberProfile]);
 
 
-    // 4. Eigene Teams (basierend auf dem Member-Profil)
+    // Eigene Teams (basierend auf dem Member-Profil)
     const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
     const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+    
     const myTeams = useMemo(() => {
         if (!allGroups || !memberProfile?.teams) return [];
         const userTeamIdsSet = new Set(memberProfile.teams);
         return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
     }, [allGroups, memberProfile]);
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingApp || isLoadingPublicApp || isLoadingNews || isLoadingTeamPolls || isLoadingPublicPolls || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingApp || isLoadingNews || isLoadingPolls || isLoadingGroups;
 
     if (isLoading) {
         return (

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   useFirestore,
   useCollection,
@@ -102,18 +102,20 @@ export default function UmfragenPage() {
       }
   };
 
+  const visiblePolls = useMemo(() => {
+    if (!polls || !member) return [];
+    const userTeams = new Set(member.teams || []);
+    return polls
+        .filter((poll) => {
+            if (poll.visibility.type === 'all') return true;
+            if (poll.visibility.type === 'specificTeams') {
+                return poll.visibility.teamIds.some(teamId => userTeams.has(teamId));
+            }
+            return false;
+        })
+        .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }, [polls, member]);
 
-  const visiblePolls = polls
-    ?.filter((poll) => {
-        if (!user || !member) return false;
-        if (poll.visibility.type === 'all') return true;
-        if (poll.visibility.type === 'specificTeams') {
-            const userTeams = member.teams || [];
-            return poll.visibility.teamIds.some(teamId => userTeams.includes(teamId));
-        }
-        return false;
-    })
-    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
 
   const activePolls = visiblePolls?.filter(p => !isPast(p.endDate.toDate()));
   const expiredPolls = visiblePolls?.filter(p => isPast(p.endDate.toDate()));
@@ -257,5 +259,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
-
-    

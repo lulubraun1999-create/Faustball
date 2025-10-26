@@ -6,19 +6,21 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isAdmin() { return request.auth.token.admin == true; }
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
+    
+    // Gibt die Teams des Benutzers als Liste zurück, oder eine leere Liste, wenn keine vorhanden sind
     function getUserTeams() {
-      let memberData = getMemberDoc(request.auth.uid).data;
-      return memberData != null && 'teams' in memberData ? memberData.teams : [];
+      return getMemberDoc(request.auth.uid).data.get('teams', []);
     }
+    
+    // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das gelesene Dokument gehört
     function isMemberOfDocTeamResource() {
-      let userTeams = getUserTeams();
+      // Stelle sicher, dass resource.data existiert, teamId hat und der User Teams hat
       return isSignedIn() &&
              resource != null && resource.data != null &&
              resource.data.keys().hasAny(['teamId']) &&
-             userTeams.size() > 0 &&
-             userTeams.hasAny([resource.data.teamId]);
+             getUserTeams().size() > 0 &&
+             getUserTeams().hasAny([resource.data.teamId]); // Prüfe Mitgliedschaft
     }
-
 
     // --- /users/{userId} ---
     match /users/{userId} {
@@ -38,7 +40,9 @@ service cloud.firestore {
     // --- /members/{memberId} ---
     match /members/{memberId} {
         function isOwner(memberId) { return request.auth.uid == memberId; }
-        function isExistingOwner() { return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid; }
+        function isExistingOwner() {
+          return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid;
+        }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
@@ -74,13 +78,13 @@ service cloud.firestore {
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
         function isMemberOfVisibleTeamForAppointment() {
-          let memberTeams = getUserTeams();
-          return memberTeams != null &&
+          // Prüfe Existenz aller nötigen Felder und dann die Team-Mitgliedschaft
+          return getUserTeams() != null && // User muss Teams haben
                  resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
                  resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
-                 resource.data.visibility.teamIds.hasAny(memberTeams);
+                 resource.data.visibility.teamIds.hasAny(getUserTeams());
         }
 
         allow read: if isSignedIn() && (
@@ -113,7 +117,7 @@ service cloud.firestore {
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
         function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
         function isMemberOfOriginalAppointmentTeamFromResource() {
-           let originalAppointment = getOriginalAppointmentFromResource();
+           let originalAppointment = getOriginalAppointmentFromResource(); // 'let' ist OK innerhalb von 'function'
            if (originalAppointment == null || originalAppointment.data == null) { return false; }
            let originalAppointmentData = originalAppointment.data;
            let memberTeams = getUserTeams();
@@ -125,7 +129,7 @@ service cloud.firestore {
         }
 
         allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
-        allow list: if isSignedIn() && isAdmin(); // KORREKTE LIST-REGEL
+        allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isAdmin() && exists(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
         allow update, delete: if isSignedIn() && isAdmin();
     }
@@ -147,7 +151,7 @@ service cloud.firestore {
                      (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                      isMemberOfVisibleTeamForPollResource()
                    );
-        allow list: if isSignedIn(); // Erlaube LIST für angemeldete Benutzer
+        allow list: if isSignedIn();
         allow create, delete: if isSignedIn() && isAdmin();
         allow update: if isSignedIn() && (
                       isAdmin() ||
