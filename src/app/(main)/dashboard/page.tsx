@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -22,7 +23,7 @@ export default function DashboardPage() {
         [firestore, user]
     );
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-
+    
     // --- Angepasste Datenabfragen ---
 
     // 1. Nächste Termine (nur die sichtbaren)
@@ -131,141 +132,137 @@ export default function DashboardPage() {
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2 lg:p-8 xl:grid-cols-3">
             {/* Nächste Termine */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
-                    </CardTitle>
-                    <Button variant="outline" size="sm" asChild>
-                        <Link href="/verwaltung/termine">Alle anzeigen</Link>
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    {nextAppointments && nextAppointments.length > 0 ? (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Datum</TableHead>
-                                    <TableHead>Uhrzeit</TableHead>
-                                    <TableHead>Titel</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {nextAppointments.map((app) => (
-                                    <TableRow key={app.id}>
-                                        <TableCell>
-                                            {format(app.startDate.toDate(), 'eee, dd.MM.yy', { locale: de })}
-                                        </TableCell>
-                                        <TableCell>
-                                            {app.isAllDay ? 'Ganztags' : format(app.startDate.toDate(), 'HH:mm', { locale: de })}
-                                        </TableCell>
-                                        <TableCell className="font-medium">{app.title}</TableCell>
+            <div className="xl:col-span-2">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/termine">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {nextAppointments && nextAppointments.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Uhrzeit</TableHead>
+                                        <TableHead>Titel</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Keine bevorstehenden Termine.</p>
-                    )}
-                </CardContent>
-            </Card>
+                                </TableHeader>
+                                <TableBody>
+                                    {nextAppointments.map((app) => (
+                                        <TableRow key={app.id}>
+                                            <TableCell>
+                                                {format(app.startDate.toDate(), 'eee, dd.MM.yy', { locale: de })}
+                                            </TableCell>
+                                            <TableCell>
+                                                {app.isAllDay ? 'Ganztags' : format(app.startDate.toDate(), 'HH:mm', { locale: de })}
+                                            </TableCell>
+                                            <TableCell className="font-medium">{app.title}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Keine bevorstehenden Termine.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Neueste Nachrichten */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
-                    </CardTitle>
-                     {/* Optional: Link zur News-Seite */}
-                     <Button variant="outline" size="sm" asChild>
-                         <Link href="/verwaltung/news">Alle anzeigen</Link>
-                     </Button>
-                </CardHeader>
-                <CardContent>
-                    {latestNews && latestNews.length > 0 ? (
-                        <ul className="space-y-3">
-                            {latestNews.map((news) => (
-                                <li key={news.id} className="text-sm font-medium hover:underline">
-                                    <Link href={`/verwaltung/news/${news.id}`}>
-                                        {news.title}
-                                    </Link>
-                                     <p className="text-xs text-muted-foreground">
-                                         {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
-                                     </p>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
-                    )}
-                </CardContent>
-            </Card>
+            <div>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/news">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {latestNews && latestNews.length > 0 ? (
+                            <ul className="space-y-3">
+                                {latestNews.map((news) => (
+                                    <li key={news.id} className="text-sm font-medium hover:underline">
+                                        <Link href={`/verwaltung/news/${news.id}`}>
+                                            {news.title}
+                                        </Link>
+                                        <p className="text-xs text-muted-foreground">
+                                            {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                        </p>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Aktuelle Umfragen */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <BarChart3 className="h-5 w-5 text-primary" /> Aktuelle Umfragen
-                    </CardTitle>
-                    <Button variant="outline" size="sm" asChild>
-                         <Link href="/verwaltung/umfragen">Alle anzeigen</Link> {/* Link angepasst */}
-                     </Button>
-                </CardHeader>
-                <CardContent>
-                    {currentPolls && currentPolls.length > 0 ? (
-                         <ul className="space-y-3">
-                            {currentPolls.map((poll) => (
-                                <li key={poll.id} className="text-sm font-medium hover:underline">
-                                    <Link href={`/verwaltung/umfragen?pollId=${poll.id}`}> {/* Link zur Umfragen-Seite mit ID */}
-                                        {poll.title}
-                                    </Link>
-                                     <p className="text-xs text-muted-foreground">
-                                         Endet am: {format(poll.endDate.toDate(), 'dd.MM.yyyy', { locale: de })}
-                                     </p>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktiven Umfragen.</p>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="lg:col-span-2 xl:col-span-1">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <BarChart3 className="h-5 w-5 text-primary" /> Aktuelle Umfragen
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/umfragen">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {currentPolls && currentPolls.length > 0 ? (
+                            <ul className="space-y-3">
+                                {currentPolls.map((poll) => (
+                                    <li key={poll.id} className="text-sm font-medium hover:underline">
+                                        <Link href={`/verwaltung/umfragen?pollId=${poll.id}`}>
+                                            {poll.title}
+                                        </Link>
+                                        <p className="text-xs text-muted-foreground">
+                                            Endet am: {format(poll.endDate.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                        </p>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Keine aktiven Umfragen.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* Meine Teams */}
-            <Card>
-                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" /> Meine Teams
-                    </CardTitle>
-                     <Button variant="outline" size="sm" asChild>
-                         <Link href="/verwaltung/gruppen">Alle anzeigen</Link> {/* Link angepasst */}
-                     </Button>
-                </CardHeader>
-                <CardContent>
-                     {myTeams.length > 0 ? (
-                        <ul className="space-y-2">
-                            {myTeams.map((team) => (
-                                <li key={team.id} className="text-sm font-medium">
-                                    {team.name}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                         <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
-                    )}
-                </CardContent>
-            </Card>
-
-             {/* Platzhalter für zukünftige Widgets */}
-             {/* <Card>
-                 <CardHeader>
-                     <CardTitle>Weitere Infos</CardTitle>
-                     <CardDescription>Hier könnten weitere Widgets platziert werden.</CardDescription>
-                 </CardHeader>
-                 <CardContent>
-                     <p>...</p>
-                 </CardContent>
-             </Card> */}
+            <div>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <Users className="h-5 w-5 text-primary" /> Meine Teams
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/gruppen">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {myTeams.length > 0 ? (
+                            <ul className="space-y-2">
+                                {myTeams.map((team) => (
+                                    <li key={team.id} className="text-sm font-medium">
+                                        {team.name}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
