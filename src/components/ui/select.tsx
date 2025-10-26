@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -50,6 +49,7 @@ const SelectScrollUpButton = React.forwardRef<
 ))
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
 
+{/* *** KORREKTUR HIER: 'SelectVSelectScrollDownButton' zu 'SelectPrimitive.ScrollDownButton' geändert *** */}
 const SelectScrollDownButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
@@ -120,7 +120,7 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "active:bg-accent/80", 
+      "active:bg-accent/80", // Klick-Feedback
       className
     )}
     {...props}
@@ -160,5 +160,3 @@ export {
   SelectScrollUpButton,
   SelectScrollDownButton,
 }
-
-    
