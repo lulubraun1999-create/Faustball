@@ -27,41 +27,46 @@ export default function DashboardPage() {
     // --- Angepasste Datenabfragen ---
 
     // 1. Nächste Termine (nur die sichtbaren)
-    //    - Query 1: Termine für 'all'
-    const nextAppointmentsAllQuery = useMemoFirebase(
-        () => (firestore && user ? query(
+    const nextAppointmentsQuery = useMemoFirebase(() => {
+        if (!firestore || !user || !memberProfile) return null;
+        
+        const userTeamIds = memberProfile.teams || [];
+        if (userTeamIds.length === 0) {
+            // Wenn der User in keinem Team ist, nur 'all' Termine holen
+            return query(
+                collection(firestore, 'appointments'),
+                where('visibility.type', '==', 'all'),
+                where('startDate', '>=', Timestamp.now()),
+                orderBy('startDate', 'asc'),
+                limit(5)
+            );
+        }
+        
+        // Hole Termine, die entweder 'all' sind ODER für eines der User-Teams
+        return query(
             collection(firestore, 'appointments'),
-            where('visibility.type', '==', 'all'),
-            where('startDate', '>=', Timestamp.now()), // Nur zukünftige
-            orderBy('startDate', 'asc'),
-            limit(5)
-        ) : null),
-        [firestore, user]
-    );
-    //    - Query 2: Termine für die eigenen Teams (nur wenn Teams vorhanden)
-    const nextAppointmentsTeamsQuery = useMemoFirebase(
-        () => (firestore && user && memberProfile && memberProfile.teams && memberProfile.teams.length > 0 ? query(
-            collection(firestore, 'appointments'),
-            where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
+            where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds]),
             where('startDate', '>=', Timestamp.now()),
             orderBy('startDate', 'asc'),
-            limit(5)
-        ) : null),
-        [firestore, user, memberProfile]
-    );
+            limit(10) // Etwas mehr holen, da wir client-seitig filtern
+        );
+    }, [firestore, user, memberProfile]);
 
-    const { data: appointmentsAll, isLoading: isLoadingAppAll } = useCollection<Appointment>(nextAppointmentsAllQuery);
-    const { data: appointmentsTeams, isLoading: isLoadingAppTeams } = useCollection<Appointment>(nextAppointmentsTeamsQuery);
+    const { data: rawAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(nextAppointmentsQuery);
 
-    // Kombiniere und sortiere die nächsten Termine
     const nextAppointments = useMemo(() => {
-        const combined = [...(appointmentsAll || []), ...(appointmentsTeams || [])];
-        // Deduplizieren (falls ein Termin fälschlicherweise in beiden Queries landet)
-        const uniqueAppointments = Array.from(new Map(combined.map(app => [app.id, app])).values());
-        // Sortieren und auf 5 begrenzen
-        return uniqueAppointments.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis()).slice(0, 5);
-    }, [appointmentsAll, appointmentsTeams]);
+        if (!rawAppointments || !memberProfile) return [];
+        const userTeamIds = new Set(memberProfile.teams || []);
+        return rawAppointments
+            .filter(app => {
+                if (app.visibility.type === 'all') return true;
+                if (app.visibility.type === 'specificTeams') {
+                    return app.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+                }
+                return false;
+            })
+            .slice(0, 5);
+    }, [rawAppointments, memberProfile]);
 
 
     // 2. Neueste Nachrichten (öffentlich)
@@ -76,38 +81,44 @@ export default function DashboardPage() {
     const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
 
     // 3. Aktuelle Umfragen (nur die sichtbaren)
-     //    - Query 1: Umfragen für 'all'
-    const currentPollsAllQuery = useMemoFirebase(
-        () => (firestore && user ? query(
+    const currentPollsQuery = useMemoFirebase(() => {
+        if (!firestore || !user || !memberProfile) return null;
+        
+        const userTeamIds = memberProfile.teams || [];
+        if (userTeamIds.length === 0) {
+            return query(
+                collection(firestore, 'polls'),
+                where('visibility.type', '==', 'all'),
+                where('endDate', '>=', Timestamp.now()),
+                orderBy('endDate', 'asc'),
+                limit(3)
+            );
+        }
+        
+        return query(
             collection(firestore, 'polls'),
-            where('visibility.type', '==', 'all'),
-            where('endDate', '>=', Timestamp.now()), // Nur aktive
-            orderBy('endDate', 'asc'), // Sortiere nach Enddatum
-            limit(3)
-        ) : null),
-        [firestore, user]
-    );
-    //    - Query 2: Umfragen für die eigenen Teams
-    const currentPollsTeamsQuery = useMemoFirebase(
-        () => (firestore && user && memberProfile && memberProfile.teams && memberProfile.teams.length > 0 ? query(
-            collection(firestore, 'polls'),
-            where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
+            where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds]),
             where('endDate', '>=', Timestamp.now()),
             orderBy('endDate', 'asc'),
-            limit(3)
-        ) : null),
-        [firestore, user, memberProfile]
-    );
-    const { data: pollsAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(currentPollsAllQuery);
-    const { data: pollsTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(currentPollsTeamsQuery);
+            limit(6)
+        );
+    }, [firestore, user, memberProfile]);
 
-    // Kombiniere und sortiere Umfragen
+    const { data: rawPolls, isLoading: isLoadingPolls } = useCollection<Poll>(currentPollsQuery);
+
     const currentPolls = useMemo(() => {
-        const combined = [...(pollsAll || []), ...(pollsTeams || [])];
-        const uniquePolls = Array.from(new Map(combined.map(poll => [poll.id, poll])).values());
-        return uniquePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
-    }, [pollsAll, pollsTeams]);
+        if (!rawPolls || !memberProfile) return [];
+        const userTeamIds = new Set(memberProfile.teams || []);
+        return rawPolls
+            .filter(poll => {
+                if (poll.visibility.type === 'all') return true;
+                if (poll.visibility.type === 'specificTeams') {
+                    return poll.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+                }
+                return false;
+            })
+            .slice(0, 3);
+    }, [rawPolls, memberProfile]);
 
 
     // 4. Eigene Teams (basierend auf dem Member-Profil)
@@ -119,7 +130,7 @@ export default function DashboardPage() {
         return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
     }, [allGroups, memberProfile]);
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingAppAll || isLoadingAppTeams || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingApp || isLoadingNews || isLoadingPolls || isLoadingGroups;
 
     if (isLoading) {
         return (
@@ -131,7 +142,6 @@ export default function DashboardPage() {
 
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2 lg:p-8 xl:grid-cols-3">
-            {/* Nächste Termine */}
             <div className="xl:col-span-2">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -172,40 +182,36 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
             </div>
+            
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
+                    </CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href="/verwaltung/news">Alle anzeigen</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {latestNews && latestNews.length > 0 ? (
+                        <ul className="space-y-3">
+                            {latestNews.map((news) => (
+                                <li key={news.id} className="text-sm font-medium hover:underline">
+                                    <Link href={`/verwaltung/news/${news.id}`}>
+                                        {news.title}
+                                    </Link>
+                                    <p className="text-xs text-muted-foreground">
+                                        {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
+                    )}
+                </CardContent>
+            </Card>
 
-            {/* Neueste Nachrichten */}
-            <div>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-lg font-medium flex items-center gap-2">
-                            <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
-                        </CardTitle>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/verwaltung/news">Alle anzeigen</Link>
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        {latestNews && latestNews.length > 0 ? (
-                            <ul className="space-y-3">
-                                {latestNews.map((news) => (
-                                    <li key={news.id} className="text-sm font-medium hover:underline">
-                                        <Link href={`/verwaltung/news/${news.id}`}>
-                                            {news.title}
-                                        </Link>
-                                        <p className="text-xs text-muted-foreground">
-                                            {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
-                                        </p>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Aktuelle Umfragen */}
             <div className="lg:col-span-2 xl:col-span-1">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -237,32 +243,29 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            {/* Meine Teams */}
-            <div>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-lg font-medium flex items-center gap-2">
-                            <Users className="h-5 w-5 text-primary" /> Meine Teams
-                        </CardTitle>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/verwaltung/gruppen">Alle anzeigen</Link>
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        {myTeams.length > 0 ? (
-                            <ul className="space-y-2">
-                                {myTeams.map((team) => (
-                                    <li key={team.id} className="text-sm font-medium">
-                                        {team.name}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" /> Meine Teams
+                    </CardTitle>
+                    <Button variant="outline" size="sm" asChild>
+                        <Link href="/verwaltung/gruppen">Alle anzeigen</Link>
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {myTeams.length > 0 ? (
+                        <ul className="space-y-2">
+                            {myTeams.map((team) => (
+                                <li key={team.id} className="text-sm font-medium">
+                                    {team.name}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }
