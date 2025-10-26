@@ -14,7 +14,6 @@ import {
   deleteDoc,
   query,
   where,
-  getDocs,
   collection,
 } from "firebase/firestore";
 import {
@@ -52,7 +51,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -112,18 +110,23 @@ export default function VerwaltungTerminePage() {
   );
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
   
-  const appointmentsRef = useMemoFirebase(
-      () => collection(firestore, 'appointments'),
-      [firestore]
-  );
+  const appointmentsRef = useMemoFirebase(() => {
+    if (!firestore || !profile) return null;
+    const userTeamIds = profile.teams || [];
+    if (userTeamIds.length === 0) {
+        return query(
+            collection(firestore, 'appointments'),
+            where('visibility.type', '==', 'all')
+        );
+    }
+    return query(
+        collection(firestore, 'appointments'),
+        where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds])
+    );
+  }, [firestore, profile]);
+
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
-  const userResponsesRef = useMemoFirebase(
-    () => auth.user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null,
-    [firestore, auth.user]
-  );
-  const { data: userResponses, isLoading: responsesLoading } = useCollection<AppointmentResponse>(userResponsesRef);
-
   const allMembersRef = useMemoFirebase(
     () => collection(firestore, 'members'),
     [firestore]
@@ -135,23 +138,6 @@ export default function VerwaltungTerminePage() {
       [firestore]
   );
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
-
-
-  const responsesMap = useMemo(() => {
-    const map = new Map<string, AppointmentResponse>();
-    userResponses?.forEach(res => {
-      map.set(`${res.appointmentId}_${res.date}`, res);
-    });
-    return map;
-  }, [userResponses]);
-
-
-  const membersMap = useMemo(() => {
-    const map = new Map<string, MemberProfile>();
-    allMembers?.forEach(mem => map.set(mem.userId, mem));
-    return map;
-  }, [allMembers]);
-
 
   const appointmentTypesRef = useMemoFirebase(
       () => collection(firestore, 'appointmentTypes'),
@@ -180,9 +166,8 @@ export default function VerwaltungTerminePage() {
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
-    responsesLoading ||
-    membersLoading ||
-    allResponsesLoading;
+    allResponsesLoading ||
+    membersLoading;
 
   // Teams für Filter extrahieren, nur die, in denen der User Mitglied ist
   const { userTeams, teamsMap } = useMemo(() => {
@@ -535,7 +520,8 @@ export default function VerwaltungTerminePage() {
                                         {appointmentsInMonth.map((app) => {
                                         const canRespond = isUserRelevantForAppointment(app, profile);
                                         const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
-                                        const userResponse = responsesMap.get(`${app.id}_${dateString}`);
+                                        const userResponse = allResponses?.find(r => r.id === `${app.id}_${dateString}_${auth.user?.uid}`);
+
                                         const userStatus = userResponse?.status;
                                         const location = app.locationId ? locationsMap.get(app.locationId) : null;
                                         const typeName = getTypeName(app.appointmentTypeId);
@@ -708,7 +694,7 @@ interface ResponseStatusProps {
 }
 
 const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers, allResponses, groups }) => {
-  const { relevantMembers, responsesForInstance, accepted, rejected, unsure, pending } = useMemo(() => {
+  const { relevantMembers, accepted, rejected, unsure, pending } = useMemo(() => {
     const relevantMemberIds = new Set<string>();
     const visibility = appointment.visibility;
 
@@ -735,8 +721,8 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     const respondedUserIds = new Set(responsesForInstance.map(r => r.userId));
     const pending = relevantMembers.filter(m => !respondedUserIds.has(m.userId));
 
-    return { relevantMembers, responsesForInstance, accepted, rejected, unsure, pending };
-  }, [appointment, allMembers, allResponses, groups]);
+    return { relevantMembers, accepted, rejected, unsure, pending };
+  }, [appointment, allMembers, allResponses]);
   
   const membersMap = useMemo(() => new Map(allMembers.map(m => [m.userId, m])), [allMembers]);
 

@@ -1,8 +1,8 @@
 
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import React, { useState, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -12,7 +12,6 @@ import {
   errorEmitter,
   FirestorePermissionError,
   useUser,
-  useDoc
 } from '@/firebase';
 import {
   collection,
@@ -38,7 +37,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -77,7 +75,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
     Dialog,
@@ -87,16 +84,13 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, MapPin, CalendarPlus, CalendarX, X, RefreshCw } from 'lucide-react';
+import { Edit, Trash2, ListTodo, Loader2, Plus, RefreshCw, CalendarX } from 'lucide-react';
 import type { Appointment, AppointmentType, Location, Group, AppointmentException } from '@/lib/types';
-import { format, formatISO, isValid as isDateValid, addDays, addWeeks, addMonths, differenceInMilliseconds, set, isEqual, startOfDay, parseISO } from 'date-fns';
+import { format, addDays, addWeeks, addMonths, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 
 // --- Typen ---
 type GroupWithTeams = Group & { teams: Group[] };
@@ -109,7 +103,6 @@ type UnrolledAppointment = Appointment & {
   exceptionId?: string;
   isCancelled?: boolean;
 };
-
 
 // --- Zod Schemas ---
 const locationSchema = z.object({ name: z.string().min(1, "Name ist erforderlich."), address: z.string().optional() });
@@ -156,7 +149,7 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
                   const recurrenceEnd = new Date(data.recurrenceEndDate);
                   const startDateValue = data.startDate.includes('T') ? data.startDate.split('T')[0] : data.startDate;
                   const start = new Date(startDateValue);
-                  return isDateValid(recurrenceEnd) && isDateValid(start) && recurrenceEnd >= start;
+                  return recurrenceEnd >= start;
                } catch (e) { return false; }
             }
             return true;
@@ -177,7 +170,7 @@ type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
 function AdminTerminePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, isAdmin } = useUser();
+  const { user } = useUser();
 
   // Dialog & Form States
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -232,20 +225,10 @@ function AdminTerminePageContent() {
   const appointmentForm = useForm<AppointmentFormValues>({ 
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
-        title: '',
-        appointmentTypeId: '',
-        startDate: '',
-        endDate: '',
-        isAllDay: false,
-        recurrence: 'none',
-        recurrenceEndDate: '',
-        visibilityType: 'all',
-        visibleTeamIds: [],
-        rsvpDeadline: '',
-        locationId: '',
-        meetingPoint: '',
-        meetingTime: '',
-        description: '',
+        title: '', appointmentTypeId: '', startDate: '', endDate: '',
+        isAllDay: false, recurrence: 'none', recurrenceEndDate: '',
+        visibilityType: 'all', visibleTeamIds: [], rsvpDeadline: '',
+        locationId: '', meetingPoint: '', meetingTime: '', description: '',
     }
   });
   const locationForm = useForm<LocationFormValues>({ resolver: zodResolver(locationSchema), defaultValues: { name: '', address: '' }});
@@ -316,7 +299,7 @@ function AdminTerminePageContent() {
         }
     });
 
-    return allEvents.filter(event => event.instanceDate >= new Date())
+    return allEvents.filter(event => event.instanceDate >= new Date() || event.isCancelled)
                     .sort((a,b) => a.instanceDate.getTime() - b.instanceDate.getTime());
 
   }, [appointments, exceptions, isLoadingExceptions]);
@@ -546,17 +529,6 @@ function AdminTerminePageContent() {
   
   const isLoading = isLoadingAppointments || isLoadingTypes || isLoadingLocations || isLoadingGroups || isLoadingExceptions;
 
-  if (!isAdmin) {
-    return (
-       <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-         <Card className="border-destructive/50">
-           <CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><ListTodo className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader>
-           <CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen, um auf diesen Bereich zuzugreifen.</p></CardContent>
-         </Card>
-       </div>
-     );
-  }
-
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Dialog open={isAppointmentDialogOpen} onOpenChange={(open) => { if (!open) resetAppointmentForm(); setIsAppointmentDialogOpen(open); }}>
@@ -609,8 +581,6 @@ function AdminTerminePageContent() {
              </DialogFooter>
           </DialogContent>
       </Dialog>
-      
-      {/*... Other Dialogs for Instance, Type ... */}
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <h1 className="flex items-center gap-3 text-3xl font-bold font-headline">Termine bearbeiten</h1>

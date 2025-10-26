@@ -103,6 +103,42 @@ export interface Appointment {
   lastUpdated?: Timestamp;
 }
 
+/**
+ * Represents a single user's response to a specific instance of an appointment.
+ * Stored in Firestore under the /appointmentResponses collection.
+ */
+export interface AppointmentResponse {
+  id: string;
+  appointmentId: string; // ID of the parent Appointment
+  userId: string;
+  date: string; // ISO date string (YYYY-MM-DD) of the specific appointment instance
+  status: 'zugesagt' | 'abgesagt' | 'unsicher';
+  reason?: string; // Reason for absence
+  timestamp: Timestamp;
+}
+
+/**
+ * NEU: Represents a single exception to a recurring appointment.
+ * Stored in Firestore under the /appointmentExceptions collection.
+ */
+export interface AppointmentException {
+  id: string;
+  originalAppointmentId: string; // ID der ursprünglichen Terminserie (Appointment.id)
+  originalDate: Timestamp; // Das ursprüngliche Datum des betroffenen Termins (nur Datum, Zeit wird ignoriert)
+  status: 'cancelled' | 'modified'; // Art der Ausnahme
+  modifiedData?: { // Nur relevant, wenn status 'modified' ist
+    startDate?: Timestamp; // Die neue Startzeit für diesen Tag
+    endDate?: Timestamp; // Die neue Endzeit für diesen Tag
+    title?: string; // Der neue Titel für diesen Tag
+    locationId?: string; // Der neue Ort für diesen Tag
+    description?: string; // Die neue Beschreibung für diesen Tag
+    meetingPoint?: string; // Der neue Treffpunkt für diesen Tag
+    meetingTime?: string; // Die neue Treffzeit für diesen Tag
+  };
+  createdAt: Timestamp; // Wann wurde die Ausnahme erstellt
+  userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
+}
+
 
 /**
  * Represents a poll or survey.
@@ -162,23 +198,4 @@ export interface TreasuryTransaction {
     type: 'income' | 'expense' | 'penalty';
     memberId?: string;
     status: 'paid' | 'unpaid';
-}
-
-// *** NEU: Typ für Termin-Ausnahmen ***
-export interface AppointmentException {
-  id?: string; // ID der Ausnahme, wird von Firestore hinzugefügt
-  originalAppointmentId: string; // ID der ursprünglichen Terminserie (Appointment.id)
-  originalDate: Timestamp; // Das ursprüngliche Datum des betroffenen Termins (nur Datum, Zeit wird ignoriert)
-  status: 'cancelled' | 'modified'; // Art der Ausnahme
-  modifiedData?: { // Nur relevant, wenn status 'modified' ist
-    startDate?: Timestamp; // Die neue Startzeit für diesen Tag
-    endDate?: Timestamp; // Die neue Endzeit für diesen Tag
-    title?: string; // Der neue Titel für diesen Tag
-    locationId?: string; // Der neue Ort für diesen Tag
-    description?: string; // Die neue Beschreibung für diesen Tag
-    meetingPoint?: string; // Der neue Treffpunkt für diesen Tag
-    meetingTime?: string; // Die neue Treffzeit für diesen Tag
-  };
-  createdAt: Timestamp; // Wann wurde die Ausnahme erstellt
-  userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
 }

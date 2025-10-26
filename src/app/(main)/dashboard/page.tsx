@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { CalendarDays, Newspaper, BarChart3, Users, Loader2 } from 'lucide-react';
@@ -17,18 +17,17 @@ export default function DashboardPage() {
     const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
 
-    // Lade das Profil des aktuellen Benutzers, um seine Teams zu bekommen
     const memberRef = useMemoFirebase(
         () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
         [firestore, user]
     );
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-    
+
     // --- Angepasste Datenabfragen ---
 
     // 1. Nächste Termine (nur die sichtbaren)
     const nextAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore || !user || !memberProfile) return null;
+        if (!firestore || !memberProfile) return null;
         
         const userTeamIds = memberProfile.teams || [];
         if (userTeamIds.length === 0) {
@@ -50,7 +49,7 @@ export default function DashboardPage() {
             orderBy('startDate', 'asc'),
             limit(10) // Etwas mehr holen, da wir client-seitig filtern
         );
-    }, [firestore, user, memberProfile]);
+    }, [firestore, memberProfile]);
 
     const { data: rawAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(nextAppointmentsQuery);
 
@@ -61,6 +60,7 @@ export default function DashboardPage() {
             .filter(app => {
                 if (app.visibility.type === 'all') return true;
                 if (app.visibility.type === 'specificTeams') {
+                    // Check for intersection between appointment teams and user teams
                     return app.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
                 }
                 return false;
@@ -82,7 +82,7 @@ export default function DashboardPage() {
 
     // 3. Aktuelle Umfragen (nur die sichtbaren)
     const currentPollsQuery = useMemoFirebase(() => {
-        if (!firestore || !user || !memberProfile) return null;
+        if (!firestore || !memberProfile) return null;
         
         const userTeamIds = memberProfile.teams || [];
         if (userTeamIds.length === 0) {
@@ -102,7 +102,7 @@ export default function DashboardPage() {
             orderBy('endDate', 'asc'),
             limit(6)
         );
-    }, [firestore, user, memberProfile]);
+    }, [firestore, memberProfile]);
 
     const { data: rawPolls, isLoading: isLoadingPolls } = useCollection<Poll>(currentPollsQuery);
 
@@ -141,8 +141,8 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2 lg:p-8 xl:grid-cols-3">
-            <div className="xl:col-span-2">
+        <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-3">
+            <div className="col-span-1 lg:col-span-2 xl:col-span-2">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -183,36 +183,38 @@ export default function DashboardPage() {
                 </Card>
             </div>
             
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
-                    </CardTitle>
-                    <Button variant="outline" size="sm" asChild>
-                        <Link href="/verwaltung/news">Alle anzeigen</Link>
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    {latestNews && latestNews.length > 0 ? (
-                        <ul className="space-y-3">
-                            {latestNews.map((news) => (
-                                <li key={news.id} className="text-sm font-medium hover:underline">
-                                    <Link href={`/verwaltung/news/${news.id}`}>
-                                        {news.title}
-                                    </Link>
-                                    <p className="text-xs text-muted-foreground">
-                                        {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
-                                    </p>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="col-span-1">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/news">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {latestNews && latestNews.length > 0 ? (
+                            <ul className="space-y-3">
+                                {latestNews.map((news) => (
+                                    <li key={news.id} className="text-sm font-medium hover:underline">
+                                        <Link href={`/verwaltung/news/${news.id}`}>
+                                            {news.title}
+                                        </Link>
+                                        <p className="text-xs text-muted-foreground">
+                                            {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                        </p>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Keine aktuellen Nachrichten.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
 
-            <div className="lg:col-span-2 xl:col-span-1">
+            <div className="col-span-1 lg:col-span-1">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -243,29 +245,31 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-lg font-medium flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" /> Meine Teams
-                    </CardTitle>
-                    <Button variant="outline" size="sm" asChild>
-                        <Link href="/verwaltung/gruppen">Alle anzeigen</Link>
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    {myTeams.length > 0 ? (
-                        <ul className="space-y-2">
-                            {myTeams.map((team) => (
-                                <li key={team.id} className="text-sm font-medium">
-                                    {team.name}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="col-span-1">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-lg font-medium flex items-center gap-2">
+                            <Users className="h-5 w-5 text-primary" /> Meine Teams
+                        </CardTitle>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/verwaltung/gruppen">Alle anzeigen</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {myTeams.length > 0 ? (
+                            <ul className="space-y-2">
+                                {myTeams.map((team) => (
+                                    <li key={team.id} className="text-sm font-medium">
+                                        {team.name}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-center text-sm text-muted-foreground py-4">Du bist keinem Team zugewiesen.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }

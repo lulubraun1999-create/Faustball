@@ -7,14 +7,16 @@ service cloud.firestore {
     function isAdmin() { return request.auth.token.admin == true; }
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
     function getUserTeams() {
-      let memberDoc = getMemberDoc(request.auth.uid);
-      return memberDoc.data != null && 'teams' in memberDoc.data ? memberDoc.data.teams : [];
+      let memberData = getMemberDoc(request.auth.uid).data;
+      return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
-    function isMemberOfDocTeam() {
+    function isMemberOfDocTeamResource() {
+      let userTeams = getUserTeams();
       return isSignedIn() &&
+             resource != null && resource.data != null &&
              resource.data.keys().hasAny(['teamId']) &&
-             getUserTeams().size() > 0 &&
-             resource.data.teamId in getUserTeams();
+             userTeams.size() > 0 &&
+             userTeams.hasAny([resource.data.teamId]);
     }
 
 
@@ -36,7 +38,7 @@ service cloud.firestore {
     // --- /members/{memberId} ---
     match /members/{memberId} {
         function isOwner(memberId) { return request.auth.uid == memberId; }
-        function isExistingOwner() { return isSignedIn() && resource.data.userId == request.auth.uid; }
+        function isExistingOwner() { return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid; }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
@@ -72,23 +74,24 @@ service cloud.firestore {
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
         function isMemberOfVisibleTeamForAppointment() {
-          let memberDoc = getMemberDoc(request.auth.uid);
-          return memberDoc.data != null &&
+          let memberTeams = getUserTeams();
+          return memberTeams != null &&
+                 resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
+                 resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
-                 memberDoc.data.keys().hasAny(['teams']) &&
-                 resource.data.visibility.teamIds.hasAny(memberDoc.data.teams);
+                 resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow read: if isSignedIn() && (
                       isAdmin() ||
-                      resource.data.visibility.type == 'all' ||
+                      (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                       isMemberOfVisibleTeamForAppointment()
                     );
         allow write: if isSignedIn() && isAdmin();
     }
     
-    // *** KORRIGIERTER PLATZ FÜR /appointmentResponses/{responseId} ***
+    // --- /appointmentResponses/{responseId} ---
     match /appointmentResponses/{responseId} {
         function isResponseOwner() { return request.resource.data.keys().hasAny(['userId']) && request.auth.uid == request.resource.data.userId; }
         function isExistingResponseOwner() { return resource != null && resource.data.keys().hasAny(['userId']) && request.auth.uid == resource.data.userId; }
@@ -105,7 +108,7 @@ service cloud.firestore {
         allow update, delete: if isSignedIn() && isExistingResponseOwner();
     }
 
-    // *** KORRIGIERTER PLATZ FÜR /appointmentExceptions/{exceptionId} ***
+    // --- /appointmentExceptions/{exceptionId} ---
     match /appointmentExceptions/{exceptionId} {
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
         function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
@@ -113,8 +116,12 @@ service cloud.firestore {
            let originalAppointment = getOriginalAppointmentFromResource();
            if (originalAppointment == null || originalAppointment.data == null) { return false; }
            let originalAppointmentData = originalAppointment.data;
-           let memberDoc = getMemberDoc(request.auth.uid);
-           return memberDoc.data != null && 'visibility' in originalAppointmentData && 'type' in originalAppointmentData.visibility && originalAppointmentData.visibility.type == 'specificTeams' && 'teamIds' in originalAppointmentData.visibility && 'teams' in memberDoc.data && originalAppointmentData.visibility.teamIds.hasAny(memberDoc.data.teams);
+           let memberTeams = getUserTeams();
+           return memberTeams != null &&
+                  'visibility' in originalAppointmentData &&
+                  originalAppointmentData.visibility.type == 'specificTeams' &&
+                  'teamIds' in originalAppointmentData.visibility &&
+                  originalAppointmentData.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
@@ -123,32 +130,32 @@ service cloud.firestore {
         allow update, delete: if isSignedIn() && isAdmin();
     }
 
-    // *** KORRIGIERTER BLOCK FÜR /polls/{pollId} ***
+    // --- /polls/{pollId} ---
     match /polls/{pollId} {
         function isMemberOfVisibleTeamForPollResource() {
-          let memberDoc = getMemberDoc(request.auth.uid);
-          return memberDoc.data != null &&
+          let memberTeams = getUserTeams();
+          return memberTeams != null &&
                  resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
+                 resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
-                 memberDoc.data.keys().hasAny(['teams']) &&
-                 resource.data.visibility.teamIds.hasAny(memberDoc.data.teams);
+                 resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow get: if isSignedIn() && (
                      isAdmin() ||
-                     resource.data.visibility.type == 'all' ||
+                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                      isMemberOfVisibleTeamForPollResource()
                    );
         allow list: if isSignedIn(); // Erlaube LIST für angemeldete Benutzer
         allow create, delete: if isSignedIn() && isAdmin();
         allow update: if isSignedIn() && (
                       isAdmin() ||
-                      ( (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource()) &&
+                      ( (resource.data != null &&
+                         (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource())) &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']) )
                     );
     }
-    // *** ENDE KORRIGIERTER BLOCK ***
 
     // --- /news/{newsId} ---
     match /news/{newsId} {
@@ -158,13 +165,13 @@ service cloud.firestore {
 
     // --- /treasury/{transactionId} ---
     match /treasury/{transactionId} {
-        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
+        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- /penalties/{penaltyId} ---
     match /penalties/{penaltyId} {
-       allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
+       allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
        allow write: if isSignedIn() && isAdmin();
     }
   }
