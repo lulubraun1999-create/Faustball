@@ -23,6 +23,7 @@ import {
   Location,
   MemberProfile,
   AppointmentResponse,
+  AppointmentException,
 } from "@/lib/types";
 import {
   Card,
@@ -74,12 +75,14 @@ import {
 import { Users } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
 type UnrolledAppointment = Appointment & {
   instanceDate: Date; // The specific date of this virtual instance
   instanceId: string; // A unique ID for this virtual instance
+  isCancelled?: boolean;
 };
 
 export default function VerwaltungTerminePage() {
@@ -105,7 +108,6 @@ export default function VerwaltungTerminePage() {
   
   const appointmentsRef = useMemoFirebase(() => {
     if (!firestore || !profile || !profile.teams || profile.teams.length === 0) return null;
-
     return query(
         collection(firestore, 'appointments'),
         where('visibility.teamIds', 'array-contains-any', profile.teams)
@@ -127,6 +129,13 @@ export default function VerwaltungTerminePage() {
     const all = [...(teamAppointments || []), ...(publicAppointments || [])];
     return Array.from(new Map(all.map(app => [app.id, app])).values());
   }, [teamAppointments, publicAppointments]);
+  
+  const appointmentIds = useMemo(() => appointments?.map(app => app.id) || [], [appointments]);
+  const exceptionsRef = useMemoFirebase(() => {
+    if (!firestore || !appointmentIds || appointmentIds.length === 0) return null;
+    return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
+  }, [firestore, appointmentIds]);
+  const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
 
   const allMembersRef = useMemoFirebase(
@@ -170,7 +179,8 @@ export default function VerwaltungTerminePage() {
     groupsLoading ||
     locationsLoading ||
     allResponsesLoading ||
-    membersLoading;
+    membersLoading ||
+    isLoadingExceptions;
 
   // Teams für Filter extrahieren, nur die, in denen der User Mitglied ist
   const { userTeams, teamsMap } = useMemo(() => {
@@ -198,21 +208,37 @@ export default function VerwaltungTerminePage() {
 
   // Entrollte Termine (inkl. Wiederholungen)
   const unrolledAppointments = useMemo(() => {
-    if (!appointments) return [];
+    if (!appointments || isLoadingExceptions) return [];
+    
+    const exceptionsMap = new Map<string, AppointmentException>();
+    exceptions?.forEach(ex => {
+        const originalDateString = formatDate(ex.originalDate.toDate(), 'yyyy-MM-dd');
+        exceptionsMap.set(`${ex.originalAppointmentId}_${originalDateString}`, ex);
+    });
+
     const allEvents: UnrolledAppointment[] = [];
   
     appointments.forEach(app => {
       if (!app.startDate) return;
 
-      const unroll = (currentDate: Date) => {
-        const instanceId = `${app.id}_${formatDate(currentDate, 'yyyy-MM-dd')}`;
+      const unroll = (currentDate: Date, originalDate?: Date) => {
+        const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
+        const originalDateStr = formatDate(originalDate || currentDate, 'yyyy-MM-dd');
+        const instanceId = `${app.id}_${dateStr}`;
+        const exception = exceptionsMap.get(`${app.id}_${originalDateStr}`);
         
-        allEvents.push({
+        let instance: UnrolledAppointment = {
           ...app,
-          startDate: Timestamp.fromDate(currentDate),
           instanceDate: currentDate,
           instanceId: instanceId,
-        });
+          isCancelled: exception?.status === 'cancelled',
+        };
+
+        if (exception?.status === 'modified' && exception.modifiedData) {
+            instance = { ...instance, ...exception.modifiedData };
+        }
+        
+        allEvents.push(instance);
       };
 
       if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
@@ -239,7 +265,7 @@ export default function VerwaltungTerminePage() {
       }
     });
     return allEvents.filter(event => event.instanceDate >= new Date());
-  }, [appointments]);
+  }, [appointments, exceptions, isLoadingExceptions]);
 
 
   // Helper-Funktion: Prüft, ob der Benutzer auf einen Termin antworten darf
@@ -534,7 +560,7 @@ export default function VerwaltungTerminePage() {
                                     </TableHeader>
                                     <TableBody>
                                         {appointmentsInMonth.map((app) => {
-                                        const canRespond = isUserRelevantForAppointment(app, profile);
+                                        const canRespond = isUserRelevantForAppointment(app, profile) && !app.isCancelled;
                                         const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
                                         const userResponse = allResponses?.find(r => r.id === `${app.id}_${dateString}_${auth.user?.uid}`);
 
@@ -557,7 +583,7 @@ export default function VerwaltungTerminePage() {
                                         }
 
                                         return (
-                                            <TableRow key={app.instanceId}>
+                                            <TableRow key={app.instanceId} className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
                                             <TableCell className="font-medium">
                                                 {displayTitle}
                                             </TableCell>
@@ -593,7 +619,9 @@ export default function VerwaltungTerminePage() {
                                                 />
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {canRespond && auth.user ? (
+                                                {app.isCancelled ? (
+                                                     <span className="text-sm font-semibold text-destructive">Abgesagt</span>
+                                                ) : canRespond && auth.user ? (
                                                 <div className="flex justify-end gap-2">
                                                     <Button
                                                     size="sm"
@@ -643,7 +671,7 @@ export default function VerwaltungTerminePage() {
                                                 </div>
                                                 ) : (
                                                 <span className="text-xs text-muted-foreground">
-                                                    Nicht relevant
+                                                    -
                                                 </span>
                                                 )}
                                             </TableCell>
