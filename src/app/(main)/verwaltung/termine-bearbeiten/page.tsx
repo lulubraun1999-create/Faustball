@@ -90,12 +90,13 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, MapPin, CalendarPlus, CalendarX, X } from 'lucide-react';
+import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, MapPin, CalendarPlus, CalendarX, X, RefreshCw } from 'lucide-react';
 import type { Appointment, AppointmentType, Location, Group, AppointmentException } from '@/lib/types';
 import { format, formatISO, isValid as isDateValid, addDays, addWeeks, addMonths, differenceInMilliseconds, set, isEqual, startOfDay, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 // --- Typen ---
 type GroupWithTeams = Group & { teams: Group[] };
@@ -105,6 +106,7 @@ type UnrolledAppointment = Appointment & {
   originalId: string;
   instanceDate: Date;
   isException?: boolean;
+  exceptionId?: string;
   isCancelled?: boolean;
 };
 
@@ -112,9 +114,6 @@ type UnrolledAppointment = Appointment & {
 // --- Zod Schemas ---
 const locationSchema = z.object({ name: z.string().min(1, "Name ist erforderlich."), address: z.string().optional() });
 type LocationFormValues = z.infer<typeof locationSchema>;
-
-const appointmentTypeSchema = z.object({ name: z.string().min(1, "Name ist erforderlich.") });
-type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
 const singleAppointmentInstanceSchema = z.object({
   title: z.string().optional(),
@@ -187,11 +186,11 @@ function AdminTerminePageContent() {
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
   const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
-  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   
   // Filter States
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [showCancelled, setShowCancelled] = useState<boolean>(false);
   
   // Data fetching
   const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
@@ -203,7 +202,6 @@ function AdminTerminePageContent() {
     if (!firestore || appointmentIds.length === 0) return null;
     return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
   }, [firestore, appointmentIds]);
-
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
   const typesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
@@ -251,7 +249,6 @@ function AdminTerminePageContent() {
     }
   });
   const locationForm = useForm<LocationFormValues>({ resolver: zodResolver(locationSchema), defaultValues: { name: '', address: '' }});
-  const typeForm = useForm<AppointmentTypeFormValues>({ resolver: zodResolver(appointmentTypeSchema), defaultValues: { name: '' } });
   const instanceForm = useForm<SingleAppointmentInstanceFormValues>({ resolver: zodResolver(singleAppointmentInstanceSchema) });
 
   // Form watchers
@@ -280,12 +277,13 @@ function AdminTerminePageContent() {
             const virtualId = `${app.id}_${dateStr}`;
             const exception = exceptionsMap.get(`${app.id}_${originalDateStr}`);
             
-            let instance = {
+            let instance: UnrolledAppointment = {
                 ...app,
                 virtualId,
                 originalId: app.id,
                 instanceDate: currentDate,
                 isException: !!exception,
+                exceptionId: exception?.id,
                 isCancelled: exception?.status === 'cancelled',
             };
 
@@ -318,18 +316,19 @@ function AdminTerminePageContent() {
         }
     });
 
-    return allEvents.filter(event => event.instanceDate >= new Date() && !event.isCancelled)
+    return allEvents.filter(event => event.instanceDate >= new Date())
                     .sort((a,b) => a.instanceDate.getTime() - b.instanceDate.getTime());
 
   }, [appointments, exceptions, isLoadingExceptions]);
 
   const filteredAppointments = useMemo(() => {
     return unrolledAppointments.filter(app => {
+        if (!showCancelled && app.isCancelled) return false;
         if (typeFilter !== 'all' && app.appointmentTypeId !== typeFilter) return false;
         if (teamFilter !== 'all' && !(app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter))) return false;
         return true;
     });
-  }, [unrolledAppointments, teamFilter, typeFilter]);
+  }, [unrolledAppointments, teamFilter, typeFilter, showCancelled]);
 
   const resetAppointmentForm = () => {
         appointmentForm.reset({
@@ -503,6 +502,20 @@ function AdminTerminePageContent() {
         }));
     }
   };
+  
+  const handleRestoreSingleInstance = async (appointment: UnrolledAppointment) => {
+    if (!firestore || !appointment.exceptionId) return;
+    try {
+        const exceptionDocRef = doc(firestore, 'appointmentExceptions', appointment.exceptionId);
+        await deleteDoc(exceptionDocRef);
+        toast({ title: 'Termin wiederhergestellt.'});
+    } catch(e) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ 
+            path: `appointmentExceptions/${appointment.exceptionId}`, 
+            operation: 'delete'
+        }));
+    }
+  };
 
   const handleDeleteAppointment = async (id: string) => {
       if (!firestore) return;
@@ -529,18 +542,6 @@ function AdminTerminePageContent() {
       setIsLocationDialogOpen(false);
     } catch(e) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'locations', operation: 'create', requestResourceData: data }));
-    }
-  };
-  
-  const onSubmitAppointmentType = async (data: AppointmentTypeFormValues) => {
-    if (!firestore) return;
-    try {
-      await addDoc(collection(firestore, 'appointmentTypes'), data);
-      toast({ title: "Neue Art hinzugefügt" });
-      typeForm.reset();
-      setIsTypeDialogOpen(false);
-    } catch(e) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'appointmentTypes', operation: 'create', requestResourceData: data }));
     }
   };
   
@@ -572,34 +573,34 @@ function AdminTerminePageContent() {
                   {/* Art & Titel */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField control={appointmentForm.control} name="appointmentTypeId" render={({ field }) => ( <FormItem><FormLabel>Art</FormLabel><Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Art auswählen..." /></SelectTrigger></FormControl> <SelectContent>{appointmentTypes?.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent> </Select><FormMessage /></FormItem> )}/>
-                    {watchAppointmentTypeId === sonstigeTypeId && ( <FormField control={appointmentForm.control} name="title" render={({ field }) => ( <FormItem><FormLabel>Titel</FormLabel><FormControl><Input placeholder="Titel für den Termin" {...field} /></FormControl><FormMessage /></FormItem> )}/> )}
+                    {watchAppointmentTypeId === sonstigeTypeId && ( <FormField control={appointmentForm.control} name="title" render={({ field }) => ( <FormItem><FormLabel>Titel</FormLabel><FormControl><Input placeholder="Titel für den Termin" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )}/> )}
                   </div>
 
                   {/* Start, Ende, Ganztags */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField control={appointmentForm.control} name="startDate" render={({ field }) => ( <FormItem><FormLabel>Beginn</FormLabel><FormControl><Input type={watchIsAllDay ? "date" : "datetime-local"} {...field} /></FormControl><FormMessage /></FormItem> )}/>
-                    {!watchIsAllDay && <FormField control={appointmentForm.control} name="endDate" render={({ field }) => ( <FormItem><FormLabel>Ende (optional)</FormLabel><FormControl><Input type="datetime-local" {...field} min={appointmentForm.getValues("startDate")} /></FormControl><FormMessage /></FormItem> )}/>}
+                    {!watchIsAllDay && <FormField control={appointmentForm.control} name="endDate" render={({ field }) => ( <FormItem><FormLabel>Ende (optional)</FormLabel><FormControl><Input type="datetime-local" {...field} min={appointmentForm.getValues("startDate")} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )}/>}
                   </div>
                   <FormField control={appointmentForm.control} name="isAllDay" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-2"><FormControl><Checkbox checked={field.value} onCheckedChange={(checked) => { field.onChange(checked); if (checked) { appointmentForm.setValue("endDate", ""); } }} /></FormControl><FormLabel className="font-normal">Ganztägiger Termin</FormLabel></FormItem> )}/>
 
                   {/* Wiederholung */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField control={appointmentForm.control} name="recurrence" render={({ field }) => ( <FormItem><FormLabel>Wiederholung</FormLabel><Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Wiederholung auswählen" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="none">Keine</SelectItem> <SelectItem value="daily">Täglich</SelectItem> <SelectItem value="weekly">Wöchentlich</SelectItem> <SelectItem value="bi-weekly">Alle 2 Wochen</SelectItem> <SelectItem value="monthly">Monatlich</SelectItem> </SelectContent> </Select></FormItem> )}/>
-                    {watchRecurrence !== 'none' && <FormField control={appointmentForm.control} name="recurrenceEndDate" render={({ field }) => ( <FormItem><FormLabel>Wiederholung endet am</FormLabel><FormControl><Input type="date" {...field} min={appointmentForm.getValues("startDate").split('T')[0]} /></FormControl><FormMessage /></FormItem> )}/>}
+                    {watchRecurrence !== 'none' && <FormField control={appointmentForm.control} name="recurrenceEndDate" render={({ field }) => ( <FormItem><FormLabel>Wiederholung endet am</FormLabel><FormControl><Input type="date" {...field} min={appointmentForm.getValues("startDate").split('T')[0]} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )}/>}
                   </div>
 
                   {/* Sichtbarkeit */}
                   <FormField control={appointmentForm.control} name="visibilityType" render={({ field }) => ( <FormItem><FormLabel>Sichtbar für</FormLabel><Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Sichtbarkeit festlegen" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="all">Alle</SelectItem> <SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem> </SelectContent> </Select></FormItem> )}/>
-                  {watchVisibilityType === 'specificTeams' && ( <FormField control={appointmentForm.control} name="visibleTeamIds" render={({ field }) => ( <FormItem><FormLabel>Mannschaften auswählen</FormLabel><Popover> <PopoverTrigger asChild> <FormControl> <Button variant="outline" role="combobox" className={cn("w-full justify-between", !field.value?.length && "text-muted-foreground")}>{field.value?.length > 0 ? `${field.value.length} ausgewählt` : "Mannschaften auswählen"} <Plus className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-[--radix-popover-trigger-width] p-0"><ScrollArea className="h-48">{groupedTeams.map(group => (<div key={group.id} className="p-2"><h4 className="font-semibold text-sm px-2">{group.name}</h4>{group.teams.map(team => (<FormField key={team.id} control={appointmentForm.control} name="visibleTeamIds" render={({ field }) => ( <FormItem key={team.id} className="flex flex-row items-start space-x-3 space-y-0 px-2 py-1.5"><FormControl><Checkbox checked={field.value?.includes(team.id)} onCheckedChange={(checked) => {return checked ? field.onChange([...field.value, team.id]) : field.onChange(field.value?.filter(value => value !== team.id));}} /></FormControl><FormLabel className="font-normal">{team.name}</FormLabel></FormItem> )}/>))}</div>))}</ScrollArea></PopoverContent> </Popover><FormMessage /></FormItem> )}/> )}
+                  {watchVisibilityType === 'specificTeams' && ( <FormField control={appointmentForm.control} name="visibleTeamIds" render={({ field }) => ( <FormItem><FormLabel>Mannschaften auswählen</FormLabel><Popover> <PopoverTrigger asChild> <FormControl> <Button variant="outline" role="combobox" className={cn("w-full justify-between", !field.value?.length && "text-muted-foreground")}>{field.value?.length > 0 ? `${field.value.length} ausgewählt` : "Mannschaften auswählen"} <Plus className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-[--radix-popover-trigger-width] p-0"><ScrollArea className="h-48">{groupedTeams.map(group => (<div key={group.id} className="p-2"><h4 className="font-semibold text-sm px-2">{group.name}</h4>{group.teams.map(team => (<FormField key={team.id} control={appointmentForm.control} name="visibleTeamIds" render={({ field }) => ( <FormItem key={team.id} className="flex flex-row items-start space-x-3 space-y-0 px-2 py-1.5"><FormControl><Checkbox checked={field.value?.includes(team.id)} onCheckedChange={(checked) => {return checked ? field.onChange([...(field.value ?? []), team.id]) : field.onChange(field.value?.filter(value => value !== team.id));}} /></FormControl><FormLabel className="font-normal">{team.name}</FormLabel></FormItem> )}/>))}</div>))}</ScrollArea></PopoverContent> </Popover><FormMessage /></FormItem> )}/> )}
 
                   {/* Ort, Treffpunkt */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField control={appointmentForm.control} name="locationId" render={({ field }) => ( <FormItem><FormLabel>Ort</FormLabel><div className="flex gap-2"><Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl> <SelectContent>{locations?.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent> </Select><Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}><DialogTrigger asChild><Button type="button" variant="outline" size="icon"><Plus className="h-4 w-4"/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Neuen Ort hinzufügen</DialogTitle></DialogHeader><Form {...locationForm}><form onSubmit={locationForm.handleSubmit(onSubmitLocation)} className="space-y-4"><FormField control={locationForm.control} name="name" render={({ field }) => ( <FormItem><FormLabel>Name des Ortes</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem> )}/><FormField control={locationForm.control} name="address" render={({ field }) => ( <FormItem><FormLabel>Adresse (optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem> )}/><DialogFooter><Button type="submit">Speichern</Button></DialogFooter></form></Form></DialogContent></Dialog></div><FormMessage /></FormItem> )}/>
-                    <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Anmeldeschluss (optional)</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem> )}/>
-                    <FormField control={appointmentForm.control} name="meetingPoint" render={({ field }) => ( <FormItem><FormLabel>Treffpunkt (optional)</FormLabel><FormControl><Input placeholder="z.B. Eingangshalle" {...field} /></FormControl></FormItem> )}/>
-                    <FormField control={appointmentForm.control} name="meetingTime" render={({ field }) => ( <FormItem><FormLabel>Treffzeit (optional)</FormLabel><FormControl><Input placeholder="z.B. 1h vor Beginn" {...field} /></FormControl></FormItem> )}/>
+                    <FormField control={appointmentForm.control} name="locationId" render={({ field }) => ( <FormItem><FormLabel>Ort</FormLabel><div className="flex gap-2"><Select onValueChange={field.onChange} value={field.value ?? ''}> <FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl> <SelectContent>{locations?.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent> </Select><Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}><DialogTrigger asChild><Button type="button" variant="outline" size="icon"><Plus className="h-4 w-4"/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Neuen Ort hinzufügen</DialogTitle></DialogHeader><Form {...locationForm}><form onSubmit={locationForm.handleSubmit(onSubmitLocation)} className="space-y-4"><FormField control={locationForm.control} name="name" render={({ field }) => ( <FormItem><FormLabel>Name des Ortes</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem> )}/><FormField control={locationForm.control} name="address" render={({ field }) => ( <FormItem><FormLabel>Adresse (optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem> )}/><DialogFooter><Button type="submit">Speichern</Button></DialogFooter></form></Form></DialogContent></Dialog></div><FormMessage /></FormItem> )}/>
+                    <FormField control={appointmentForm.control} name="rsvpDeadline" render={({ field }) => ( <FormItem><FormLabel>Anmeldeschluss (optional)</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl></FormItem> )}/>
+                    <FormField control={appointmentForm.control} name="meetingPoint" render={({ field }) => ( <FormItem><FormLabel>Treffpunkt (optional)</FormLabel><FormControl><Input placeholder="z.B. Eingangshalle" {...field} value={field.value ?? ''} /></FormControl></FormItem> )}/>
+                    <FormField control={appointmentForm.control} name="meetingTime" render={({ field }) => ( <FormItem><FormLabel>Treffzeit (optional)</FormLabel><FormControl><Input placeholder="z.B. 1h vor Beginn" {...field} value={field.value ?? ''} /></FormControl></FormItem> )}/>
                   </div>
-                   <FormField control={appointmentForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details zum Termin..." {...field} /></FormControl></FormItem> )}/>
+                   <FormField control={appointmentForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details zum Termin..." {...field} value={field.value ?? ''} /></FormControl></FormItem> )}/>
                 </form>
               </Form>
              </ScrollArea>
@@ -624,9 +625,15 @@ function AdminTerminePageContent() {
       <Card>
         <CardHeader>
           <CardTitle>Anstehende Termine</CardTitle>
-           <div className="flex flex-col md:flex-row gap-2 mt-4">
-              <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Art filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Arten</SelectItem>{appointmentTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
-              <Select value={teamFilter} onValueChange={setTeamFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Mannschaften</SelectItem>{teams?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
+           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mt-4">
+            <div className="flex flex-col md:flex-row gap-2">
+                <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Art filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Arten</SelectItem>{appointmentTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
+                <Select value={teamFilter} onValueChange={setTeamFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Mannschaften</SelectItem>{teams?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div className="flex items-center space-x-2 pt-2 md:pt-0">
+                <Switch id="show-cancelled" checked={showCancelled} onCheckedChange={setShowCancelled} />
+                <Label htmlFor="show-cancelled">Abgesagte anzeigen</Label>
+            </div>
            </div>
         </CardHeader>
         <CardContent>
@@ -638,15 +645,21 @@ function AdminTerminePageContent() {
             <TableHeader><TableRow><TableHead>Datum</TableHead><TableHead>Titel</TableHead><TableHead>Sichtbarkeit</TableHead><TableHead className="text-right">Aktionen</TableHead></TableRow></TableHeader>
             <TableBody>
                 {filteredAppointments.length > 0 ? filteredAppointments.map(app => (
-                    <TableRow key={app.virtualId} className={cn(app.isException && 'bg-amber-50 dark:bg-amber-900/20')}>
+                    <TableRow key={app.virtualId} className={cn(app.isException && 'bg-amber-50 dark:bg-amber-900/20', app.isCancelled && 'bg-red-50 dark:bg-red-900/20 text-muted-foreground line-through')}>
                         <TableCell>{format(app.instanceDate, 'eee, dd.MM.yyyy HH:mm', { locale: de })}</TableCell>
                         <TableCell className="font-medium">{app.title}</TableCell>
                         <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => handleEditSingleInstance(app)}><Edit className="h-4 w-4"/></Button>
-                            <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><CalendarX className="h-4 w-4 text-orange-600"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Einzelnen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Soll nur dieser eine Termin am {format(app.instanceDate, 'dd.MM.yyyy')} abgesagt werden? Die Serie bleibt bestehen.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingleInstance(app)}>Ja, nur diesen absagen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-                            <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Gesamte Serie löschen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie die gesamte Terminserie "{app.title}" unwiderruflich löschen? Alle zukünftigen Termine dieser Serie werden entfernt.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteAppointment(app.originalId)} className="bg-destructive hover:bg-destructive/90">Serie löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                            {app.isCancelled ? (
+                                <Button variant="ghost" size="icon" onClick={() => handleRestoreSingleInstance(app)}><RefreshCw className="h-4 w-4 text-green-600"/></Button>
+                            ) : (
+                                <>
+                                    <Button variant="ghost" size="icon" onClick={() => handleEditSingleInstance(app)}><Edit className="h-4 w-4"/></Button>
+                                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><CalendarX className="h-4 w-4 text-orange-600"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Einzelnen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Soll nur dieser eine Termin am {format(app.instanceDate, 'dd.MM.yyyy')} abgesagt werden? Die Serie bleibt bestehen.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingleInstance(app)}>Ja, nur diesen absagen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Gesamte Serie löschen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie die gesamte Terminserie "{app.title}" unwiderruflich löschen? Alle zukünftigen Termine dieser Serie werden entfernt.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteAppointment(app.originalId)} className="bg-destructive hover:bg-destructive/90">Serie löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                                </>
+                            )}
                           </div>
                         </TableCell>
                     </TableRow>
