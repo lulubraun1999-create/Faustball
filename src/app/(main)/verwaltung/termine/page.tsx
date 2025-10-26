@@ -46,7 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -123,19 +123,20 @@ export default function VerwaltungTerminePage() {
   const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(allPublicAppointmentsQuery);
 
   const appointments = useMemo(() => {
+    if (!teamAppointments && !publicAppointments) return [];
     const all = [...(teamAppointments || []), ...(publicAppointments || [])];
     return Array.from(new Map(all.map(app => [app.id, app])).values());
   }, [teamAppointments, publicAppointments]);
 
 
   const allMembersRef = useMemoFirebase(
-    () => collection(firestore, 'members'),
+    () => (firestore ? collection(firestore, 'members') : null),
     [firestore]
   );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
   const allResponsesRef = useMemoFirebase(
-      () => collection(firestore, 'appointmentResponses'),
+      () => (firestore ? collection(firestore, 'appointmentResponses') : null),
       [firestore]
   );
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
