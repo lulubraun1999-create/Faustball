@@ -22,7 +22,6 @@ export default function DashboardPage() {
         [firestore, user]
     );
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-    const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
 
     // --- Angepasste Datenabfragen ---
 
@@ -132,7 +131,7 @@ export default function DashboardPage() {
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-2 lg:p-8 xl:grid-cols-3">
             {/* Nächste Termine */}
-            <Card className="xl:col-span-2">
+            <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-lg font-medium flex items-center gap-2">
                         <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
@@ -258,7 +257,7 @@ export default function DashboardPage() {
             </Card>
 
              {/* Platzhalter für zukünftige Widgets */}
-             {/* <Card className="xl:col-span-1">
+             {/* <Card>
                  <CardHeader>
                      <CardTitle>Weitere Infos</CardTitle>
                      <CardDescription>Hier könnten weitere Widgets platziert werden.</CardDescription>
