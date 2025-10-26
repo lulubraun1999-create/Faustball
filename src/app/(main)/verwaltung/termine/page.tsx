@@ -46,12 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -80,14 +75,12 @@ import { Users } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
 type UnrolledAppointment = Appointment & {
   instanceDate: Date; // The specific date of this virtual instance
   instanceId: string; // A unique ID for this virtual instance
 };
-
 
 export default function VerwaltungTerminePage() {
   const auth = useUser();
@@ -111,22 +104,30 @@ export default function VerwaltungTerminePage() {
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
   
   const appointmentsRef = useMemoFirebase(() => {
-    if (!firestore || !profile) return null;
-    const userTeamIds = profile.teams || [];
-    if (userTeamIds.length === 0) {
-        return query(
-            collection(firestore, 'appointments'),
-            where('visibility.type', '==', 'all')
-        );
-    }
+    if (!firestore || !profile || !profile.teams || profile.teams.length === 0) return null;
+
     return query(
         collection(firestore, 'appointments'),
-        where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds])
+        where('visibility.teamIds', 'array-contains-any', profile.teams)
     );
   }, [firestore, profile]);
-
-  const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
+  const { data: teamAppointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
+  const allPublicAppointmentsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
+         collection(firestore, 'appointments'),
+         where('visibility.type', '==', 'all')
+     );
+  }, [firestore]);
+  const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(allPublicAppointmentsQuery);
+
+  const appointments = useMemo(() => {
+    const all = [...(teamAppointments || []), ...(publicAppointments || [])];
+    return Array.from(new Map(all.map(app => [app.id, app])).values());
+  }, [teamAppointments, publicAppointments]);
+
+
   const allMembersRef = useMemoFirebase(
     () => collection(firestore, 'members'),
     [firestore]
@@ -163,6 +164,7 @@ export default function VerwaltungTerminePage() {
     auth.isUserLoading ||
     profileLoading ||
     appointmentsLoading ||
+    publicAppointmentsLoading ||
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
@@ -405,10 +407,23 @@ export default function VerwaltungTerminePage() {
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
   // Formatiert Datum und Uhrzeit
-    const formatDateTime = (app: Appointment) => {
+    const formatDateTime = (app: UnrolledAppointment) => {
     if (!app.startDate) return "Kein Datum";
-    const start = app.startDate instanceof Timestamp ? app.startDate.toDate() : app.startDate;
-    const end = app.endDate instanceof Timestamp ? app.endDate.toDate() : app.endDate;
+    const start = app.instanceDate; // Use the specific instance date
+    const originalStart = app.startDate.toDate();
+
+    // Preserve the original time
+    start.setHours(originalStart.getHours());
+    start.setMinutes(originalStart.getMinutes());
+    start.setSeconds(originalStart.getSeconds());
+
+    const end = app.endDate ? app.endDate.toDate() : undefined;
+    if (end) {
+        // if end date exists, we need to calculate the duration and add it to the instance date
+        const duration = end.getTime() - originalStart.getTime();
+        end.setTime(start.getTime() + duration);
+    }
+
 
     const dateFormat = "dd.MM.yyyy";
     const timeFormat = "HH:mm";

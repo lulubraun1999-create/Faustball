@@ -27,46 +27,44 @@ export default function DashboardPage() {
 
     // 1. Nächste Termine (nur die sichtbaren)
     const nextAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore || !memberProfile) return null;
-        
-        const userTeamIds = memberProfile.teams || [];
-        if (userTeamIds.length === 0) {
-            // Wenn der User in keinem Team ist, nur 'all' Termine holen
-            return query(
-                collection(firestore, 'appointments'),
-                where('visibility.type', '==', 'all'),
-                where('startDate', '>=', Timestamp.now()),
-                orderBy('startDate', 'asc'),
-                limit(5)
-            );
+        if (!firestore || !memberProfile || !memberProfile.teams || memberProfile.teams.length === 0) {
+            // Wenn der User in keinem Team ist, keine Abfrage durchführen
+            return null;
         }
-        
-        // Hole Termine, die entweder 'all' sind ODER für eines der User-Teams
+        // Hole nur Termine, die für eines der User-Teams sichtbar sind.
         return query(
             collection(firestore, 'appointments'),
-            where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds]),
+            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
             where('startDate', '>=', Timestamp.now()),
             orderBy('startDate', 'asc'),
-            limit(10) // Etwas mehr holen, da wir client-seitig filtern
+            limit(10)
         );
     }, [firestore, memberProfile]);
 
-    const { data: rawAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(nextAppointmentsQuery);
+    const { data: teamAppointments, isLoading: isLoadingApp } = useCollection<Appointment>(nextAppointmentsQuery);
+
+    const allPublicAppointmentsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        // Separate query for 'all' visible appointments
+        return query(
+             collection(firestore, 'appointments'),
+             where('visibility.type', '==', 'all'),
+             where('startDate', '>=', Timestamp.now()),
+             orderBy('startDate', 'asc'),
+             limit(10)
+         );
+     }, [firestore]);
+     const { data: publicAppointments, isLoading: isLoadingPublicApp } = useCollection<Appointment>(allPublicAppointmentsQuery);
+
 
     const nextAppointments = useMemo(() => {
-        if (!rawAppointments || !memberProfile) return [];
-        const userTeamIds = new Set(memberProfile.teams || []);
-        return rawAppointments
-            .filter(app => {
-                if (app.visibility.type === 'all') return true;
-                if (app.visibility.type === 'specificTeams') {
-                    // Check for intersection between appointment teams and user teams
-                    return app.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
-                }
-                return false;
-            })
+        const allAppointments = [...(teamAppointments || []), ...(publicAppointments || [])];
+        const uniqueAppointments = Array.from(new Map(allAppointments.map(app => [app.id, app])).values());
+        
+        return uniqueAppointments
+            .sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis())
             .slice(0, 5);
-    }, [rawAppointments, memberProfile]);
+    }, [teamAppointments, publicAppointments]);
 
 
     // 2. Neueste Nachrichten (öffentlich)
@@ -82,43 +80,40 @@ export default function DashboardPage() {
 
     // 3. Aktuelle Umfragen (nur die sichtbaren)
     const currentPollsQuery = useMemoFirebase(() => {
-        if (!firestore || !memberProfile) return null;
-        
-        const userTeamIds = memberProfile.teams || [];
-        if (userTeamIds.length === 0) {
-            return query(
-                collection(firestore, 'polls'),
-                where('visibility.type', '==', 'all'),
-                where('endDate', '>=', Timestamp.now()),
-                orderBy('endDate', 'asc'),
-                limit(3)
-            );
+        if (!firestore || !memberProfile || !memberProfile.teams || memberProfile.teams.length === 0) {
+            return null;
         }
         
         return query(
             collection(firestore, 'polls'),
-            where('visibility.teamIds', 'array-contains-any', ['all', ...userTeamIds]),
+            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
             where('endDate', '>=', Timestamp.now()),
             orderBy('endDate', 'asc'),
             limit(6)
         );
     }, [firestore, memberProfile]);
+    const { data: teamPolls, isLoading: isLoadingTeamPolls } = useCollection<Poll>(currentPollsQuery);
 
-    const { data: rawPolls, isLoading: isLoadingPolls } = useCollection<Poll>(currentPollsQuery);
+    const allPublicPollsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(
+             collection(firestore, 'polls'),
+             where('visibility.type', '==', 'all'),
+             where('endDate', '>=', Timestamp.now()),
+             orderBy('endDate', 'asc'),
+             limit(6)
+         );
+     }, [firestore]);
+    const { data: publicPolls, isLoading: isLoadingPublicPolls } = useCollection<Poll>(allPublicPollsQuery);
+
 
     const currentPolls = useMemo(() => {
-        if (!rawPolls || !memberProfile) return [];
-        const userTeamIds = new Set(memberProfile.teams || []);
-        return rawPolls
-            .filter(poll => {
-                if (poll.visibility.type === 'all') return true;
-                if (poll.visibility.type === 'specificTeams') {
-                    return poll.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
-                }
-                return false;
-            })
+        const allPolls = [...(teamPolls || []), ...(publicPolls || [])];
+        const uniquePolls = Array.from(new Map(allPolls.map(poll => [poll.id, poll])).values());
+        return uniquePolls
+            .sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis())
             .slice(0, 3);
-    }, [rawPolls, memberProfile]);
+    }, [teamPolls, publicPolls]);
 
 
     // 4. Eigene Teams (basierend auf dem Member-Profil)
@@ -130,7 +125,7 @@ export default function DashboardPage() {
         return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
     }, [allGroups, memberProfile]);
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingApp || isLoadingNews || isLoadingPolls || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingApp || isLoadingPublicApp || isLoadingNews || isLoadingTeamPolls || isLoadingPublicPolls || isLoadingGroups;
 
     if (isLoading) {
         return (
@@ -142,7 +137,7 @@ export default function DashboardPage() {
 
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-3">
-            <div className="col-span-1 lg:col-span-2 xl:col-span-2">
+            <div className="lg:col-span-3 xl:col-span-2">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -183,7 +178,7 @@ export default function DashboardPage() {
                 </Card>
             </div>
             
-            <div className="col-span-1">
+            <div className="lg:col-span-1">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -214,7 +209,7 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            <div className="col-span-1 lg:col-span-1">
+            <div className="lg:col-span-1">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -245,7 +240,7 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
-            <div className="col-span-1">
+            <div className="lg:col-span-1">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
