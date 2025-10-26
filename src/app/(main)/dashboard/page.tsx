@@ -5,9 +5,9 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { CalendarDays, Newspaper, BarChart3, Users, Loader2 } from 'lucide-react';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase'; // useDoc hinzugefügt
-import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore'; // Imports hinzugefügt
-import type { Appointment, NewsArticle, Poll, MemberProfile, Group } from '@/lib/types'; // Typen importiert
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore';
+import type { Appointment, NewsArticle, Poll, MemberProfile, Group } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -40,15 +40,15 @@ export default function DashboardPage() {
     );
     //    - Query 2: Termine für die eigenen Teams (nur wenn Teams vorhanden)
     const nextAppointmentsTeamsQuery = useMemoFirebase(
-        () => (firestore && user && userTeamIds.length > 0 ? query(
+        () => (firestore && user && memberProfile && memberProfile.teams && memberProfile.teams.length > 0 ? query(
             collection(firestore, 'appointments'),
             where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
             where('startDate', '>=', Timestamp.now()),
             orderBy('startDate', 'asc'),
             limit(5)
         ) : null),
-        [firestore, user, userTeamIds]
+        [firestore, user, memberProfile]
     );
 
     const { data: appointmentsAll, isLoading: isLoadingAppAll } = useCollection<Appointment>(nextAppointmentsAllQuery);
@@ -89,15 +89,15 @@ export default function DashboardPage() {
     );
     //    - Query 2: Umfragen für die eigenen Teams
     const currentPollsTeamsQuery = useMemoFirebase(
-        () => (firestore && user && userTeamIds.length > 0 ? query(
+        () => (firestore && user && memberProfile && memberProfile.teams && memberProfile.teams.length > 0 ? query(
             collection(firestore, 'polls'),
             where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('visibility.teamIds', 'array-contains-any', memberProfile.teams),
             where('endDate', '>=', Timestamp.now()),
             orderBy('endDate', 'asc'),
             limit(3)
         ) : null),
-        [firestore, user, userTeamIds]
+        [firestore, user, memberProfile]
     );
     const { data: pollsAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(currentPollsAllQuery);
     const { data: pollsTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(currentPollsTeamsQuery);
@@ -138,7 +138,7 @@ export default function DashboardPage() {
                         <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
                     </CardTitle>
                     <Button variant="outline" size="sm" asChild>
-                        <Link href="/kalender">Alle anzeigen</Link>
+                        <Link href="/verwaltung/termine">Alle anzeigen</Link>
                     </Button>
                 </CardHeader>
                 <CardContent>
@@ -178,19 +178,18 @@ export default function DashboardPage() {
                         <Newspaper className="h-5 w-5 text-primary" /> Neueste Nachrichten
                     </CardTitle>
                      {/* Optional: Link zur News-Seite */}
-                     {/* <Button variant="outline" size="sm" asChild>
-                         <Link href="/news">Alle anzeigen</Link>
-                     </Button> */}
+                     <Button variant="outline" size="sm" asChild>
+                         <Link href="/verwaltung/news">Alle anzeigen</Link>
+                     </Button>
                 </CardHeader>
                 <CardContent>
                     {latestNews && latestNews.length > 0 ? (
                         <ul className="space-y-3">
                             {latestNews.map((news) => (
                                 <li key={news.id} className="text-sm font-medium hover:underline">
-                                    {/* Link zum News-Artikel, falls Detailseite existiert */}
-                                    {/* <Link href={`/news/${news.id}`}> */}
+                                    <Link href={`/verwaltung/news/${news.id}`}>
                                         {news.title}
-                                    {/* </Link> */}
+                                    </Link>
                                      <p className="text-xs text-muted-foreground">
                                          {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
                                      </p>
