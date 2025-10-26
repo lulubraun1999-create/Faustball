@@ -190,7 +190,6 @@ function AdminTerminePageContent() {
   // Filter States
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [showCancelled, setShowCancelled] = useState<boolean>(false);
   
   // Data fetching
   const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
@@ -199,7 +198,7 @@ function AdminTerminePageContent() {
   const appointmentIds = useMemo(() => appointments?.map(app => app.id) || [], [appointments]);
 
   const exceptionsRef = useMemoFirebase(() => {
-    if (!firestore || appointmentIds.length === 0) return null;
+    if (!firestore || !appointmentIds || appointmentIds.length === 0) return null;
     return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
   }, [firestore, appointmentIds]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
@@ -213,10 +212,11 @@ function AdminTerminePageContent() {
   
   // Memoized Maps and derived data
   const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo(() => {
+    const allGroups = groups || [];
     const typesMap = new Map(appointmentTypes?.map(t => [t.id, t.name]));
     const locationsMap = new Map(locations?.map(l => [l.id, l]));
-    const classes = groups?.filter(g => g.type === 'class').sort((a,b) => a.name.localeCompare(b.name)) || [];
-    const teams = groups?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [];
+    const classes = allGroups.filter(g => g.type === 'class').sort((a,b) => a.name.localeCompare(b.name));
+    const teams = allGroups.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map(t => [t.id, t.name]));
     const groupedTeams: GroupWithTeams[] = classes.map(c => ({
       ...c,
@@ -323,12 +323,11 @@ function AdminTerminePageContent() {
 
   const filteredAppointments = useMemo(() => {
     return unrolledAppointments.filter(app => {
-        if (!showCancelled && app.isCancelled) return false;
         if (typeFilter !== 'all' && app.appointmentTypeId !== typeFilter) return false;
         if (teamFilter !== 'all' && !(app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter))) return false;
         return true;
     });
-  }, [unrolledAppointments, teamFilter, typeFilter, showCancelled]);
+  }, [unrolledAppointments, teamFilter, typeFilter]);
 
   const resetAppointmentForm = () => {
         appointmentForm.reset({
@@ -629,10 +628,6 @@ function AdminTerminePageContent() {
             <div className="flex flex-col md:flex-row gap-2">
                 <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Art filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Arten</SelectItem>{appointmentTypes?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
                 <Select value={teamFilter} onValueChange={setTeamFilter}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Mannschaften</SelectItem>{teams?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>
-            </div>
-            <div className="flex items-center space-x-2 pt-2 md:pt-0">
-                <Switch id="show-cancelled" checked={showCancelled} onCheckedChange={setShowCancelled} />
-                <Label htmlFor="show-cancelled">Abgesagte anzeigen</Label>
             </div>
            </div>
         </CardHeader>
