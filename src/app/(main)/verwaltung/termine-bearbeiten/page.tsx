@@ -618,12 +618,6 @@ function AdminTerminePageContent() {
             <Button onClick={() => { resetAppointmentForm(); setIsAppointmentDialogOpen(true); }}>
                 <Plus className="mr-2 h-4 w-4" /> Neue Terminserie
             </Button>
-             <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
-                <DialogTrigger asChild><Button variant="outline">Art verwalten</Button></DialogTrigger>
-                <DialogContent><DialogHeader><DialogTitle>Terminarten verwalten</DialogTitle></DialogHeader>
-                {/* ... (Type management content) ... */}
-                </DialogContent>
-             </Dialog>
         </div>
       </div>
 
