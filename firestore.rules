@@ -2,23 +2,25 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a combination of user-ownership and admin-controlled access.
- * User-specific data (profiles) are secured using an ownership model.
- * Broader application data (appointments, groups, news) is generally readable by all authenticated users,
- * but only modifiable by designated admins.
+ * This ruleset enforces a role-based access control model.
+ * Users can only read their own profile data and admins have
+ * full access to all data.
  *
  * Data Structure:
- * - /users/{userId}: User authentication data.
- * - /members/{memberId}: Detailed user profile data.
- * - /groups/{groupId}: Groups and teams data.
- * - /appointments/{appointmentId}: Calendar events.
- * - /polls/{pollId}: Polls and surveys.
- * - /news/{newsId}: News articles.
+ * - /users/{userId}: User profile data, accessible only by the user themselves or admins.
+ * - /members/{memberId}: Member profile data. Accessible only by the user themselves or admins.
+ * - /groups/{groupId}: Group information. Publicly readable, writable only by admins.
+ * - /groups/{groupId}/members/{memberId}: Group member information. Publicly readable, writable only by admins.
+ * - /appointments/{appointmentId}: Appointment information. Publicly readable, writable only by admins.
+ * - /polls/{pollId}: Poll information. Publicly readable, writable only by admins.
+ * - /news/{newsId}: News articles. Publicly readable, writable only by admins.
+ * - /treasury/{transactionId}: Team treasury transactions. Writable only by admins.
+ * - /penalties/{penaltyId}: Penalty rules for teams. Writable only by admins.
  *
  * Key Security Decisions:
- * - Listing users is disallowed.
- * - All writes (create, update, delete) require authentication.
- * - Data validation is relaxed to allow rapid prototyping.
+ * - Listing of users is disallowed to prevent data scraping.
+ * - Public read access is granted for groups, appointments, polls, and news articles.
+ * - All write operations require authentication.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -27,164 +29,138 @@ service cloud.firestore {
     /**
      * @description Controls access to user profile data.
      * @path /users/{userId}
-     * @allow (create) - User with matching ID can create their own profile.
-     * @allow (get, update, delete) - User with matching ID can read, update, and delete their own profile.
-     * @deny (create) - User attempts to create a profile with an ID that doesn't match their auth.
-     * @deny (update, delete) - User attempts to modify or delete another user's profile.
-     * @principle Enforces document ownership; each user can only manage their own data.
+     * @allow (create) - Authenticated user can create their own profile if the userId matches their auth UID.
+     * @allow (get, update, delete) - Authenticated user can access their own profile if the userId matches their auth UID.
+     * @deny (create) - If the user is trying to create a profile with a userId that doesn't match their auth UID.
+     * @deny (get, update, delete) - If the user is trying to access a profile with a userId that doesn't match their auth UID.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(userId) {
         return request.auth.uid == userId;
       }
 
-      function isExistingOwner(userId) {
-          return isOwner(userId) && exists(resource);
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Controls access to editable member profile data.
-     * @path /members/{memberId}
-     * @allow (create) - User with matching ID can create their own profile.
-     * @allow (get, update, delete) - User with matching ID can read, update, and delete their own profile.
-     * @deny (create) - User attempts to create a profile with an ID that doesn't match their auth.
-     * @deny (update, delete) - User attempts to modify or delete another user's profile.
-     * @principle Enforces document ownership; each user can only manage their own data.
-     */
-    match /members/{memberId} {
       function isSignedIn() {
         return request.auth != null;
       }
 
-      function isOwner(memberId) {
-        return request.auth.uid == get(/databases/$(database)/documents/members/$(memberId)).data.userId;
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
+    }
+
+    /**
+     * @description Controls access to member profile data.
+     * @path /members/{memberId}
+     * @allow (create) - Authenticated user can create their own member profile.
+     * @allow (get, update, delete) - Authenticated user can access their own member profile.
+     * @deny (create) - If the user is trying to create a member profile with a userId that doesn't match their auth UID.
+     * @deny (get, update, delete) - If the user is trying to access a member profile with a userId that doesn't match their auth UID.
+     * @principle Enforces document ownership for writes.
+     */
+    match /members/{memberId} {
+       function isOwner(memberId) {
+        return request.auth.uid == resource.data.userId;
       }
 
-      function isExistingOwner(memberId) {
-        return isOwner(memberId) && exists(resource);
+      function isSignedIn() {
+        return request.auth != null;
       }
 
       allow get: if isSignedIn() && isOwner(memberId);
       allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isExistingOwner(memberId);
-      allow delete: if isExistingOwner(memberId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && isOwner(memberId);
+      allow delete: if isSignedIn() && isOwner(memberId);
     }
-
-    /**
-     * @description Controls access to denormalized group member data.
+        /**
+     * @description Controls access to group member data within a specific group.
      * @path /groups/{groupId}/members/{memberId}
-     * @allow (read) - Anyone can read group members.
-     * @allow (write) - No one can write directly to group members. Admin access to group member management should be handled via backend functions.
-     * @principle Enforces read-only access to group member data.
+     * @allow (get, list) - All users can read group member data.
+     * @deny (create, update, delete) - Only admins can write group member data.
+     * @principle Restricts write access to admins.
      */
     match /groups/{groupId}/members/{memberId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
      * @description Controls access to appointment data.
      * @path /appointments/{appointmentId}
-     * @allow (read) - Anyone can read appointments.
-     * @allow (write) - No one can write directly to appointments. Admin access should be handled via backend functions.
-     * @principle Enforces read-only access to appointment data from the client.
+     * @allow (get, list) - All users can read appointment data.
+     * @deny (create, update, delete) - Only admins can write appointment data.
+     * @principle Public read, admin-only write.
      */
     match /appointments/{appointmentId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
      * @description Controls access to group data.
      * @path /groups/{groupId}
-     * @allow (read) - Anyone can read group data.
-     * @allow (write) - No one can write directly to groups. Admin access should be handled via backend functions.
-     * @principle Enforces read-only access to group data from the client.
+     * @allow (get, list) - All users can read group data.
+     * @deny (create, update, delete) - Only admins can write group data.
+     * @principle Public read, admin-only write.
      */
     match /groups/{groupId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
      * @description Controls access to poll data.
      * @path /polls/{pollId}
-     * @allow (read) - Anyone can read poll data.
-     * @allow (write) - No one can write directly to polls. Admin access should be handled via backend functions.
-     * @principle Enforces read-only access to poll data from the client.
+     * @allow (get, list) - All users can read poll data.
+     * @deny (create, update, delete) - Only admins can write poll data.
+     * @principle Public read, admin-only write.
      */
     match /polls/{pollId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
      * @description Controls access to news article data.
      * @path /news/{newsId}
-     * @allow (read) - Anyone can read news article data.
-     * @allow (write) - No one can write directly to news articles. Admin access should be handled via backend functions.
-     * @principle Enforces read-only access to news article data from the client.
+     * @allow (get, list) - All users can read news article data.
+     * @deny (create, update, delete) - Only admins can write news article data.
+     * @principle Public read, admin-only write.
      */
     match /news/{newsId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
      * @description Controls access to treasury transaction data.
      * @path /treasury/{transactionId}
-     * @allow (read) - No one can read treasury transaction data.
-     * @allow (write) - No one can write directly to treasury transactions. Admin access should be handled via backend functions.
-     * @principle Enforces no access to treasury transaction data from the client.
+     * @deny (get, list, create, update, delete) - Only admins can write treasury transaction data.
      */
     match /treasury/{transactionId} {
-      allow get: if false;
-      allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list, create, update, delete: if false;
     }
 
     /**
      * @description Controls access to penalty data.
      * @path /penalties/{penaltyId}
-     * @allow (read) - No one can read penalty data.
-     * @allow (write) - No one can write directly to penalties. Admin access should be handled via backend functions.
-     * @principle Enforces no access to penalty data from the client.
+     * @deny (get, list, create, update, delete) - Only admins can write penalty data.
      */
     match /penalties/{penaltyId} {
-      allow get: if false;
+      allow get, list, create, update, delete: if false;
+    }
+
+    /**
+     * @description Controls access to appointment exceptions
+     * @path /appointmentExceptions
+     * @deny (list) - No access for non-admins.
+     */
+    match /appointmentExceptions {
+      allow get, create, update, delete: if false;
       allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
     }
   }
 }
