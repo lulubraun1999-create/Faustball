@@ -426,10 +426,7 @@ function AdminTerminePageContent() {
   const filteredAppointments = useMemo(() => {
     const now = startOfDay(new Date());
     return unrolledAppointments.filter((app) => {
-       // Zeige immer abgesagte Termine an
-       if (app.isCancelled) return true;
-       // Vergangene Termine nur ausblenden, wenn sie nicht abgesagt sind
-       if (startOfDay(app.instanceDate) < now) return false;
+      if (startOfDay(app.instanceDate) < now && !app.isCancelled) return false;
 
       if (typeFilter !== 'all' && app.appointmentTypeId !== typeFilter)
         return false;
@@ -596,7 +593,7 @@ function AdminTerminePageContent() {
         toast({ title: 'Terminserie aktualisiert' });
       } else {
         await addDoc(collection(firestore, 'appointments'), appointmentData);
-        toast({ title: 'Neue Terminserie erstellt' });
+        toast({ title: 'Neuer Termin erstellt' });
       }
       setIsAppointmentDialogOpen(false);
       resetAppointmentForm();
@@ -888,10 +885,10 @@ function AdminTerminePageContent() {
             <DialogTitle>
               {selectedAppointment
                 ? 'Terminserie bearbeiten'
-                : 'Neue Terminserie erstellen'}
+                : 'Neuen Termin erstellen'}
             </DialogTitle>
             <DialogDescription>
-              Details zur Terminserie eingeben.
+              Details zum Termin eingeben.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[70vh] p-1 pr-6">
@@ -1343,7 +1340,7 @@ function AdminTerminePageContent() {
               )}
               {selectedAppointment
                 ? 'Änderungen speichern'
-                : 'Terminserie erstellen'}
+                : 'Termin erstellen'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1455,7 +1452,7 @@ function AdminTerminePageContent() {
               setIsAppointmentDialogOpen(true);
             }}
           >
-            <Plus className="mr-2 h-4 w-4" /> Neue Terminserie
+            <Plus className="mr-2 h-4 w-4" /> Termin hinzufügen
           </Button>
         </div>
       </div>
