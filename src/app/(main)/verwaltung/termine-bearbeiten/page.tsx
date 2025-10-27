@@ -527,32 +527,36 @@ function AdminTerminePageContent() {
   }, [appointments, exceptions, isLoadingExceptions]);
 
   const filteredAppointments = useMemo(() => {
-    const userTeamIdsSet = new Set(memberProfile?.teams || []);
-
+    // Wait until the member profile is loaded
+    if (!memberProfile) return [];
+  
+    const userTeamIdsSet = new Set(memberProfile.teams || []);
+  
     let preFiltered = unrolledAppointments;
-
+  
+    // 1. Filter by team
     if (teamFilter === 'myTeams') {
       preFiltered = unrolledAppointments.filter((app) => {
         if (app.visibility.type === 'all') return true;
-        return app.visibility.teamIds.some((teamId) =>
-          userTeamIdsSet.has(teamId)
-        );
+        // Check if there is any intersection between the appointment's teams and the user's teams
+        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
       });
     } else if (teamFilter !== 'all') {
       preFiltered = unrolledAppointments.filter(
         (app) =>
+          // Include if the appointment is for everyone or for the specific selected team
           app.visibility.type === 'all' ||
           app.visibility.teamIds.includes(teamFilter)
       );
     }
-
+  
+    // 2. Filter by type
     const finalFiltered = preFiltered.filter(
       (app) => typeFilter === 'all' || app.appointmentTypeId === typeFilter
     );
-
-    return finalFiltered.sort(
-      (a, b) => a.startDate.toMillis() - b.startDate.toMillis()
-    );
+  
+    // 3. Sort by start date
+    return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
   }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
 
 
@@ -880,7 +884,7 @@ function AdminTerminePageContent() {
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData,
-        createdBy: user.uid,
+        createdBy: originalAppointmentData.createdBy, // Keep original creator
         title: finalTitle || 'Termin',
         locationId:
           pendingUpdateData.locationId ?? originalAppointmentData.locationId,
@@ -1236,19 +1240,20 @@ function AdminTerminePageContent() {
     }
     return a.name.localeCompare(b.name);
   };
-  const sortedTeamsForFilter = useMemo(() => teams.sort(customSort), [teams]);
+  const sortedTeamsForFilter = useMemo(() => {
+    if (!teams) return [];
+    return [...teams].sort(customSort)
+  }, [teams]);
+  
   const sortedGroupedTeams = useMemo(() => {
-    if (!groups) return [];
-    return groups
-      .filter((g) => g.type === 'class')
-      .sort(customSort)
-      .map((c) => ({
-        ...c,
-        teams: groups
-          .filter((t) => t.type === 'team' && t.parentId === c.id)
-          .sort(customSort),
-      }))
-      .filter((c) => c.teams.length > 0);
+      if (!groups) return [];
+      const classes = groups.filter(g => g.type === 'class').sort(customSort);
+      const teamlist = groups.filter(g => g.type === 'team');
+  
+      return classes.map(c => ({
+          ...c,
+          teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
+      })).filter(c => c.teams.length > 0);
   }, [groups]);
 
   return (
@@ -1264,7 +1269,7 @@ function AdminTerminePageContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarPlus className="h-5 w-5" />
-              {selectedAppointment ? 'Termin bearbeiten' : 'Neuen Termin hinzufügen'}
+              {selectedAppointment ? 'Termin bearbeiten' : 'Termin hinzufügen'}
             </DialogTitle>
             <DialogDescription>
               {selectedAppointment
@@ -2221,7 +2226,6 @@ function AdminTerminePageContent() {
                       <Input
                         placeholder="z.B. Eingang Halle"
                         {...field}
-                        defaultValue={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />
@@ -2238,7 +2242,6 @@ function AdminTerminePageContent() {
                       <Input
                         placeholder="z.B. 18:45 Uhr"
                         {...field}
-                        defaultValue={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />
