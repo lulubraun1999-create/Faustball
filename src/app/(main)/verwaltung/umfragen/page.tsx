@@ -35,7 +35,7 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
 
-  // Query 1: Polls visible to 'all'
+  // Query 1: Polls visible to 'all' that are not expired yet, to keep the list clean.
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(collection(firestore, 'polls'), where('visibility.type', '==', 'all')) : null),
     [firestore]
@@ -266,3 +266,5 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
+
+    
