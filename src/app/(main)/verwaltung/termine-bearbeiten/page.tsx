@@ -12,6 +12,7 @@ import {
   errorEmitter,
   FirestorePermissionError,
   useUser,
+  useDoc,
 } from '@/firebase';
 import {
   collection,
@@ -104,6 +105,7 @@ import type {
   Location,
   Group,
   AppointmentException,
+  MemberProfile,
 } from '@/lib/types';
 import { format, addDays, addWeeks, addMonths, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -229,6 +231,11 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
 };
 type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
 
+// Natürliche Sortierfunktion
+const naturalSort = (a: string, b: string) => {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+};
+
 function AdminTerminePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -251,6 +258,12 @@ function AdminTerminePageContent() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
   // Data fetching
+    const memberProfileRef = useMemoFirebase(
+    () => (user ? doc(firestore, 'members', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
+
   const appointmentsRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'appointments') : null),
     [firestore]
@@ -301,7 +314,7 @@ function AdminTerminePageContent() {
       .sort((a, b) => a.name.localeCompare(b.name));
     const teams = allGroups
       .filter((g) => g.type === 'team')
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => naturalSort(a.name, b.name));
     const teamsMap = new Map(teams.map((t) => [t.id, t.name]));
     const groupedTeams: GroupWithTeams[] = classes.map((c) => ({
       ...c,
@@ -430,17 +443,20 @@ function AdminTerminePageContent() {
 
       if (typeFilter !== 'all' && app.appointmentTypeId !== typeFilter)
         return false;
-      if (
-        teamFilter !== 'all' &&
-        !(
-          app.visibility.type === 'all' ||
-          app.visibility.teamIds.includes(teamFilter)
-        )
-      )
-        return false;
+      
+      const userTeamIds = new Set(profile?.teams || []);
+      if (teamFilter === 'myTeams') {
+          if (app.visibility.type !== 'all' && !app.visibility.teamIds.some(teamId => userTeamIds.has(teamId))) {
+              return false;
+          }
+      } else if (teamFilter !== 'all') {
+          if (app.visibility.type !== 'all' && !app.visibility.teamIds.includes(teamFilter)) {
+              return false;
+          }
+      }
       return true;
     });
-  }, [unrolledAppointments, teamFilter, typeFilter]);
+  }, [unrolledAppointments, teamFilter, typeFilter, profile]);
 
   const resetAppointmentForm = () => {
     appointmentForm.reset({
@@ -869,7 +885,8 @@ function AdminTerminePageContent() {
     isLoadingTypes ||
     isLoadingLocations ||
     isLoadingGroups ||
-    isLoadingExceptions;
+    isLoadingExceptions ||
+    profileLoading;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -885,7 +902,7 @@ function AdminTerminePageContent() {
             <DialogTitle>
               {selectedAppointment
                 ? 'Terminserie bearbeiten'
-                : 'Neuen Termin erstellen'}
+                : 'Termin erstellen'}
             </DialogTitle>
             <DialogDescription>
               Details zum Termin eingeben.
@@ -1481,6 +1498,7 @@ function AdminTerminePageContent() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle Mannschaften</SelectItem>
+                  <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
                   {teams?.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
@@ -1675,3 +1693,4 @@ export default function AdminTerminePage() {
 
   return <AdminTerminePageContent />;
 }
+
