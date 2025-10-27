@@ -99,7 +99,7 @@ export interface Appointment {
   rsvpDeadline?: Timestamp; // Optional deadline for responses
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
-  createdAt?: Timestamp; // Optional: Server timestamp when created
+  createdBy: string; // Firebase Auth UID of the user who created the event
   lastUpdated?: Timestamp;
 }
 
