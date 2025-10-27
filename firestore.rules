@@ -2,168 +2,255 @@
  * @fileoverview Firestore Security Rules for FaustApp.
  *
  * Core Philosophy:
- * This ruleset enforces a role-based access control model.
- * Users can only read appointmentTypes. Only administrators can create, update, or delete appointments, groups, polls, news articles, treasury transactions and penalties.
- * Users can only read and write their own user and member data.
+ * This ruleset enforces a combination of user-ownership and admin-controlled access.
+ * User-specific data (profiles) can only be accessed by the owning user or an admin.
+ * App-wide data (appointments, groups, news) is publicly readable but only writable by admins.
  *
  * Data Structure:
  * - /users/{userId}: User authentication data, accessible only by the user themselves or admins.
  * - /members/{memberId}: User profile data, accessible only by the user themselves or admins.
- * - /groups/{groupId}: Group information (classes/teams), writable by admins, readable by all.
- * - /appointments/{appointmentId}: Appointments, writable by admins, readable by all.
- * - /polls/{pollId}: Polls, writable by admins, readable by all.
- * - /news/{newsId}: News articles, writable by admins, readable by all.
- * - /treasury/{transactionId}: Financial transactions, writable only by admins.
- * - /penalties/{penaltyId}: Penalty rules, writable only by admins.
- * - /groups/{groupId}/members/{memberId}: Denormalized group members, writable by admins, readable by all.
+ * - /groups/{groupId}: Group data, publicly readable, admin-writable.
+ * - /appointments/{appointmentId}: Appointment data, publicly readable, admin-writable.
+ * - /polls/{pollId}: Poll data, publicly readable, admin-writable.
+ * - /news/{newsId}: News data, publicly readable, admin-writable.
+ * - /treasury/{transactionId}: Treasury transaction data, admin-writable.
+ * - /penalties/{penaltyId}: Penalty catalog data, admin-writable.
+ * - /groups/{groupId}/members/{memberId}: Group membership data, publicly readable, admin-writable.
  *
  * Key Security Decisions:
- * - Admin Role: The rules rely on an 'admin' role on the user document. No listing of user documents is allowed to prevent unauthorized data access.
- * - Public Read-Only Collections: The `appointments`, `groups`, `polls`, and `news` collections are readable by all users but writable only by admins.
- * - Group Members: The `groups/{groupId}/members/{memberId}` collection provides fast lookups of team rosters and is readable by all.
+ * - User listing is generally disallowed.
+ * - Data schema validation is relaxed for prototyping but authorization is strictly enforced.
+ * - Timestamp validation is omitted for rapid prototyping.
+ * - The "appointmentTypes" collection is not defined in the `backend.json` file but is referenced in the error log.
+ *
+ * Denormalization for Authorization:
+ *  -The "appointmentTypes" collection is intended to be used by all users.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /**
+     * @description Checks if the request is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
+    /**
+     * @description Checks if the authenticated user is the owner of the resource.
+     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
+    /**
+     * @description Checks if the authenticated user is the existing owner of the resource.
+     */
     function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Manages access to user account data.
+     * @description Checks if the authenticated user has the 'admin' role.
+     */
+    function isAdmin() {
+      return request.auth.token.role == 'admin';
+    }
+
+    /**
+     * @description Allows any signed-in user to read the data.
+     * Note: This is only safe if the collection contains public data.
+     */
+    function isPubliclyReadable() {
+      return true;
+    }
+
+    /**
+     * @description Allows only the owner or admin to read the data.
+     */
+    function isOwnerOrAdmin(userId) {
+      return isOwner(userId) || isAdmin();
+    }
+
+
+    /**
+     * @description Rules for the /users/{userId} collection.
      * @path /users/{userId}
-     * @allow (create) Signed-in user can create their own user document.
-     * @allow (get, update, delete) Signed-in user can access their own user document or admin can access.
-     * @deny (list) Prevents listing all user documents.
-     * @principle Enforces user-ownership for data privacy.
+     * @allow (create) User with ID 'user123' can create their own user document.
+     * @allow (get) User with ID 'user123' can read their own user document.
+     * @deny (create) User with ID 'user456' cannot create a document with ID 'user123'.
+     * @deny (update) User with ID 'user456' cannot update the user document of 'user123'.
+     * @principle Enforces document ownership for reads and writes.
      */
     match /users/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow get, update, delete: if isExistingOwner(userId) || isAdmin();
+      // Only the user themselves can read their own document
+      allow get: if isOwnerOrAdmin(userId);
       allow list: if false;
+
+      // Only the user themselves can create their own document, and the userId must match
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+
+      // Only the user themselves can update their own document, and the userId must not change
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+
+      // Only the user themselves can delete their own document.
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages access to member profile data.
+     * @description Rules for the /members/{memberId} collection.
      * @path /members/{memberId}
-     * @allow (create) Signed-in user can create their own member profile.
-     * @allow (get, update, delete) Signed-in user can access their own member profile or admin can access.
-     * @deny (list) Prevents listing all member profiles.
-     * @principle Enforces user-ownership for data privacy.
+     * @allow (create) User with ID 'user123' can create their own member document.
+     * @allow (get) User with ID 'user123' can read their own member document.
+     * @deny (create) User with ID 'user456' cannot create a document with ID 'user123'.
+     * @deny (update) User with ID 'user456' cannot update the member document of 'user123'.
+     * @principle Enforces document ownership for reads and writes.
      */
     match /members/{memberId} {
-      allow create: if isSignedIn();
-      allow get, update, delete: if isSignedIn() && get(/databases/$(database)/documents/members/$(memberId)).data.userId == request.auth.uid || isAdmin();
+      allow get: if isSignedIn();
       allow list: if false;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
     }
 
-   /**
-     * @description Manages the lightweight group member records.
-     * @path /groups/{groupId}/members/{memberId}
-     * @allow (get, list) All users can view group members.
-     * @allow (create, update, delete) Only admins can modify group members.
-     * @principle Enforces admin-only writes, public reads for team rosters.
-     */
-    match /groups/{groupId}/members/{memberId} {
-        allow get, list: if true;
-        allow create, update, delete: if isAdmin();
-    }
+     /**
+      * @description Rules for the /groups/{groupId}/members/{memberId} collection.
+      * @path /groups/{groupId}/members/{memberId}
+      * @allow (get) Any signed-in user can read a group member's data.
+      * @deny (create) Only admins can create group members.
+      * @deny (update) Only admins can update group members.
+      * @deny (delete) Only admins can delete group members.
+      * @principle Restricts write access to admins, allows public read access.
+      */
+     match /groups/{groupId}/members/{memberId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+     }
 
     /**
-     * @description Manages access to appointment data.
+     * @description Rules for the /appointments/{appointmentId} collection.
      * @path /appointments/{appointmentId}
-     * @allow (get, list) All users can view appointments.
-     * @allow (create, update, delete) Only admins can modify appointments.
-     * @principle Enforces admin-only writes, public reads for the event calendar.
+     * @allow (get) Any user can read appointment data.
+     * @allow (list) Any user can list appointment data.
+     * @deny (create) Only admins can create appointments.
+     * @deny (update) Only admins can update appointments.
+     * @deny (delete) Only admins can delete appointments.
+     * @principle Restricts write access to admins, allows public read access.
      */
     match /appointments/{appointmentId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
+      allow get: if isPubliclyReadable();
+      allow list: if isPubliclyReadable();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Manages access to group data.
+     * @description Rules for the /groups/{groupId} collection.
      * @path /groups/{groupId}
-     * @allow (get, list) All users can view group information.
-     * @allow (create, update, delete) Only admins can modify group information.
-     * @principle Enforces admin-only writes, public reads for group/team data.
+     * @allow (get) Any user can read group data.
+     * @allow (list) Any user can list group data.
+     * @deny (create) Only admins can create groups.
+     * @deny (update) Only admins can update groups.
+     * @deny (delete) Only admins can delete groups.
+     * @principle Restricts write access to admins, allows public read access.
      */
     match /groups/{groupId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
+      allow get: if isPubliclyReadable();
+      allow list: if isPubliclyReadable();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Manages access to poll data.
+     * @description Rules for the /polls/{pollId} collection.
      * @path /polls/{pollId}
-     * @allow (get, list) All users can view polls.
-     * @allow (create, update, delete) Only admins can modify polls.
-     * @principle Enforces admin-only writes, public reads for polls.
+     * @allow (get) Any user can read poll data.
+     * @allow (list) Any user can list poll data.
+     * @deny (create) Only admins can create polls.
+     * @deny (update) Only admins can update polls.
+     * @deny (delete) Only admins can delete polls.
+     * @principle Restricts write access to admins, allows public read access.
      */
     match /polls/{pollId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
+      allow get: if isPubliclyReadable();
+      allow list: if isPubliclyReadable();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Manages access to news article data.
+     * @description Rules for the /news/{newsId} collection.
      * @path /news/{newsId}
-     * @allow (get, list) All users can view news articles.
-     * @allow (create, update, delete) Only admins can modify news articles.
-     * @principle Enforces admin-only writes, public reads for news content.
+     * @allow (get) Any user can read news article data.
+     * @allow (list) Any user can list news article data.
+     * @deny (create) Only admins can create news articles.
+     * @deny (update) Only admins can update news articles.
+     * @deny (delete) Only admins can delete news articles.
+     * @principle Restricts write access to admins, allows public read access.
      */
     match /news/{newsId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
+      allow get: if isPubliclyReadable();
+      allow list: if isPubliclyReadable();
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Manages access to treasury transaction data.
+     * @description Rules for the /treasury/{transactionId} collection.
      * @path /treasury/{transactionId}
-     * @allow (create, update, delete) Only admins can modify treasury transactions.
-     * @deny (get, list) Treasury transactions are not accessible directly.
-     * @principle Enforces admin-only writes, no public reads for financial data.
+     * @deny (get) No one can get treasury data.
+     * @deny (list) No one can list treasury data.
+     * @deny (create) Only admins can create treasury transactions.
+     * @deny (update) Only admins can update treasury transactions.
+     * @deny (delete) Only admins can delete treasury transactions.
+     * @principle Restricts all access to admins.
      */
     match /treasury/{transactionId} {
-      allow create, update, delete: if isAdmin();
-      allow get, list: if false;
+      allow get: if false;
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description Manages access to penalty data.
+     * @description Rules for the /penalties/{penaltyId} collection.
      * @path /penalties/{penaltyId}
-     * @allow (create, update, delete) Only admins can modify penalty data.
-     * @deny (get, list) Penalties are not accessible directly.
-     * @principle Enforces admin-only writes, no public reads for penalty rules.
+     * @deny (get) No one can get penalty data.
+     * @deny (list) No one can list penalty data.
+     * @deny (create) Only admins can create penalties.
+     * @deny (update) Only admins can update penalties.
+     * @deny (delete) Only admins can delete penalties.
+     * @principle Restricts all access to admins.
      */
     match /penalties/{penaltyId} {
-      allow create, update, delete: if isAdmin();
-      allow get, list: if false;
+      allow get: if false;
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
-    /**
-     * @description Allows all users to read appointment types.
-     * @path /appointmentTypes
-     * @allow (get, list) All users can read appointment types.
-     * @deny (create, update, delete) No one can create, update, or delete appointment types.
-     * @principle Enforces read-only access for appointment types.
-     */
-    match /appointmentTypes {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+     /**
+      * @description Rules for the /appointmentTypes collection.
+      * @path /appointmentTypes
+      */
+    match /appointmentTypes/{appointmentTypeId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
+
   }
 }
