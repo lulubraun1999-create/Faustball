@@ -527,8 +527,8 @@ function AdminTerminePageContent() {
   }, [appointments, exceptions, isLoadingExceptions]);
 
   const filteredAppointments = useMemo(() => {
-    if (isMemberProfileLoading) return []; 
-    if (!memberProfile && !isMemberProfileLoading) return []; 
+    if (isMemberProfileLoading) return [];
+    if (!memberProfile && !isMemberProfileLoading) return [];
   
     const userTeamIdsSet = new Set(memberProfile?.teams || []);
   
@@ -875,7 +875,7 @@ function AdminTerminePageContent() {
             : typeName
           : originalAppointmentData.title;
 
-      const newAppointmentData: Omit<Appointment, 'id'> = {
+      const newAppointmentData: Omit<Appointment, 'id'| 'lastUpdated'> = {
         ...originalAppointmentData,
         title: finalTitle || 'Termin',
         locationId:
@@ -891,8 +891,9 @@ function AdminTerminePageContent() {
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-        createdAt: originalAppointmentData.createdAt,
-        lastUpdated: serverTimestamp(),
+        // Set the creator to the current admin and reset creation timestamp
+        createdBy: user.uid, 
+        createdAt: serverTimestamp(),
       };
 
       batch.set(newAppointmentRef, newAppointmentData);
@@ -1241,15 +1242,15 @@ function AdminTerminePageContent() {
   }, [teams]);
   
   const sortedGroupedTeams = useMemo(() => {
-      if (!groups) return [];
-      const classes = groups.filter(g => g.type === 'class').sort(customSort);
-      const teamlist = groups.filter(g => g.type === 'team');
-  
-      return classes.map(c => ({
-          ...c,
-          teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
-      })).filter(c => c.teams.length > 0);
-  }, [groups]);
+    if (!groups) return [];
+    const classes = groups.filter(g => g.type === 'class').sort(customSort);
+    const teamlist = groups.filter(g => g.type === 'team');
+
+    return classes.map(c => ({
+        ...c,
+        teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
+    })).filter(c => c.teams.length > 0);
+}, [groups]);
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -1987,7 +1988,7 @@ function AdminTerminePageContent() {
                       <FormItem>
                         <FormLabel>Treffpunkt (optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="z.B. Eingang Halle" {...field} />
+                          <Input placeholder="z.B. Eingang Halle" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -2000,7 +2001,7 @@ function AdminTerminePageContent() {
                       <FormItem>
                         <FormLabel>Treffzeit (optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="z.B. 18:45 Uhr" {...field} />
+                          <Input placeholder="z.B. 18:45 Uhr" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
