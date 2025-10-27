@@ -11,7 +11,7 @@ import {
   FirestorePermissionError,
   useDoc,
 } from '@/firebase';
-import { collection, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, where, Timestamp } from 'firebase/firestore';
 import type { Poll, MemberProfile } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,18 +28,33 @@ export default function UmfragenPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
 
-  const pollsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'polls') : null),
-    [firestore]
-  );
-  const { data: polls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
-  
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
+  const userTeamIds = useMemo(() => member?.teams || [], [member]);
 
+  // Query 1: Polls visible to 'all'
+  const pollsForAllQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'polls'), where('visibility.type', '==', 'all')) : null),
+    [firestore]
+  );
+  const { data: pollsForAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(pollsForAllQuery);
+
+  // Query 2: Polls visible to the user's teams
+  const pollsForTeamsQuery = useMemoFirebase(
+    () => (firestore && userTeamIds.length > 0
+        ? query(
+            collection(firestore, 'polls'),
+            where('visibility.type', '==', 'specificTeams'),
+            where('visibility.teamIds', 'array-contains-any', userTeamIds)
+          )
+        : null),
+    [firestore, userTeamIds]
+  );
+  const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
+  
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
   const handleVote = async (pollId: string, optionId: string | null) => {
@@ -48,7 +63,7 @@ export default function UmfragenPage() {
     setVotingStates((prev) => ({ ...prev, [pollId]: true }));
     const pollDocRef = doc(firestore, 'polls', pollId);
 
-    const currentPoll = polls?.find((p) => p.id === pollId);
+    const currentPoll = visiblePolls?.find((p) => p.id === pollId);
     if (!currentPoll) return;
     
     // First, remove any existing vote from this user for this poll
@@ -82,7 +97,7 @@ export default function UmfragenPage() {
       setVotingStates((prev) => ({ ...prev, [`retract-${pollId}`]: true }));
       const pollDocRef = doc(firestore, 'polls', pollId);
 
-      const currentPoll = polls?.find(p => p.id === pollId);
+      const currentPoll = visiblePolls?.find(p => p.id === pollId);
       const userVote = currentPoll?.votes.find(v => v.userId === user.uid);
 
       if (!userVote) return;
@@ -103,24 +118,16 @@ export default function UmfragenPage() {
   };
 
   const visiblePolls = useMemo(() => {
-    if (!polls || !member) return [];
-    const userTeams = new Set(member.teams || []);
-    return polls
-        .filter((poll) => {
-            if (poll.visibility.type === 'all') return true;
-            if (poll.visibility.type === 'specificTeams') {
-                return poll.visibility.teamIds.some(teamId => userTeams.has(teamId));
-            }
-            return false;
-        })
-        .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-  }, [polls, member]);
+    const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
+    const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
+    return uniquePolls.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }, [pollsForAll, pollsForTeams]);
 
 
   const activePolls = visiblePolls?.filter(p => !isPast(p.endDate.toDate()));
   const expiredPolls = visiblePolls?.filter(p => isPast(p.endDate.toDate()));
   
-  const isLoading = isLoadingPolls || isUserLoading || isLoadingMember;
+  const isLoading = isLoadingPollsAll || isLoadingPollsTeams || isUserLoading || isLoadingMember;
 
   if (isLoading) {
     return (
