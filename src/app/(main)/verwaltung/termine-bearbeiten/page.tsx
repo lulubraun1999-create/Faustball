@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -23,9 +24,9 @@ import {
   serverTimestamp,
   query,
   where,
-  writeBatch, // writeBatch importieren
-  getDocs, // getDocs importieren
-  getDoc, // getDoc importieren
+  writeBatch,
+  getDocs,
+  getDoc,
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import {
@@ -111,7 +112,6 @@ import type {
   AppointmentException,
   MemberProfile,
 } from '@/lib/types';
-// *** NEUE IMPORTE für Wiederholungen ***
 import {
   format,
   formatISO,
@@ -128,19 +128,16 @@ import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
-// Neuer Typ für die gruppierte Ansicht
 type GroupWithTeams = Group & { teams: Group[] };
 
-// *** Geänderter Typ für entfaltete Termine ***
 type UnrolledAppointment = Appointment & {
-  virtualId: string; // Eindeutige ID für React Key (originalId + ISO-Datum)
-  originalId: string; // Die ID der ursprünglichen Terminserie
-  originalDateISO?: string; // Das Datum dieser Instanz als ISO String
-  isException?: boolean; // Ist dieser angezeigte Termin eine Ausnahme?
-  isCancelled?: boolean; // Ist dieser Termin abgesagt?
+  virtualId: string;
+  originalId: string;
+  originalDateISO?: string;
+  isException?: boolean;
+  isCancelled?: boolean;
 };
 
-// --- Zod Schemas ---
 const locationSchema = z.object({
   name: z.string().min(1, 'Ortsname ist erforderlich.'),
   address: z.string().optional(),
@@ -151,13 +148,12 @@ const appointmentTypeSchema = z.object({
 });
 type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
-// --- NEU: Zod Schema für Bearbeitung einer einzelnen Instanz ---
 const singleAppointmentInstanceSchema = z
   .object({
-    originalDateISO: z.string(), // Verstecktes Feld, um das Originaldatum zu speichern
+    originalDateISO: z.string(),
     startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'),
     endDate: z.string().optional(),
-    isAllDay: z.boolean().default(false), // Hinzugefügt
+    isAllDay: z.boolean().default(false),
     title: z.string().optional(),
     locationId: z.string().optional(),
     description: z.string().optional(),
@@ -171,9 +167,7 @@ const singleAppointmentInstanceSchema = z
 type SingleAppointmentInstanceFormValues = z.infer<
   typeof singleAppointmentInstanceSchema
 >;
-// --- Ende Neues Schema ---
 
-// Zod Schema für die Serie
 const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
   return useMemo(() => {
     const sonstigeTypeId = appointmentTypes?.find(
@@ -348,7 +342,6 @@ function AdminTerminePageContent() {
       .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
 
-    // *** KORRIGIERTE GRUPPIERUNG & SORTIERUNG (U8 vor U10) ***
     const customSort = (a: Group, b: Group) => {
       const regex = /^(U)(\d+)/i;
       const matchA = a.name.match(regex);
@@ -419,7 +412,6 @@ function AdminTerminePageContent() {
     [appointmentTypes]
   );
 
-  // *** ANGEPASSTE LOGIK: Wiederholende Termine entfalten & Ausnahmen anwenden ***
   const unrolledAppointments = useMemo(() => {
     if (!appointments || isLoadingExceptions) return [];
 
@@ -533,7 +525,6 @@ function AdminTerminePageContent() {
     });
     return allEvents;
   }, [appointments, exceptions, isLoadingExceptions]);
-  // *** ENDE ANGEPASSTE LOGIK ***
 
   const filteredAppointments = useMemo(() => {
     const userTeamIdsSet = new Set(memberProfile?.teams || []);
@@ -563,6 +554,7 @@ function AdminTerminePageContent() {
       (a, b) => a.startDate.toMillis() - b.startDate.toMillis()
     );
   }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
+
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !appointmentsRef) return;
@@ -679,7 +671,6 @@ function AdminTerminePageContent() {
     }
   };
 
-  // --- ANGEPASSTE FUNKTION: Nur Dialog öffnen ---
   const onSubmitSingleInstance = async (
     data: SingleAppointmentInstanceFormValues
   ) => {
@@ -689,7 +680,6 @@ function AdminTerminePageContent() {
     setIsUpdateTypeDialogOpen(true);
   };
 
-  // --- HILFSFUNKTION ZUM RESET ALLER INSTANZ-DIALOGE ---
   const resetSingleInstanceDialogs = () => {
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(false);
@@ -698,7 +688,6 @@ function AdminTerminePageContent() {
     instanceForm.reset();
   };
 
-  // --- NEUE FUNKTION: Speichert nur die eine Instanz ---
   async function handleSaveSingleOnly() {
     if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user)
       return;
@@ -835,7 +824,6 @@ function AdminTerminePageContent() {
     }
   }
 
-  // --- NEUE FUNKTION: Speichert diese & zukünftige Instanzen (Split) ---
   async function handleSaveForFuture() {
     if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user)
       return;
@@ -857,7 +845,6 @@ function AdminTerminePageContent() {
         originalAppointmentSnap.data() as Appointment;
       const batch = writeBatch(firestore);
 
-      // 1. Die *alte* Terminserie beenden (einen Tag vor dem geänderten Termin)
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       const originalStartDate = originalAppointmentData.startDate.toDate();
@@ -870,7 +857,6 @@ function AdminTerminePageContent() {
         batch.delete(originalAppointmentRef);
       }
 
-      // 2. Eine *neue* Terminserie erstellen
       const newAppointmentRef = doc(collection(firestore, 'appointments'));
 
       const newStartDate = new Date(pendingUpdateData.startDate!);
@@ -894,6 +880,7 @@ function AdminTerminePageContent() {
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData,
+        createdBy: user.uid,
         title: finalTitle || 'Termin',
         locationId:
           pendingUpdateData.locationId ?? originalAppointmentData.locationId,
@@ -910,12 +897,10 @@ function AdminTerminePageContent() {
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp(),
-        createdBy: user.uid,
       };
 
       batch.set(newAppointmentRef, newAppointmentData);
 
-      // 3. Alle alten Ausnahmen löschen, die ab jetzt ungültig sind
       const exceptionsQuery = query(
         collection(firestore, 'appointmentExceptions'),
         where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
@@ -941,7 +926,6 @@ function AdminTerminePageContent() {
     }
   }
 
-  // *** NEUER HANDLER: Einzelnen Termin absagen/wiederherstellen ***
   const handleCancelSingleInstance = async (
     appointment: UnrolledAppointment
   ) => {
@@ -966,7 +950,6 @@ function AdminTerminePageContent() {
           existingException.id
         );
         if (appointment.isCancelled) {
-          // WIEDERHERSTELLEN
           if (
             existingException.modifiedData &&
             Object.keys(existingException.modifiedData).length > 0
@@ -978,7 +961,6 @@ function AdminTerminePageContent() {
             toast({ title: 'Termin wiederhergestellt.' });
           }
         } else {
-          // ABSAGEN
           await updateDoc(docRef, {
             status: 'cancelled',
             modifiedData: {},
@@ -988,7 +970,6 @@ function AdminTerminePageContent() {
           toast({ title: 'Termin abgesagt.' });
         }
       } else {
-        // NEUE 'cancelled' Ausnahme erstellen
         const exceptionData: Omit<AppointmentException, 'id'> = {
           originalAppointmentId: appointment.originalId,
           originalDate: Timestamp.fromDate(originalDateStartOfDay),
@@ -1013,7 +994,6 @@ function AdminTerminePageContent() {
     }
   };
 
-  // Löscht jetzt die GANZE SERIE
   const handleDeleteAppointment = async (id: string) => {
     if (!firestore) return;
     setIsSubmitting(true);
@@ -1045,7 +1025,6 @@ function AdminTerminePageContent() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    // Wenn es keine 'originalId' hat ODER virtualId == originalId, ist es ein Einmaltermin
     if (!appointment.originalId || appointment.virtualId === appointment.originalId) {
       const originalAppointment = appointments?.find(
         (app) => app.id === appointment.id
@@ -1105,14 +1084,13 @@ function AdminTerminePageContent() {
       });
       setIsAppointmentDialogOpen(true);
     } else {
-      // Öffne den NEUEN Dialog zum Bearbeiten der Instanz
       setSelectedInstanceToEdit(appointment);
 
       const formatTimestampForInput = (
         ts: Timestamp | undefined,
         type: 'datetime' | 'date' = 'datetime'
       ) => {
-        /*...*/ if (!ts) return '';
+        if (!ts) return '';
         try {
           const date = ts.toDate();
           if (type === 'date') return formatISO(date, { representation: 'date' });
@@ -1248,7 +1226,6 @@ function AdminTerminePageContent() {
     isLoadingExceptions ||
     isMemberProfileLoading;
 
-  // *** NEUE SORTIERFUNKTION FÜR GRUPPEN (U8 vor U10) ***
   const customSort = (a: Group, b: Group) => {
     const regex = /^(U)(\d+)/i;
     const matchA = a.name.match(regex);
@@ -1259,9 +1236,9 @@ function AdminTerminePageContent() {
     }
     return a.name.localeCompare(b.name);
   };
-  // *** NEUE SORTIERTE LISTEN FÜR FILTER ***
   const sortedTeamsForFilter = useMemo(() => teams.sort(customSort), [teams]);
   const sortedGroupedTeams = useMemo(() => {
+    if (!groups) return [];
     return groups
       .filter((g) => g.type === 'class')
       .sort(customSort)
@@ -1276,7 +1253,6 @@ function AdminTerminePageContent() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      {/* Dialog für Serien-Bearbeitung / Neuen Termin */}
       <Dialog
         open={isAppointmentDialogOpen}
         onOpenChange={(open) => {
@@ -1288,7 +1264,7 @@ function AdminTerminePageContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarPlus className="h-5 w-5" />
-              {selectedAppointment ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}
+              {selectedAppointment ? 'Termin bearbeiten' : 'Neuen Termin hinzufügen'}
             </DialogTitle>
             <DialogDescription>
               {selectedAppointment
@@ -1305,7 +1281,6 @@ function AdminTerminePageContent() {
                 }}
                 className="space-y-4 px-1 py-4"
               >
-                {/* Art des Termins */}
                 <FormField
                   control={appointmentForm.control}
                   name="appointmentTypeId"
@@ -1471,7 +1446,6 @@ function AdminTerminePageContent() {
                   )}
                 />
 
-                {/* Titel */}
                 <FormField
                   control={appointmentForm.control}
                   name="title"
@@ -1506,7 +1480,6 @@ function AdminTerminePageContent() {
                   }}
                 />
 
-                {/* Start, Ende, Ganztags */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={appointmentForm.control}
@@ -1566,7 +1539,6 @@ function AdminTerminePageContent() {
                   )}
                 />
 
-                {/* Wiederholung */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={appointmentForm.control}
@@ -1629,7 +1601,6 @@ function AdminTerminePageContent() {
                   )}
                 </div>
 
-                {/* Sichtbarkeit */}
                 <FormField
                   control={appointmentForm.control}
                   name="visibilityType"
@@ -1661,7 +1632,6 @@ function AdminTerminePageContent() {
                   )}
                 />
 
-                {/* Sichtbarkeit Teams (mit Popover-Fix) */}
                 {watchVisibilityType === 'specificTeams' && (
                   <FormField
                     control={appointmentForm.control}
@@ -1807,7 +1777,6 @@ function AdminTerminePageContent() {
                   />
                 )}
 
-                {/* Rückmeldefrist */}
                 <FormField
                   control={appointmentForm.control}
                   name="rsvpDeadline"
@@ -1826,7 +1795,6 @@ function AdminTerminePageContent() {
                   )}
                 />
 
-                {/* Ort */}
                 <FormField
                   control={appointmentForm.control}
                   name="locationId"
@@ -2011,7 +1979,6 @@ function AdminTerminePageContent() {
                     </FormItem>
                   )}
                 />
-                {/* ... (Restliche Felder: Treffpunkt, Beschreibung) ... */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={appointmentForm.control}
@@ -2072,7 +2039,7 @@ function AdminTerminePageContent() {
                     {isSubmitting && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    {selectedAppointment ? 'Serie speichern' : 'Termin erstellen'}
+                    {selectedAppointment ? 'Serie speichern' : 'Termin hinzufügen'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -2081,7 +2048,6 @@ function AdminTerminePageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* *** NEU: Dialog für Instanz-Bearbeitung *** */}
       <Dialog
         open={isInstanceDialogOpen}
         onOpenChange={(open) => {
@@ -2318,9 +2284,6 @@ function AdminTerminePageContent() {
           </Form>
         </DialogContent>
       </Dialog>
-      {/* *** ENDE Instanz-Dialog *** */}
-
-      {/* --- NEUER DIALOG: "Wie speichern?" --- */}
       <AlertDialog
         open={isUpdateTypeDialogOpen}
         onOpenChange={(open) => {
@@ -2363,9 +2326,7 @@ function AdminTerminePageContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* ------------------------------------ */}
 
-      {/* --- Terminliste --- */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2374,7 +2335,6 @@ function AdminTerminePageContent() {
               <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>{' '}
             </CardTitle>
             <div className="flex items-center gap-2">
-              {/* Filter */}
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
                 <Select value={teamFilter} onValueChange={setTeamFilter}>
@@ -2383,10 +2343,8 @@ function AdminTerminePageContent() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Alle Mannschaften</SelectItem>
-                    {/* *** NEU: "Meine Mannschaften" Filter *** */}
                     <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
                     <Separator />
-                    {/* *** NEU: Sortierte Teams *** */}
                     {isLoadingGroups ? (
                       <SelectItem value="loading" disabled>
                         Lade...
@@ -2426,7 +2384,7 @@ function AdminTerminePageContent() {
                   setIsAppointmentDialogOpen(true);
                 }}
               >
-                <Plus className="mr-2 h-4 w-4" /> Neuer Termin
+                <Plus className="mr-2 h-4 w-4" /> Termin hinzufügen
               </Button>
             </div>
           </div>
@@ -2441,7 +2399,6 @@ function AdminTerminePageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {/* *** KORRIGIERTE Spalten *** */}
                     <TableHead>Art (Titel)</TableHead>
                     <TableHead>Datum/Zeit</TableHead>
                     <TableHead>Sichtbarkeit</TableHead>
@@ -2544,7 +2501,6 @@ function AdminTerminePageContent() {
                               : '-'}
                           </TableCell>
                           <TableCell className="text-right space-x-1">
-                            {/* Bearbeiten öffnet Instanz-Dialog (wenn Teil einer Serie) */}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -2557,7 +2513,6 @@ function AdminTerminePageContent() {
                               </span>
                             </Button>
 
-                            {/* Absagen/Rückgängig-Button */}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -2616,7 +2571,6 @@ function AdminTerminePageContent() {
                               </AlertDialogContent>
                             </AlertDialog>
 
-                            {/* Löschen löscht die Serie */}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon">
@@ -2681,7 +2635,6 @@ function AdminTerminePageContent() {
   );
 }
 
-// Wrapper-Komponente für die Admin-Prüfung
 export default function AdminTerminePage() {
   const { isAdmin, isUserLoading } = useUser();
   if (isUserLoading) {
