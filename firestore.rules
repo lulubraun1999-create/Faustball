@@ -6,21 +6,23 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isAdmin() { return request.auth.token.admin == true; }
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
-    
-    // Gibt die Teams des Benutzers als Liste zurück, oder eine leere Liste, wenn keine vorhanden sind
     function getUserTeams() {
-      return getMemberDoc(request.auth.uid).data.get('teams', []);
+      // Nutze get() direkt mit .data Zugriff, was null zurückgibt, falls nicht existent
+      let memberData = getMemberDoc(request.auth.uid).data;
+      // Stelle sicher, dass memberData und das 'teams'-Feld existieren
+      return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
-    
     // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das gelesene Dokument gehört
     function isMemberOfDocTeamResource() {
+      let userTeams = getUserTeams(); // Hole User Teams (kann leere Liste sein)
       // Stelle sicher, dass resource.data existiert, teamId hat und der User Teams hat
       return isSignedIn() &&
              resource != null && resource.data != null &&
              resource.data.keys().hasAny(['teamId']) &&
-             getUserTeams().size() > 0 &&
-             getUserTeams().hasAny([resource.data.teamId]); // Prüfe Mitgliedschaft
+             userTeams.size() > 0 &&
+             userTeams.hasAny([resource.data.teamId]); // Prüfe Mitgliedschaft mit hasAny
     }
+
 
     // --- /users/{userId} ---
     match /users/{userId} {
@@ -41,6 +43,7 @@ service cloud.firestore {
     match /members/{memberId} {
         function isOwner(memberId) { return request.auth.uid == memberId; }
         function isExistingOwner() {
+          // Prüft, ob resource existiert und userId hat
           return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid;
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
@@ -78,13 +81,13 @@ service cloud.firestore {
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
         function isMemberOfVisibleTeamForAppointment() {
-          // Prüfe Existenz aller nötigen Felder und dann die Team-Mitgliedschaft
-          return getUserTeams() != null && // User muss Teams haben
+          let memberTeams = getUserTeams();
+          return memberTeams != null &&
                  resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
                  resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
-                 resource.data.visibility.teamIds.hasAny(getUserTeams());
+                 resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow read: if isSignedIn() && (
@@ -117,7 +120,7 @@ service cloud.firestore {
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
         function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
         function isMemberOfOriginalAppointmentTeamFromResource() {
-           let originalAppointment = getOriginalAppointmentFromResource(); // 'let' ist OK innerhalb von 'function'
+           let originalAppointment = getOriginalAppointmentFromResource();
            if (originalAppointment == null || originalAppointment.data == null) { return false; }
            let originalAppointmentData = originalAppointment.data;
            let memberTeams = getUserTeams();
