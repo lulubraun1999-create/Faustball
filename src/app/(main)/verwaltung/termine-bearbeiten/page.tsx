@@ -884,7 +884,7 @@ function AdminTerminePageContent() {
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData,
-        createdBy: originalAppointmentData.createdBy, // Keep original creator
+        createdBy: user.uid, // Set current user as creator of the new series
         title: finalTitle || 'Termin',
         locationId:
           pendingUpdateData.locationId ?? originalAppointmentData.locationId,
@@ -2174,7 +2174,6 @@ function AdminTerminePageContent() {
                               : 'Optionaler Titel...'
                           }
                           {...field}
-                          defaultValue={field.value ?? ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -2258,7 +2257,6 @@ function AdminTerminePageContent() {
                       <Textarea
                         placeholder="Weitere Details..."
                         {...field}
-                        defaultValue={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />
