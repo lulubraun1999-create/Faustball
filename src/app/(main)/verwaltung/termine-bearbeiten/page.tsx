@@ -822,94 +822,73 @@ function AdminTerminePageContent() {
   }
 
   async function handleSaveForFuture() {
-    if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user)
-      return;
-
+    if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user) return;
+  
     setIsSubmitting(true);
     try {
-      const originalAppointmentRef = doc(
-        firestore,
-        'appointments',
-        selectedInstanceToEdit.originalId
-      );
+      const originalAppointmentRef = doc(firestore, 'appointments', selectedInstanceToEdit.originalId);
       const originalAppointmentSnap = await getDoc(originalAppointmentRef);
-
-      if (!originalAppointmentSnap.exists()) {
-        throw new Error('Original-Terminserie nicht gefunden');
-      }
-
-      const originalAppointmentData =
-        originalAppointmentSnap.data() as Appointment;
-      const batch = writeBatch(firestore);
-
+  
+      if (!originalAppointmentSnap.exists()) throw new Error('Original-Terminserie nicht gefunden');
+  
+      const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
-      const originalStartDate = originalAppointmentData.startDate.toDate();
-
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, {
-          recurrenceEndDate: Timestamp.fromDate(dayBefore),
-        });
-      } else {
-        batch.delete(originalAppointmentRef);
-      }
-
-      const newAppointmentRef = doc(collection(firestore, 'appointments'));
-
+  
+      // Step 1: Create the new series
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate
-        ? new Date(pendingUpdateData.endDate)
-        : undefined;
-
+      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
+  
       const typeName = typesMap.get(originalAppointmentData.appointmentTypeId);
       const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault =
-        !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault
-        ? ''
+      const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
+      const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
+      const finalTitle = pendingUpdateData.title !== originalDisplayTitle
+        ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
         : originalAppointmentData.title;
-      const finalTitle =
-        pendingUpdateData.title !== originalDisplayTitle
-          ? pendingUpdateData.title && pendingUpdateData.title.trim() !== ''
-            ? pendingUpdateData.title.trim()
-            : typeName
-          : originalAppointmentData.title;
-
-      const newAppointmentData: Omit<Appointment, 'id'| 'lastUpdated'> = {
+  
+      const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData,
         title: finalTitle || 'Termin',
-        locationId:
-          pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description:
-          pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint:
-          pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-        meetingTime:
-          pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        isAllDay:
-          pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
+        description: pendingUpdateData.description ?? originalAppointmentData.description,
+        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
+        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-        // Set the creator to the current admin and reset creation timestamp
-        createdBy: user.uid, 
+        createdBy: user.uid,
         createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp(),
       };
-
-      batch.set(newAppointmentRef, newAppointmentData);
-
+      
+      const newDocRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
+      
+      // Step 2: Update the old series
+      const batch = writeBatch(firestore);
+      const originalStartDate = originalAppointmentData.startDate.toDate();
+      if (dayBefore >= originalStartDate) {
+        batch.update(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(dayBefore) });
+      } else {
+        batch.delete(originalAppointmentRef);
+      }
+  
+      // Step 3: Delete old exceptions
       const exceptionsQuery = query(
         collection(firestore, 'appointmentExceptions'),
         where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
         where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)))
       );
       const exceptionsSnap = await getDocs(exceptionsQuery);
-
       exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
-
+  
       await batch.commit();
+      
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+  
     } catch (error: any) {
+      console.error("Error splitting appointment series:", error);
       errorEmitter.emit(
         'permission-error',
         new FirestorePermissionError({
@@ -1022,9 +1001,11 @@ function AdminTerminePageContent() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    if (!appointment.originalId || appointment.virtualId === appointment.originalId) {
+    // This logic handles both single instances and full series
+    // If it's a non-recurring appointment, or the first instance of a series, open the main dialog
+    if (!appointment.recurrence || appointment.recurrence === 'none' || (appointment.originalId === appointment.id)) {
       const originalAppointment = appointments?.find(
-        (app) => app.id === appointment.id
+        (app) => app.id === appointment.originalId
       );
       if (!originalAppointment) return;
       setSelectedAppointment(originalAppointment);
@@ -1080,7 +1061,7 @@ function AdminTerminePageContent() {
         description: originalAppointment.description ?? '',
       });
       setIsAppointmentDialogOpen(true);
-    } else {
+    } else { // For a recurring instance that is not the first one
       setSelectedInstanceToEdit(appointment);
 
       const formatTimestampForInput = (
@@ -1988,7 +1969,7 @@ function AdminTerminePageContent() {
                       <FormItem>
                         <FormLabel>Treffpunkt (optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="z.B. Eingang Halle" {...field} value={field.value ?? ''} />
+                          <Input placeholder="z.B. Eingang Halle" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -2001,7 +1982,7 @@ function AdminTerminePageContent() {
                       <FormItem>
                         <FormLabel>Treffzeit (optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="z.B. 18:45 Uhr" {...field} value={field.value ?? ''} />
+                          <Input placeholder="z.B. 18:45 Uhr" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -2474,10 +2455,8 @@ function AdminTerminePageContent() {
                               : '-'}
                           </TableCell>
                           <TableCell>
-                            {app.originalId !== app.virtualId &&
-                            app.recurrence &&
-                            app.recurrence !== 'none'
-                              ? `${app.recurrence} bis ${
+                            {app.recurrence && app.recurrence !== 'none'
+                              ? `bis ${
                                   app.recurrenceEndDate
                                     ? format(
                                         app.recurrenceEndDate.toDate(),
