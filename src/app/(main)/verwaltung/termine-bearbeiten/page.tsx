@@ -527,37 +527,30 @@ function AdminTerminePageContent() {
   }, [appointments, exceptions, isLoadingExceptions]);
 
   const filteredAppointments = useMemo(() => {
-    // Wait until the member profile is loaded
-    if (!memberProfile) return [];
+    if (isMemberProfileLoading) return []; 
+    if (!memberProfile && !isMemberProfileLoading) return []; 
   
-    const userTeamIdsSet = new Set(memberProfile.teams || []);
+    const userTeamIdsSet = new Set(memberProfile?.teams || []);
   
     let preFiltered = unrolledAppointments;
   
-    // 1. Filter by team
     if (teamFilter === 'myTeams') {
       preFiltered = unrolledAppointments.filter((app) => {
         if (app.visibility.type === 'all') return true;
-        // Check if there is any intersection between the appointment's teams and the user's teams
         return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
       });
     } else if (teamFilter !== 'all') {
       preFiltered = unrolledAppointments.filter(
-        (app) =>
-          // Include if the appointment is for everyone or for the specific selected team
-          app.visibility.type === 'all' ||
-          app.visibility.teamIds.includes(teamFilter)
+        (app) => app.visibility.teamIds.includes(teamFilter)
       );
     }
   
-    // 2. Filter by type
     const finalFiltered = preFiltered.filter(
       (app) => typeFilter === 'all' || app.appointmentTypeId === typeFilter
     );
   
-    // 3. Sort by start date
     return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
+  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile, isMemberProfileLoading]);
 
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
@@ -884,7 +877,6 @@ function AdminTerminePageContent() {
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData,
-        createdBy: user.uid, // Set current user as creator of the new series
         title: finalTitle || 'Termin',
         locationId:
           pendingUpdateData.locationId ?? originalAppointmentData.locationId,
@@ -899,7 +891,7 @@ function AdminTerminePageContent() {
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-        createdAt: serverTimestamp(),
+        createdAt: originalAppointmentData.createdAt,
         lastUpdated: serverTimestamp(),
       };
 
@@ -1231,13 +1223,16 @@ function AdminTerminePageContent() {
     isMemberProfileLoading;
 
   const customSort = (a: Group, b: Group) => {
-    const regex = /^(U)(\d+)/i;
+    const regex = /^(U|u)(\d+)/;
     const matchA = a.name.match(regex);
     const matchB = b.name.match(regex);
-
+  
     if (matchA && matchB) {
       return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
     }
+    // Fallback for names that don't match the pattern
+    if (matchA) return -1;
+    if (matchB) return 1;
     return a.name.localeCompare(b.name);
   };
   const sortedTeamsForFilter = useMemo(() => {
