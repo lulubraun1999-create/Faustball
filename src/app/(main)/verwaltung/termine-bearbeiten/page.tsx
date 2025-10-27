@@ -823,84 +823,90 @@ function AdminTerminePageContent() {
 
   async function handleSaveForFuture() {
     if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user) return;
-  
+    
     setIsSubmitting(true);
+    
     try {
-      const originalAppointmentRef = doc(firestore, 'appointments', selectedInstanceToEdit.originalId);
-      const originalAppointmentSnap = await getDoc(originalAppointmentRef);
-  
-      if (!originalAppointmentSnap.exists()) throw new Error('Original-Terminserie nicht gefunden');
-  
-      const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
-      const dayBefore = addDays(instanceDate, -1);
-  
-      // Step 1: Create the new series
-      const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
-  
-      const typeName = typesMap.get(originalAppointmentData.appointmentTypeId);
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
-      const finalTitle = pendingUpdateData.title !== originalDisplayTitle
-        ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
-        : originalAppointmentData.title;
-  
-      const newAppointmentData: Omit<Appointment, 'id'> = {
-        ...originalAppointmentData,
-        title: finalTitle || 'Termin',
-        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description: pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-        createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
-      };
-      
-      const newDocRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
-      
-      // Step 2: Update the old series
-      const batch = writeBatch(firestore);
-      const originalStartDate = originalAppointmentData.startDate.toDate();
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(dayBefore) });
-      } else {
-        batch.delete(originalAppointmentRef);
-      }
-  
-      // Step 3: Delete old exceptions
-      const exceptionsQuery = query(
-        collection(firestore, 'appointmentExceptions'),
-        where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
-        where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)))
-      );
-      const exceptionsSnap = await getDocs(exceptionsQuery);
-      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
-  
-      await batch.commit();
-      
-      toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
-  
+        const originalAppointmentRef = doc(firestore, 'appointments', selectedInstanceToEdit.originalId);
+        const originalAppointmentSnap = await getDoc(originalAppointmentRef);
+        
+        if (!originalAppointmentSnap.exists()) throw new Error('Original-Terminserie nicht gefunden');
+        
+        const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
+        const instanceDate = new Date(pendingUpdateData.originalDateISO);
+        const dayBefore = addDays(instanceDate, -1);
+        
+        // Step 1: Create the new series data object
+        const newStartDate = new Date(pendingUpdateData.startDate!);
+        const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
+        
+        const typeName = typesMap.get(originalAppointmentData.appointmentTypeId);
+        const isSonstiges = typeName === 'Sonstiges';
+        const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
+        const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
+        
+        const finalTitle = pendingUpdateData.title !== originalDisplayTitle
+            ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
+            : originalAppointmentData.title;
+            
+        const newAppointmentData: Omit<Appointment, 'id'> = {
+            ...originalAppointmentData,
+            title: finalTitle || 'Termin',
+            locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
+            description: pendingUpdateData.description ?? originalAppointmentData.description,
+            meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
+            meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+            isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+            startDate: Timestamp.fromDate(newStartDate),
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
+            recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+            // IMPORTANT: Set createdBy to current user and createdAt to now for the new series
+            createdBy: user.uid,
+            createdAt: serverTimestamp(),
+            lastUpdated: serverTimestamp(),
+        };
+        
+        // --- Execute operations separately instead of a single batch ---
+
+        // 1. Create the new appointment series
+        await addDoc(collection(firestore, 'appointments'), newAppointmentData);
+        
+        // 2. Update the old appointment series
+        const originalStartDate = originalAppointmentData.startDate.toDate();
+        if (dayBefore >= originalStartDate) {
+            await updateDoc(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(dayBefore) });
+        } else {
+            await deleteDoc(originalAppointmentRef);
+        }
+
+        // 3. Delete old exceptions in a new batch
+        const exceptionsBatch = writeBatch(firestore);
+        const exceptionsQuery = query(
+            collection(firestore, 'appointmentExceptions'),
+            where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
+            where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)))
+        );
+        const exceptionsSnap = await getDocs(exceptionsQuery);
+        exceptionsSnap.forEach((doc) => exceptionsBatch.delete(doc.ref));
+        await exceptionsBatch.commit();
+            
+        toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+
     } catch (error: any) {
-      console.error("Error splitting appointment series:", error);
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: 'appointments',
-          operation: 'batch write (update/create/delete)',
-        })
-      );
+        console.error("Error splitting appointment series:", error);
+        errorEmitter.emit(
+            'permission-error',
+            new FirestorePermissionError({
+                path: 'appointments',
+                operation: 'batch write (update/create/delete)',
+            })
+        );
     } finally {
-      setIsSubmitting(false);
-      resetSingleInstanceDialogs();
+        setIsSubmitting(false);
+        resetSingleInstanceDialogs();
     }
-  }
+}
+
 
   const handleCancelSingleInstance = async (
     appointment: UnrolledAppointment
