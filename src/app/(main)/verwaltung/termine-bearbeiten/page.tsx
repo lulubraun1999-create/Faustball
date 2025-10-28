@@ -23,9 +23,9 @@ import {
   serverTimestamp,
   query,
   where,
-  writeBatch,
-  getDocs,
-  getDoc
+  writeBatch, // writeBatch importieren
+  getDocs, // getDocs importieren
+  getDoc // getDoc importieren
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import {
@@ -92,6 +92,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, ListTodo, Loader2, Plus, Filter, MapPin, CalendarPlus, CalendarX, X, RefreshCw } from 'lucide-react';
 import type { Appointment, AppointmentType, Location, Group, AppointmentException, MemberProfile } from '@/lib/types';
+// *** NEUE IMPORTE für Wiederholungen ***
 import { format, formatISO, isValid as isDateValid, addDays, addWeeks, addMonths, differenceInMilliseconds, set, isEqual, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -212,7 +213,8 @@ function AdminTerminePageContent() {
   );
   const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
-  const getUserTeamIds = () => { // Hilfsfunktion
+  // Hilfsfunktion, um die Teams des Benutzers abzurufen (wird in 'filteredAppointments' verwendet)
+  const getUserTeamIds = () => {
     return memberProfile?.teams || [];
   };
 
@@ -382,6 +384,7 @@ function AdminTerminePageContent() {
 
 
   const filteredAppointments = useMemo(() => {
+      // *** KORRIGIERTE FILTERLOGIK ***
       const userTeamIdsSet = new Set(userTeamIds); // Verwende userTeamIds vom Hook
 
       let preFiltered = unrolledAppointments;
@@ -397,6 +400,7 @@ function AdminTerminePageContent() {
               return app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter);
           });
       }
+      // 'all' -> keine Filterung
 
       // 2. Typ-Filter anwenden
       const finalFiltered = preFiltered.filter(app => {
@@ -534,6 +538,7 @@ function AdminTerminePageContent() {
       if (pendingUpdateData.description !== (selectedInstanceToEdit.description ?? '')) modifiedData.description = pendingUpdateData.description || undefined;
       if (pendingUpdateData.meetingPoint !== (selectedInstanceToEdit.meetingPoint ?? '')) modifiedData.meetingPoint = pendingUpdateData.meetingPoint || undefined;
       if (pendingUpdateData.meetingTime !== (selectedInstanceToEdit.meetingTime ?? '')) modifiedData.meetingTime = pendingUpdateData.meetingTime || undefined;
+      if (pendingUpdateData.isAllDay !== selectedInstanceToEdit.isAllDay) modifiedData.isAllDay = pendingUpdateData.isAllDay;
 
       if (Object.keys(modifiedData).length === 0) {
           toast({ title: 'Keine Änderungen', description: 'Es wurden keine Änderungen vorgenommen.' });
@@ -723,70 +728,113 @@ function AdminTerminePageContent() {
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
     // Wenn es keine 'originalId' hat ODER virtualId == originalId, ist es ein Einmaltermin
-    // ABER: Wir wollen jetzt *immer* den Instanz-Dialog öffnen, um "Nur diesen" zu bearbeiten
-    
-    // --- IMMER DEN INSTANZ-DIALOG ÖFFNEN ---
-    setSelectedInstanceToEdit(appointment);
-    
-    const formatTimestampForInput = (ts: Timestamp | undefined, type: 'datetime' | 'date' = 'datetime') => { if (!ts) return ''; try { const date = ts.toDate(); if (type === 'date') return formatISO(date, { representation: 'date' }); return formatISO(date).slice(0, 16); } catch (e) { return ''; } };
-    const startDateString = formatTimestampForInput(appointment.startDate, appointment.isAllDay ? 'date' : 'datetime');
-    const endDateString = formatTimestampForInput(appointment.endDate, appointment.isAllDay ? 'date' : 'datetime');
-    const originalDateISOString = (appointment.originalDateISO || startOfDay(appointment.startDate.toDate()).toISOString());
+    // ODER wenn der Termin bereits eine Ausnahme ist (geändert wurde), bearbeite die Ausnahme
+    if (!appointment.originalId || appointment.virtualId === appointment.originalId || appointment.isException) {
+       // --- Logik zum Öffnen des Instanz-Dialogs ---
+       setSelectedInstanceToEdit(appointment);
+       
+       const formatTimestampForInput = (ts: Timestamp | undefined, type: 'datetime' | 'date' = 'datetime') => { if (!ts) return ''; try { const date = ts.toDate(); if (type === 'date') return formatISO(date, { representation: 'date' }); return formatISO(date).slice(0, 16); } catch (e) { return ''; } };
+       const startDateString = formatTimestampForInput(appointment.startDate, appointment.isAllDay ? 'date' : 'datetime');
+       const endDateString = formatTimestampForInput(appointment.endDate, appointment.isAllDay ? 'date' : 'datetime');
+       const originalDateISOString = (appointment.originalDateISO || startOfDay(appointment.startDate.toDate()).toISOString());
 
-    const typeName = typesMap.get(appointment.appointmentTypeId);
-    const isSonstiges = typeName === 'Sonstiges';
-    const titleIsDefault = !isSonstiges && appointment.title === typeName;
-    
-    instanceForm.reset({
-        originalDateISO: originalDateISOString,
-        startDate: startDateString,
-        endDate: endDateString,
-        isAllDay: appointment.isAllDay ?? false,
-        title: titleIsDefault ? '' : appointment.title,
-        locationId: appointment.locationId ?? '',
-        description: appointment.description ?? '',
-        meetingPoint: appointment.meetingPoint ?? '',
-        meetingTime: appointment.meetingTime ?? '',
-    });
-    setIsInstanceDialogOpen(true);
-  };
+       const typeName = typesMap.get(appointment.appointmentTypeId);
+       const isSonstiges = typeName === 'Sonstiges';
+       const titleIsDefault = !isSonstiges && appointment.title === typeName;
+       
+       instanceForm.reset({
+           originalDateISO: originalDateISOString,
+           startDate: startDateString,
+           endDate: endDateString,
+           isAllDay: appointment.isAllDay ?? false,
+           title: titleIsDefault ? '' : appointment.title,
+           locationId: appointment.locationId ?? '',
+           description: appointment.description ?? '',
+           meetingPoint: appointment.meetingPoint ?? '',
+           meetingTime: appointment.meetingTime ?? '',
+       });
+       setIsInstanceDialogOpen(true);
 
-  // NEUE Funktion, um die *Serie* zu bearbeiten
-  const handleEditSeries = (appointment: UnrolledAppointment) => {
-     const originalAppointment = appointments?.find(app => app.id === appointment.originalId);
-     if (!originalAppointment) return;
-     setSelectedAppointment(originalAppointment);
+    } else {
+       // --- Logik zum Öffnen des Serien-Dialogs ---
+       const originalAppointment = appointments?.find(app => app.id === appointment.originalId);
+       if (!originalAppointment) return;
+       setSelectedAppointment(originalAppointment);
 
-     const formatTimestampForInput = (ts: Timestamp | undefined, type: 'datetime' | 'date' = 'datetime') => { if (!ts) return ''; try { const date = ts.toDate(); if (type === 'date') return formatISO(date, { representation: 'date' }); return formatISO(date).slice(0, 16); } catch (e) { return ''; } };
-     const startDateString = formatTimestampForInput(originalAppointment.startDate, originalAppointment.isAllDay ? 'date' : 'datetime');
-     const endDateString = formatTimestampForInput(originalAppointment.endDate, originalAppointment.isAllDay ? 'date' : 'datetime');
-     const rsvpDeadlineString = formatTimestampForInput(originalAppointment.rsvpDeadline, originalAppointment.isAllDay ? 'date' : 'datetime');
-     const recurrenceEndDateString = formatTimestampForInput(originalAppointment.recurrenceEndDate, 'date');
-     const typeName = typesMap.get(originalAppointment.appointmentTypeId);
-     const isSonstiges = typeName === 'Sonstiges';
-     const titleIsDefault = !isSonstiges && originalAppointment.title === typeName;
-     
-     appointmentForm.reset({
-         title: titleIsDefault ? '' : originalAppointment.title,
-         appointmentTypeId: originalAppointment.appointmentTypeId,
-         startDate: startDateString, endDate: endDateString,
-         isAllDay: originalAppointment.isAllDay ?? false,
-         recurrence: originalAppointment.recurrence ?? 'none',
-         recurrenceEndDate: recurrenceEndDateString,
-         visibilityType: originalAppointment.visibility.type,
-         visibleTeamIds: originalAppointment.visibility.teamIds,
-         rsvpDeadline: rsvpDeadlineString, locationId: originalAppointment.locationId ?? '',
-         meetingPoint: originalAppointment.meetingPoint ?? '', meetingTime: originalAppointment.meetingTime ?? '',
-         description: originalAppointment.description ?? '',
-      });
-     setIsAppointmentDialogOpen(true);
+       const formatTimestampForInput = (ts: Timestamp | undefined, type: 'datetime' | 'date' = 'datetime') => { if (!ts) return ''; try { const date = ts.toDate(); if (type === 'date') return formatISO(date, { representation: 'date' }); return formatISO(date).slice(0, 16); } catch (e) { return ''; } };
+       const startDateString = formatTimestampForInput(originalAppointment.startDate, originalAppointment.isAllDay ? 'date' : 'datetime');
+       const endDateString = formatTimestampForInput(originalAppointment.endDate, originalAppointment.isAllDay ? 'date' : 'datetime');
+       const rsvpDeadlineString = formatTimestampForInput(originalAppointment.rsvpDeadline, originalAppointment.isAllDay ? 'date' : 'datetime');
+       const recurrenceEndDateString = formatTimestampForInput(originalAppointment.recurrenceEndDate, 'date');
+       const typeName = typesMap.get(originalAppointment.appointmentTypeId);
+       const isSonstiges = typeName === 'Sonstiges';
+       const titleIsDefault = !isSonstiges && originalAppointment.title === typeName;
+       
+       appointmentForm.reset({
+           title: titleIsDefault ? '' : originalAppointment.title,
+           appointmentTypeId: originalAppointment.appointmentTypeId,
+           startDate: startDateString, endDate: endDateString,
+           isAllDay: originalAppointment.isAllDay ?? false,
+           recurrence: originalAppointment.recurrence ?? 'none',
+           recurrenceEndDate: recurrenceEndDateString,
+           visibilityType: originalAppointment.visibility.type,
+           visibleTeamIds: originalAppointment.visibility.teamIds,
+           rsvpDeadline: rsvpDeadlineString, locationId: originalAppointment.locationId ?? '',
+           meetingPoint: originalAppointment.meetingPoint ?? '', meetingTime: originalAppointment.meetingTime ?? '',
+           description: originalAppointment.description ?? '',
+        });
+       setIsAppointmentDialogOpen(true);
+    }
   };
   
-  const resetAppointmentForm = () => { /* ... */ };
-  const onSubmitAppointmentType = async (data: AppointmentTypeFormValues) => { /* ... */ };
-  const onDeleteAppointmentType = async (id: string) => { /* ... */ };
-  const onSubmitLocation = async (data: LocationFormValues) => { /* ... */ };
-  const onDeleteLocation = async (id: string) => { /* ... */ };
+  const resetAppointmentForm = () => {
+       appointmentForm.reset({
+          title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, recurrence: 'none',
+          recurrenceEndDate: '',
+          visibilityType: 'all', visibleTeamIds: [], rsvpDeadline: '', locationId: '',
+          meetingPoint: '', meetingTime: '', description: '',
+        });
+       setSelectedAppointment(null);
+   };
+
+  const onSubmitAppointmentType = async (data: AppointmentTypeFormValues) => {
+      if(!firestore) return;
+      const typeColRef = collection(firestore, 'appointmentTypes');
+      try {
+          const existingTypes = appointmentTypes?.map((t: AppointmentType) => t.name.toLowerCase()) || [];
+          if (existingTypes.includes(data.name.toLowerCase())) {
+              toast({ variant: 'destructive', title: 'Fehler', description: 'Dieser Typ existiert bereits.' });
+              return;
+          }
+          await addDoc(typeColRef, data);
+          toast({ title: 'Typ hinzugefügt' });
+          typeForm.reset();
+          // setIsTypeDialogOpen(false); // Nicht automatisch schließen
+      } catch (error) { /* Fehlerbehandlung */ }
+  };
+  const onDeleteAppointmentType = async (id: string) => {
+    if(!firestore) return;
+    const docRef = doc(firestore, 'appointmentTypes', id);
+    try { await deleteDoc(docRef); toast({ title: 'Typ gelöscht' }); } 
+    catch(e) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' })); }
+  };
+
+  const onSubmitLocation = async (data: LocationFormValues) => {
+      if(!firestore) return;
+      const locationColRef = collection(firestore, 'locations');
+      try {
+          await addDoc(locationColRef, data);
+          toast({ title: 'Ort hinzugefügt' });
+          locationForm.reset();
+          // setIsLocationDialogOpen(false); // Nicht automatisch schließen
+      } catch (error) { /* Fehlerbehandlung */ }
+  };
+  const onDeleteLocation = async (id: string) => {
+    if(!firestore) return;
+    const docRef = doc(firestore, 'locations', id);
+    try { await deleteDoc(docRef); toast({ title: 'Ort gelöscht' }); }
+    catch(e) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' })); }
+  };
 
   const isLoading = isLoadingAppointments || isLoadingTypes || isLoadingLocations || isLoadingGroups || isLoadingExceptions || isUserLoadingAuth || isLoadingMember;
 
