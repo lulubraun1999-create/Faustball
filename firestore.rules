@@ -42,7 +42,7 @@ service cloud.firestore {
       }
 
       allow get, update, delete: if isOwner(userId);
-      allow create: if isOwner(userId) && request.auth.uid == userId;
+      allow create: if isOwner(userId);
       allow list: if false;
     }
 
@@ -128,7 +128,8 @@ service cloud.firestore {
      * @deny (get, list, create, update, delete) - Always. Only admins can manage treasury data via backend functions.
      */
     match /treasury/{transactionId} {
-      allow get, list, create, update, delete: if false;
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
 
     /**
@@ -137,7 +138,8 @@ service cloud.firestore {
      * @deny (get, list, create, update, delete) - Always. Only admins can manage penalty rules via backend functions.
      */
     match /penalties/{penaltyId} {
-      allow get, list, create, update, delete: if false;
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
 
 
