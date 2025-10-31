@@ -2,86 +2,144 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isUser() {
-      return request.auth != null;
+    // --- Helper Functions ---
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return request.auth.token.admin == true; }
+    function isOwner(userId) { return request.auth.uid == userId; }
+    function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
+    function getUserTeams() {
+      let memberData = getMemberDoc(request.auth.uid).data;
+      return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
-
-    function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
+    
+    // --- /users/{userId} ---
     match /users/{userId} {
-      allow get, delete: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-    }
-
-    match /members/{memberId} {
-      allow get: if isUser();
-      allow list: if isAdmin();
-      allow create: if isUser();
-      allow update: if isOwner(memberId) || isAdmin();
-      allow delete: if isOwner(memberId) || isAdmin();
-    }
-
-    match /groups/{groupId} {
-      allow read: if isUser();
-      allow write: if isAdmin();
-
-      match /members/{memberId} {
-        allow read: if isUser();
-        allow write: if isAdmin();
+      function isCreatingOwnDocument() { 
+        return isOwner(userId) && 
+               request.resource.data.id == userId && 
+               (request.resource.data.role == 'user' || !('role' in request.resource.data));
       }
+      function isUpdatingOwnDocument() { 
+        return isOwner(userId) && !('role' in request.resource.data); 
+      }
+      
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isCreatingOwnDocument();
+      allow update: if isUpdatingOwnDocument() || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
-    match /appointments/{appointmentId} {
-        allow read: if isUser();
+    // --- /members/{memberId} ---
+    match /members/{memberId} {
+        function isCreatingOwnProfile() { 
+          return isOwner(memberId) && request.resource.data.userId == memberId; 
+        }
+        function isUpdatingOwnProfile() {
+          return isOwner(resource.data.userId);
+        }
+        
+        allow get: if isOwner(memberId) || isAdmin();
+        allow list: if isAdmin();
+        allow create: if isCreatingOwnProfile();
+        allow update: if isUpdatingOwnProfile() || isAdmin();
+        allow delete: if isUpdatingOwnProfile() || isAdmin();
+    }
+
+    // --- /groups/{groupId} ---
+    match /groups/{groupId} {
+        allow read: if isSignedIn(); // Allow any signed-in user to read groups
+        allow write: if isAdmin();
+    }
+
+    // --- /groups/{groupId}/members/{memberId} ---
+    match /groups/{groupId}/members/{memberId} {
+        allow read: if isSignedIn();
         allow write: if isAdmin();
     }
     
-    match /appointmentExceptions/{exceptionId} {
-        allow read: if isUser();
-        allow write: if isAdmin();
-    }
-    
-    match /appointmentResponses/{responseId} {
-        allow read: if isUser();
-        allow create, update: if isUser();
-        allow delete: if isUser();
-    }
-
+    // --- /appointmentTypes & /locations ---
     match /appointmentTypes/{typeId} {
-        allow read: if isUser();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /locations/{locationId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    // --- /appointments/{appointmentId} ---
+    match /appointments/{appointmentId} {
+        function isMemberOfVisibleTeamForAppointment() {
+          let memberTeams = getUserTeams();
+          return memberTeams != null &&
+                 resource.data.visibility.type == 'specificTeams' &&
+                 resource.data.visibility.teamIds.hasAny(memberTeams);
+        }
+
+        allow read: if isSignedIn() && (
+                      isAdmin() ||
+                      resource.data.visibility.type == 'all' ||
+                      isMemberOfVisibleTeamForAppointment()
+                    );
         allow write: if isAdmin();
     }
     
-    match /locations/{locationId} {
-        allow read: if isUser();
+    // --- /appointmentResponses/{responseId} ---
+    match /appointmentResponses/{responseId} {
+        function isResponseOwner() { return request.resource.data.userId == request.auth.uid; }
+        function isExistingResponseOwner() { return resource.data.userId == request.auth.uid; }
+
+        allow get: if isAdmin() || isExistingResponseOwner();
+        allow list: if isSignedIn();
+        allow create: if isResponseOwner();
+        allow update, delete: if isExistingResponseOwner();
+    }
+
+    // --- /appointmentExceptions/{exceptionId} ---
+    match /appointmentExceptions/{exceptionId} {
+        allow read: if isSignedIn();
         allow write: if isAdmin();
     }
 
+    // --- /polls/{pollId} ---
     match /polls/{pollId} {
-      allow read: if isUser();
-      allow write: if isAdmin();
-      allow update(path, resource): if isUser() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
+        function isMemberOfVisibleTeam() {
+            let userTeams = getUserTeams();
+            return resource.data.visibility.type == 'specificTeams' &&
+                   userTeams.hasAny(resource.data.visibility.teamIds);
+        }
+
+        allow list: if isSignedIn(); // THIS IS THE KEY FIX
+        allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeam());
+        
+        allow create, delete: if isAdmin();
+        
+        // Allow users to update only the 'votes' field if they can see the poll
+        allow update: if isSignedIn() && 
+                      (isAdmin() || (resource.data.visibility.type == 'all' || isMemberOfVisibleTeam())) &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
     }
 
+    // --- /news/{newsId} ---
     match /news/{newsId} {
-      allow read: if isUser();
-      allow write: if isAdmin();
+        allow read: if true; // News are public
+        allow write: if isAdmin();
     }
 
+    // --- /treasury/{transactionId} & /penalties/{penaltyId} ---
+    function isMemberOfDocTeam() {
+      let userTeams = getUserTeams();
+      return userTeams.hasAny([resource.data.teamId]);
+    }
+    
     match /treasury/{transactionId} {
-      allow read, write: if isAdmin();
+        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
+        allow write: if isAdmin();
     }
-
     match /penalties/{penaltyId} {
-      allow read, write: if isAdmin();
+       allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeam());
+       allow write: if isAdmin();
     }
   }
 }
