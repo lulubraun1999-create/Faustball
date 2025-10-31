@@ -8,19 +8,18 @@ service cloud.firestore {
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
     function getUserTeams() {
-      // Use exists() for safe checking, returns false if the doc doesn't exist
       if (exists(/databases/$(database)/documents/members/$(request.auth.uid))) {
         let memberData = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
-        return memberData.teams; // Assumes 'teams' field is an array
+        return memberData.teams; 
       }
-      return []; // Return an empty list if the member doc doesn't exist
+      return []; 
     }
 
     // --- User and Member Data ---
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId); // Jeder kann sein eigenes Benutzerdokument erstellen
+      allow create: if isOwner(userId);
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isOwner(userId) || isAdmin();
     }
@@ -59,11 +58,8 @@ service cloud.firestore {
     }
 
     match /polls/{pollId} {
-      // Any authenticated user can list polls. The client-side query filters them.
-      allow read: if isSignedIn(); 
-      // Voting is an update operation, allowed for signed-in users.
+      allow read: if isSignedIn();
       allow update: if isSignedIn(); 
-      // Only admins can create or delete polls.
       allow create, delete: if isAdmin();
     }
 
@@ -80,8 +76,6 @@ service cloud.firestore {
     // --- Conditional Reads & Writes ---
 
     match /appointments/{appointmentId} {
-        // A user can read an appointment if it's visible to 'all' OR
-        // if the user is a member of any of the teams the appointment is visible to.
         function isVisible() {
           let userTeams = getUserTeams();
           return resource.data.visibility.type == 'all' || 
@@ -92,16 +86,12 @@ service cloud.firestore {
     }
     
     match /appointmentResponses/{responseId} {
-        // A user can create, read, update, or delete their own response.
-        // Admins can do anything.
         allow read, update, delete: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
         allow create: if isSignedIn() && (isAdmin() || request.resource.data.userId == request.auth.uid);
-        // Admins can list all responses for an appointment.
         allow list: if isAdmin();
     }
 
     match /treasury/{transactionId} {
-        // A user can read a transaction if they are a member of the associated team.
         function isMemberOfTeam() {
           let userTeams = getUserTeams();
           return userTeams.hasAny([resource.data.teamId]);
