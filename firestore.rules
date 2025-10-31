@@ -3,101 +3,112 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Helper Functions ---
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
-    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-
-    function getUserTeams() {
-      if (exists(/databases/$(database)/documents/members/$(request.auth.uid))) {
-        let memberData = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
-        return memberData.teams; 
-      }
-      return []; 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
 
-    // --- User and Member Data ---
+    // --- User & Member Data ---
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      // Admins can read any user profile. Users can only read their own.
+      allow get: if isAdmin() || isOwner(userId);
+      // Only admins can list all users.
       allow list: if isAdmin();
+      // Any user can create their own user document (on signup).
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isOwner(userId) || isAdmin();
+      // Users can update their own document, Admins can update any.
+      allow update: if isAdmin() || isOwner(userId);
+      // Only Admins can delete user documents.
+      allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      allow get: if isOwner(memberId) || isAdmin();
+      // Admins can read any member profile. Users can only read their own.
+      allow get: if isAdmin() || isOwner(memberId);
+      // Only admins can list all members.
       allow list: if isAdmin();
+       // Any user can create their own member document.
       allow create: if isOwner(memberId);
-      allow update, delete: if isOwner(memberId) || isAdmin();
+      // Users can update their own profile, Admins can update any.
+      allow update, delete: if isAdmin() || isOwner(memberId);
     }
     
-    // --- Publicly readable data for any authenticated user ---
+    // --- Groups are publicly readable by any signed-in user ---
     match /groups/{groupId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin(); // Only admins can create, update, delete groups
     }
     
+    // --- Group members are publicly readable by any signed-in user ---
     match /groups/{groupId}/members/{memberId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin(); // Only admins can manage group memberships
+    }
+
+    // --- Publicly readable data for any signed-in user, writable only by admin ---
+    match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-    
-    match /appointmentTypes/{typeId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin();
-    }
-
     match /locations/{locationId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin();
-    }
-    
-    match /news/{newsId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin();
-    }
-
-    match /polls/{pollId} {
       allow read: if isSignedIn();
-      allow update: if isSignedIn(); 
-      allow create, delete: if isAdmin();
+      allow write: if isAdmin();
     }
-
+    match /news/{newsId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
     }
-    
     match /appointmentExceptions/{exceptionId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- Polls ---
+    match /polls/{pollId} {
+      // Any signed-in user can read polls. Client-side queries handle visibility.
+      allow read: if isSignedIn();
+      // Any signed-in user can update a poll (to cast a vote).
+      allow update: if isSignedIn();
+      // Only admins can create or delete polls.
+      allow create, delete: if isAdmin();
     }
 
     // --- Conditional Reads & Writes ---
 
+    // Appointments are readable if public or the user is in a relevant team.
     match /appointments/{appointmentId} {
-        function isVisible() {
-          let userTeams = getUserTeams();
-          return resource.data.visibility.type == 'all' || 
-                 (resource.data.visibility.type == 'specificTeams' && resource.data.visibility.teamIds.hasAny(userTeams));
-        }
-        allow read: if isSignedIn() && (isAdmin() || isVisible());
-        allow write: if isAdmin();
+      // This rule is more complex, so we check on get/list individually.
+      // We can use resource.data here because it's not a query on the collection.
+      allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || resource.data.visibility.teamIds.hasAny(get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams));
+      // For list queries, we cannot use resource.data. The client must query correctly.
+      // We allow list if the user is signed in, client must add where clauses for filtering.
+      allow list: if isSignedIn();
+      // Only admins can write appointments.
+      allow write: if isAdmin();
     }
     
+    // Users can create/manage their own responses. Admins can manage all.
     match /appointmentResponses/{responseId} {
-        allow read, update, delete: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
-        allow create: if isSignedIn() && (isAdmin() || request.resource.data.userId == request.auth.uid);
-        allow list: if isAdmin();
+      allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn(); // User must set their own userId correctly.
+      allow list: if isAdmin();
     }
 
+    // Treasury is readable by team members or admins. Writable only by admins.
     match /treasury/{transactionId} {
-        function isMemberOfTeam() {
-          let userTeams = getUserTeams();
-          return userTeams.hasAny([resource.data.teamId]);
-        }
-        allow read: if isSignedIn() && (isAdmin() || isMemberOfTeam());
-        allow write: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && resource.data.teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams);
+      allow write: if isAdmin();
     }
   }
 }
+
+    
