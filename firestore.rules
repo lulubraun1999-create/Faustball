@@ -134,24 +134,19 @@ service cloud.firestore {
             return userTeams != null &&
                 'visibility' in resource.data && resource.data.visibility.type == 'specificTeams' &&
                 'teamIds' in resource.data.visibility &&
-                resource.data.visibility.teamIds.hasAny(userTeams);
+                userTeams.hasAny(resource.data.visibility.teamIds);
         }
 
         function isVoteChangeOnly() {
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
         
-        allow get: if isSignedIn() && (
+        allow get, list: if isSignedIn() && (
                     isAdmin() ||
                     (resource.data.visibility.type == 'all') ||
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        allow list: if isSignedIn() && (
-            (request.query.where.visibility.type == 'all' && request.query.where.endDate >= timestamp.now()) ||
-            (request.query.where.visibility.type == 'specificTeams' && request.query.where.endDate >= timestamp.now())
-        );
-
         allow create, delete: if isSignedIn() && isAdmin();
         
         allow update: if isSignedIn() &&
