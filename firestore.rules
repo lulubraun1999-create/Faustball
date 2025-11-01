@@ -137,34 +137,36 @@ service cloud.firestore {
 
     // --- /polls/{pollId} ---
     match /polls/{pollId} {
-        function isMemberOfVisibleTeamForPollResource() {
-          let memberTeams = getUserTeams();
-          return memberTeams != null &&
-                 resource.data != null &&
-                 resource.data.keys().hasAny(['visibility']) &&
-                 resource.data.visibility.type == 'specificTeams' &&
-                 resource.data.visibility.keys().hasAny(['teamIds']) &&
-                 resource.data.visibility.teamIds.hasAny(memberTeams);
+        function isMemberOfVisibleTeamForPoll() {
+            let memberTeams = getUserTeams();
+            return memberTeams != null &&
+                resource.data != null &&
+                'visibility' in resource.data && resource.data.visibility.type == 'specificTeams' &&
+                'teamIds' in resource.data.visibility &&
+                resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
-        // GET-Regel: Einzelne Dokumente lesen
-        allow get: if isSignedIn() && (
-                     isAdmin() ||
-                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') || 
-                     isMemberOfVisibleTeamForPollResource()
-                   );
-                   
-        // LIST-Regel
-        allow list: if isSignedIn();
+        function isVoteChangeOnly() {
+            return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
+        }
 
-        // WRITE-Regeln
-        allow create, delete: if isSignedIn() && isAdmin();
-        allow update: if isSignedIn() && (
-                      isAdmin() ||
-                      ( (resource.data != null &&
-                         (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource())) &&
-                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']) )
+        allow get: if isSignedIn() && (
+                    isAdmin() ||
+                    (resource.data.visibility.type == 'all') ||
+                    isMemberOfVisibleTeamForPoll()
                     );
+        
+        allow list: if isSignedIn() && 
+                    (request.query.get('where.visibility.type') == 'all' ||
+                     (request.query.get('where.visibility.type') == 'specificTeams' &&
+                      request.query.get('where.visibility.teamIds').hasAny(getUserTeams())));
+
+        allow create, delete: if isSignedIn() && isAdmin();
+        
+        allow update: if isSignedIn() &&
+                        (isAdmin() || 
+                         (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
+                        );
     }
 
     // --- /news/{newsId} ---
@@ -186,5 +188,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
