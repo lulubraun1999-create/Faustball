@@ -73,7 +73,8 @@ service cloud.firestore {
     
     // --- Polls ---
     match /polls/{pollId} {
-      allow read: if isSignedIn();
+      // allow read: if isSignedIn(); // OLD RULE
+      allow list, get: if isSignedIn(); // NEW RULE
       allow create, delete: if isAdmin();
       allow update: if isSignedIn(); 
     }
