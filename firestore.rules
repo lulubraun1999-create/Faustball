@@ -46,7 +46,7 @@ service cloud.firestore {
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
-        allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow get: if isSignedIn();
         allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
@@ -116,7 +116,6 @@ service cloud.firestore {
     // --- /appointmentExceptions/{exceptionId} ---
     match /appointmentExceptions/{exceptionId} {
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
-        function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
         
         function isMemberOfOriginalAppointmentTeamFromResource() {
            let originalAppointment = getOriginalAppointmentFromResource();
@@ -157,9 +156,16 @@ service cloud.firestore {
                     );
         
         allow list: if isSignedIn() && 
-                    (request.query.get('where.visibility.type') == 'all' ||
-                     (request.query.get('where.visibility.type') == 'specificTeams' &&
-                      request.query.get('where.visibility.teamIds').hasAny(getUserTeams())));
+                    (isAdmin() || 
+                     (request.query.get('where') != null && 
+                      request.query.where[0][0] == 'visibility.type' && 
+                      request.query.where[0][2] == 'all') ||
+                     (request.query.get('where') != null &&
+                      request.query.where[0][0] == 'visibility.type' && request.query.where[0][2] == 'specificTeams' &&
+                      request.query.where[1][0] == 'visibility.teamIds' && request.query.where[1][1] == 'array-contains-any' &&
+                      request.query.where[1][2].hasAny(getUserTeams())
+                     )
+                    );
 
         allow create, delete: if isSignedIn() && isAdmin();
         
@@ -188,3 +194,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
