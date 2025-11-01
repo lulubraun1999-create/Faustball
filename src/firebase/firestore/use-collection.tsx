@@ -37,16 +37,20 @@ export interface InternalQuery extends Query<DocumentData> {
   }
 }
 
+// Kleine Hilfs-Error-Map, um die Fehlermeldung sauber zu halten
+const memoErrors = {
+  notMemoized: (hookName: string, path: string) => 
+    `[Firebase-Hook-Fehler] in ${hookName}: Die übergebene Query/Referenz für den Pfad "${path}" wurde nicht korrekt mit 'useMemoFirebase' memoisert. Dies führt zu unnötigen re-renders und Datenabfragen.`,
+};
+
 /**
  * React hook to subscribe to a Firestore collection or query in real-time.
  * Handles nullable references/queries.
- * 
- *
+ * *
  * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
  * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
  * references
- *  
- * @template T Optional type for document data. Defaults to any.
+ * * @template T Optional type for document data. Defaults to any.
  * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} targetRefOrQuery -
  * The Firestore CollectionReference or Query. Waits if null/undefined.
  * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
@@ -72,43 +76,59 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
-    // Directly use memoizedTargetRefOrQuery as it's assumed to be the final query
-    const unsubscribe = onSnapshot(
-      memoizedTargetRefOrQuery,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const results: ResultItemType[] = [];
-        for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
+    // Initialisiere unsubscribe, damit es im return-Block verfügbar ist
+    let unsubscribe: (() => void) | undefined;
+
+    try {
+      unsubscribe = onSnapshot(
+        memoizedTargetRefOrQuery,
+        (snapshot: QuerySnapshot<DocumentData>) => {
+          const results: ResultItemType[] = [];
+          for (const doc of snapshot.docs) {
+            results.push({ ...(doc.data() as T), id: doc.id });
+          }
+          setData(results);
+          setError(null);
+          setIsLoading(false);
+        },
+        (error: FirestoreError) => {
+          // This logic extracts the path from either a ref or a query
+          const path: string =
+            memoizedTargetRefOrQuery.type === 'collection'
+              ? (memoizedTargetRefOrQuery as CollectionReference).path
+              : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+
+          const contextualError = new FirestorePermissionError({
+            operation: 'list',
+            path,
+          })
+
+          setError(contextualError)
+          setData(null)
+          setIsLoading(false)
+
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
         }
-        setData(results);
-        setError(null);
-        setIsLoading(false);
-      },
-      (error: FirestoreError) => {
-        // This logic extracts the path from either a ref or a query
-        const path: string =
-          memoizedTargetRefOrQuery.type === 'collection'
-            ? (memoizedTargetRefOrQuery as CollectionReference).path
-            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+      );
+    } catch (e: any) {
+      // Fange synchrone Fehler ab (z.B. wenn die Query ungültig ist)
+      setError(e);
+      setIsLoading(false);
+    }
 
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path,
-        })
 
-        setError(contextualError)
-        setData(null)
-        setIsLoading(false)
-
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
+    // *** KORREKTUR FÜR DEN ABSTURZ ***
+    // Wir prüfen, ob 'unsubscribe' eine Funktion ist, bevor wir sie aufrufen.
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
       }
-    );
-
-    return () => unsubscribe();
+    };
   }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+  
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
-    throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
+    throw new Error(memoErrors.notMemoized('useCollection', (memoizedTargetRefOrQuery as any)._query?.path?.toString() ?? (memoizdTargetRefOrQuery as any).path ?? 'unknown path'));
   }
   return { data, isLoading, error };
 }

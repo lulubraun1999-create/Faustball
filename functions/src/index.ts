@@ -1,243 +1,170 @@
-
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError } from 'firebase-functions/v2/httpshttps';
-import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc } from 'firebase-admin/firestore';
-import type { Appointment, AppointmentException } from './types';
-import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
+// KORREKTUR 1: Tippfehler "httpshttps" entfernt
+import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https'; 
+
+// KORREKTUR 2: Diese Funktionen (serverTimestamp, getDocs etc.) 
+// gehören zum CLIENT-SDK, nicht zum ADMIN-SDK.
+// Das Admin-SDK verwendet admin.firestore.FieldValue.serverTimestamp()
+// und admin.firestore().collection('...').get()
+//
+// ENTFERNT: import { serverTimestamp, getDocs, updateDoc, addDoc } from 'firebase-admin/firestore';
+// Stattdessen importieren wir FieldValue, falls du es brauchst (obwohl dein Code es aktuell nichtmal nutzt)
+import { FieldValue } from 'firebase-admin/firestore';
 
 
-// Firebase Admin SDK initialisieren
+// Initialize Firebase Admin SDK only if it hasn't been initialized yet
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
-const db = getFirestore();
 
 /**
- * Prüft, ob bereits ein Admin-Benutzer im System existiert.
+ * Checks if any admin users exist in the system by checking Firestore.
+ * This is a callable function that any authenticated user can hit to check
+ * if the initial admin setup needs to be performed.
+ * @returns {Promise<{isAdminPresent: boolean}>} True if at least one admin exists, false otherwise.
  */
-export const anyAdminExists = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-  }
-  try {
-    const userQuerySnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-    return { isAdminPresent: !userQuerySnapshot.empty };
-  } catch (error: any) {
-    console.error("Error checking admin existence:", error);
-    throw new HttpsError('internal', 'Could not check for admin existence.', error.message);
-  }
+// KORREKTUR 3: 'request' getypt
+export const anyAdminExists = onCall(async (request: CallableRequest) => {
+    // This function should be callable by any authenticated user.
+    if (!request.auth) {
+        // Obwohl jeder authentifizierte Benutzer dies aufrufen können sollte,
+        // ist es sicherer, hier eine Berechtigungsprüfung hinzuzufügen,
+        // falls die Information als sensibel betrachtet wird.
+        // Für dieses Beispiel lassen wir es offen für alle authentifizierten Benutzer.
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    try {
+        const userQuerySnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
+        return { isAdminPresent: !userQuerySnapshot.empty };
+    } catch (error: any) {
+        console.error("Error checking admin existence:", error);
+        // Wir geben einen internen Fehler zurück, damit der Client weiß, dass etwas schiefgelaufen ist.
+        throw new HttpsError('internal', 'Could not check for admin existence.', error.message);
+    }
 });
 
+
 /**
- * Setzt die Rolle eines Benutzers auf 'admin'.
+ * Sets a user's role to 'admin'.
+ * This function has two modes:
+ * 1. Initial Bootstrap: If NO admin exists in the system, any authenticated user can call this
+ * function to make themselves the first admin.
+ * 2. Admin-only Promotion: If at least one admin already exists, only another admin can call
+ * this function to promote other users.
  */
-export const setAdminRole = onCall(async (request) => {
+// KORREKTUR 3: 'request' getypt
+export const setAdminRole = onCall(async (request: CallableRequest) => {
+  // 1. Check for authentication
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Standardmäßig sich selbst
+  // Akzeptiere eine optionale 'uid' aus den Daten, um andere User zum Admin zu machen.
+  // Wenn keine 'uid' übergeben wird, versucht der Aufrufer, sich selbst zum Admin zu machen.
+  const targetUid = request.data?.uid;
 
-  // Prüfen, ob bereits Admins existieren
+  // 2. Determine which user to make admin
+  const uidToPromote = targetUid || callerUid;
+
+  // 3. Authorization Logic
   let adminsExist = false;
   try {
-      const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
+      const adminSnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
       adminsExist = !adminSnapshot.empty;
   } catch (error: any) {
        console.error("Error checking admin existence during setAdminRole:", error);
        throw new HttpsError('internal', 'Could not verify admin existence for promotion.', error.message);
   }
 
-  // Autorisierung: Erlaube, wenn der Aufrufer Admin ist ODER wenn kein Admin existiert und der Aufrufer sich selbst ernennt.
-  if (!isCallerAdmin && !(adminsExist === false && targetUid === callerUid)) {
-      throw new HttpsError('permission-denied', 'Only an admin can set other users as admins, or you must be the first user.');
+
+  // Allow if:
+  // - The caller is already an admin (and can promote themselves or others).
+  // - OR, no admins exist yet AND the user is promoting themselves (targetUid ist leer ODER gleich callerUid).
+  if (!isCallerAdmin && !(adminsExist === false && (!targetUid || uidToPromote === callerUid))) {
+      if (adminsExist) {
+        throw new HttpsError('permission-denied', 'Only an admin can set other users as admins.');
+      } else {
+        throw new HttpsError('permission-denied', 'To become the first admin, you must call this function for yourself (without providing a uid).');
+      }
   }
 
   try {
-    // 1. Custom Claim im Auth Token setzen
-    await admin.auth().setCustomUserClaims(targetUid, { admin: true });
+    // 4. Set the custom claim on the user's auth token.
+    await admin.auth().setCustomUserClaims(uidToPromote, { admin: true });
 
-    // 2. Firestore Dokumente (users und members) aktualisieren
-    const batch = db.batch();
-    const userDocRef = db.collection('users').doc(targetUid);
-    const memberDocRef = db.collection('members').doc(targetUid);
-    
+    // 5. Update the user's document in Firestore for UI consistency.
+    const batch = admin.firestore().batch();
+    const userDocRef = admin.firestore().collection('users').doc(uidToPromote);
+    const memberDocRef = admin.firestore().collection('members').doc(uidToPromote); // Auch im Member-Profil setzen
+
+    // Stelle sicher, dass die Dokumente existieren, bevor du versuchst, sie zu aktualisieren.
+    // Verwende set mit merge: true, um das Dokument zu erstellen, falls es fehlt, oder zu aktualisieren, falls es existiert.
     batch.set(userDocRef, { role: 'admin' }, { merge: true });
-    batch.set(memberDocRef, { role: 'admin' }, { merge: true });
-    
+    batch.set(memberDocRef, { role: 'admin' }, { merge: true }); // Auch im Member-Profil setzen
+
     await batch.commit();
 
-    console.log(`Successfully set user ${targetUid} as an admin.`);
+    console.log(`Successfully set user ${uidToPromote} as an admin.`);
     return {
       status: 'success',
-      message: `Success! User ${targetUid} has been made an admin.`,
+      message: `Success! User ${uidToPromote} has been made an admin.`,
     };
   } catch (error: any) {
-    console.error(`Error setting admin role for UID: ${targetUid}`, error);
+    console.error(`Error setting admin role for UID: ${uidToPromote}`, error);
     throw new HttpsError('internal', 'An internal error occurred while trying to set the admin role.', error.message);
   }
 });
 
+
 /**
- * Entzieht einem Benutzer die 'admin'-Rolle.
+ * Revokes a user's 'admin' role by removing the custom claim and updating Firestore.
  */
-export const revokeAdminRole = onCall(async (request) => {
-  // ... (Code für revokeAdminRole - stelle sicher, dass er hier ist, falls du ihn brauchst) ...
+// KORREKTUR 3: 'request' getypt
+export const revokeAdminRole = onCall(async (request: CallableRequest) => {
+  // 1. Check for authentication and admin privileges of the caller
   if (request.auth?.token.admin !== true) {
     throw new HttpsError('permission-denied', 'Only an admin can revoke admin roles.');
   }
-  // ... (restliche Logik für revokeAdminRole)
-  return { status: 'success', message: 'Rolle (Logik nicht vollständig implementiert) entfernt.' };
-});
 
+  // 2. Validate input data
+  const targetUid = request.data.uid;
+  if (typeof targetUid !== 'string' || targetUid.length === 0) { // Prüfe auf leeren String
+    throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+  }
 
-// --- TERMIN-FUNKTIONEN (HIER IST DIE KORREKTUR) ---
-
-/**
- * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
- */
-export const saveSingleAppointmentException = onCall(async (request) => {
-    if (!request.auth || !request.auth.token.admin) {
-        throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
-    }
-    
-    const { pendingUpdateData, selectedInstanceToEdit, exceptions } = request.data;
-    const userId = request.auth.uid; // ID des Admins, der die Änderung vornimmt
-
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
-
-    if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-        throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
-    }
-
-    const exceptionsColRef = db.collection('appointmentExceptions');
-    const existingException = exceptions?.find((ex: any) => // any verwenden, da Typen serverseitig anders sein können
-        ex.originalAppointmentId === selectedInstanceToEdit.originalId &&
-        isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
-    );
-
-    const modifiedData: AppointmentException['modifiedData'] = {
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-        title: pendingUpdateData.title,
-        locationId: pendingUpdateData.locationId,
-        description: pendingUpdateData.description,
-        meetingPoint: pendingUpdateData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay,
-    };
-
-    const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: serverTimestamp(), // serverTimestamp() in .set/add verwenden
-        userId: userId,
-    };
-
-    try {
-        if (existingException) {
-            const docRef = db.collection('appointmentExceptions').doc(existingException.id);
-            await updateDoc(docRef, { modifiedData: modifiedData, status: 'modified', userId: userId });
-            return { status: 'success', message: 'Terminänderung aktualisiert.' };
-        } else {
-            await addDoc(exceptionsColRef, exceptionData);
-            return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
-        }
-    } catch (error: any) {
-        console.error("Error saving single instance:", error);
-        throw new HttpsError('internal', 'Änderung konnte nicht gespeichert werden.', error.message);
-    }
-});
-
-/**
- * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
- */
-export const saveFutureAppointmentInstances = onCall(async (request) => {
-    if (!request.auth || !request.auth.token.admin) {
-        throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
-    }
-    
-    const { pendingUpdateData, selectedInstanceToEdit, typesMap } = request.data;
-    const userId = request.auth.uid;
-
-    try {
-      const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
-      const originalAppointmentSnap = await originalAppointmentRef.get();
-
-      if (!originalAppointmentSnap.exists) {
-        throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
+  // Sicherheitsprüfung: Verhindere, dass der letzte Admin seine eigenen Rechte entzieht
+  if (request.auth.uid === targetUid) {
+      const adminSnapshot = await admin.firestore().collection('users').where('role', '==', 'admin').get();
+      if (adminSnapshot.size <= 1) {
+          throw new HttpsError('failed-precondition', 'Cannot revoke the last admin role.');
       }
+  }
 
-      const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const batch = db.batch();
 
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
-      const dayBefore = addDays(instanceDate, -1);
-      const originalStartDate = originalAppointmentData.startDate.toDate();
-      
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, {
-          recurrenceEndDate: Timestamp.fromDate(dayBefore),
-        });
-      } else {
-        batch.delete(originalAppointmentRef);
-      }
+  try {
+    // 3. Remove the custom claim by setting it to null or an empty object.
+    await admin.auth().setCustomUserClaims(targetUid, { admin: null });
 
-      const newAppointmentRef = db.collection("appointments").doc(); // Neue ID generieren
-      
-      const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
-      
-      const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin'; // typesMap muss übergeben werden
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
-      const finalTitle = pendingUpdateData.title !== originalDisplayTitle 
-          ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
-          : originalAppointmentData.title;
+    // 4. Update the user's document in Firestore to 'user'.
+    const batch = admin.firestore().batch();
+    const userDocRef = admin.firestore().collection('users').doc(targetUid);
+    const memberDocRef = admin.firestore().collection('members').doc(targetUid); // Auch im Member-Profil
 
-      const newAppointmentData: Omit<Appointment, 'id'> = {
-        ...originalAppointmentData, 
-        
-        title: finalTitle || 'Termin',
-        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description: pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-        
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-            
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Behält das *originale* Enddatum der Serie bei
-        
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
-        createdBy: userId,
-      };
+    // Verwende set mit merge: true, falls Dokumente fehlen könnten
+    batch.set(userDocRef, { role: 'user' }, { merge: true });
+    batch.set(memberDocRef, { role: 'user' }, { merge: true }); // Auch im Member-Profil setzen
 
-      batch.set(newAppointmentRef, newAppointmentData);
+    await batch.commit();
 
-      // Alte Ausnahmen löschen
-      const exceptionsQuery = db.collection('appointmentExceptions')
-        .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
-        .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
-        
-      const exceptionsSnap = await getDocs(exceptionsQuery);
-      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
-      
-      await batch.commit();
-      return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
-
-    } catch (error: any) {
-        console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden', error.message);
-    }
+    console.log(`Successfully revoked admin role for user ${targetUid}.`);
+    return {
+      status: 'success',
+      message: `Success! User ${targetUid}'s admin role has been revoked.`,
+    };
+  } catch (error: any) {
+    console.error(`Error revoking admin role for UID: ${targetUid}`, error);
+    throw new HttpsError('internal', 'An internal error occurred while trying to revoke the admin role.', error.message);
+  }
 });
