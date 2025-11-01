@@ -141,12 +141,15 @@ service cloud.firestore {
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
         
-        allow get, list: if isSignedIn() && (
+        allow get: if isSignedIn() && (
                     isAdmin() ||
                     (resource.data.visibility.type == 'all') ||
                     isMemberOfVisibleTeamForPoll()
                     );
         
+        // Let 'get' rule handle list queries implicitly
+        allow list: if false; 
+
         allow create, delete: if isSignedIn() && isAdmin();
         
         allow update: if isSignedIn() &&
