@@ -169,7 +169,7 @@ service cloud.firestore {
         allow read, delete: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
         allow create: if isSignedIn() && isOwner(request.resource.data.userId);
         allow update: if isSignedIn() && isOwner(request.resource.data.userId);
-        allow list: if isSignedIn() && isAdmin();
+        allow list: if isSignedIn() && (request.query.where.userId == request.auth.uid || isAdmin());
     }
     
     // --- Chat ---
