@@ -8,11 +8,12 @@ service cloud.firestore {
     function isAdmin() { return request.auth.token.admin == true; }
     
     function isOwner(userId) { return request.auth.uid == userId; }
-    function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
     
+    // WARNING: This function is NOT reliable in 'list' or 'write' rules. 
+    // It should only be used in 'get' rules where a single document is accessed.
     function getUserTeams() {
-      // WICHTIG: Diese Funktion ist nur in `get`-Regeln zuverlässig, nicht in `list` oder `write`.
       if (!isSignedIn()) { return []; }
+      // This part is problematic in list/write rules.
       let memberData = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
       return "teams" in memberData ? memberData.teams : [];
     }
@@ -54,7 +55,6 @@ service cloud.firestore {
             // Check that the user is updating their own document and not changing critical fields
             return isOwner(memberId) && 
                    request.resource.data.userId == resource.data.userId &&
-                   request.resource.data.email == resource.data.email &&
                    !('role' in request.resource.data);
         }
         
@@ -187,10 +187,12 @@ service cloud.firestore {
 
         // CREATE:
         // Allow creating a message if user is authenticated and the creator.
-        // Room-specific logic for creation is simplified to allow writing,
-        // as the `read` rules will prevent unauthorized users from seeing the messages.
-        allow create: if isSignedIn() &&
-                      request.resource.data.userId == request.auth.uid;
+        // Room-specific logic is now separated for safety.
+        allow create: if request.auth.uid == request.resource.data.userId &&
+                       (roomId == 'all' || // Any signed-in user can write to 'all'
+                        (roomId == 'trainers' && isAdmin()) || // Only admins can write to 'trainers'
+                        roomId.startsWith('team_') // Any signed-in user can write to any team room (read rules prevent unauthorized access)
+                       );
         
         // DELETE:
         // - Admins can delete any message
