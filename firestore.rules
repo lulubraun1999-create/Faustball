@@ -16,6 +16,10 @@ service cloud.firestore {
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+    
+    function isMemberOfTeams(teamIds) {
+        return isSignedIn() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
+    }
 
     // --- User & Member Data ---
     match /users/{userId} {
@@ -33,7 +37,7 @@ service cloud.firestore {
     // --- Groups & Group Membership ---
     match /groups/{groupId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin(); // create, update, delete
+      allow write: if isAdmin();
 
       match /members/{memberId} {
         allow read: if isSignedIn();
