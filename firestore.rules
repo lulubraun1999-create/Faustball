@@ -77,6 +77,19 @@ service cloud.firestore {
             allow write: if isSignedIn() && isAdmin();
         }
     }
+    
+    // --- /locations/{locationId} ---
+    match /locations/{locationId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isAdmin();
+    }
+    
+    // --- /appointmentTypes/{typeId} ---
+    match /appointmentTypes/{typeId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isAdmin();
+    }
+
 
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
