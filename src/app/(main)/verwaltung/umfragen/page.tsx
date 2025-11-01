@@ -35,8 +35,7 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  const nowTimestamp = Timestamp.now();
-
+  // *** BEGINN DER KORREKTUR: Spezifische und sichere Abfragen verwenden ***
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
@@ -57,14 +56,17 @@ export default function UmfragenPage() {
     [firestore, userTeamIds]
   );
   const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
-
-  const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
-
+  
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
+    // Duplikate entfernen, falls eine Umfrage sowohl 'all' ist als auch ein Team-Tag hat
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
     return uniquePolls;
   }, [pollsForAll, pollsForTeams]);
+  // *** ENDE DER KORREKTUR ***
+
+
+  const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
   const handleVote = async (pollId: string, optionId: string | null) => {
     if (!firestore || !user || !optionId) return;
@@ -281,5 +283,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
-
-    
