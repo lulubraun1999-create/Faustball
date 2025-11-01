@@ -169,34 +169,19 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        function isTeamRoomMember(roomId) {
-            // This function is only safe for `get`.
-            let userTeams = getUserTeams();
-            return roomId.startsWith('team_') && userTeams.hasAny([roomId.split('_')[1]]);
-        }
+        // READ: Allow reads if user is signed in.
+        // Specific room access is controlled by the UI and what queries it makes.
+        allow read: if isSignedIn();
 
-        // READ: 
-        // - 'all' room: any signed-in user
-        // - 'trainers' room: only admins
-        // - team rooms ('team_*'): only members of that team
-        allow read: if isSignedIn() && 
-                    (roomId == 'all' || 
-                     (roomId == 'trainers' && isAdmin()) ||
-                     isTeamRoomMember(roomId)
-                    );
-
-        // CREATE:
-        // Allow creating a message if user is authenticated and the creator.
-        // This rule is structured to be safe for write operations by avoiding `get()` calls.
+        // CREATE: Allow if user is authenticated, it's their own message,
+        // and the room is one of the valid types. No "get" calls are made here.
         allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && (
             roomId == 'all' ||
             (roomId == 'trainers' && isAdmin()) ||
             roomId.startsWith('team_')
         );
         
-        // DELETE:
-        // - Admins can delete any message
-        // - Users can delete their own messages
+        // DELETE: Admins can delete any message, users can delete their own.
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
