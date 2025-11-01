@@ -60,6 +60,14 @@ export function MainHeader() {
             >
               Kalender
             </Link>
+            <Link
+              href="/verwaltung/termine"
+              className={cn("transition-colors hover:text-foreground/80", 
+                pathname.startsWith('/verwaltung/termine') ? "text-foreground" : "text-foreground/60"
+              )}
+            >
+              Termine
+            </Link>
             <VerwaltungDropdown />
           </div>
         </nav>
