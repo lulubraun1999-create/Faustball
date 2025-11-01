@@ -187,11 +187,10 @@ service cloud.firestore {
 
         // CREATE:
         // Allow creating a message if user is authenticated and the creator.
-        // Room-specific logic is now separated for safety.
-        allow create: if request.auth.uid == request.resource.data.userId &&
-                       (roomId == 'all' || // Any signed-in user can write to 'all'
-                        (roomId == 'trainers' && isAdmin()) || // Only admins can write to 'trainers'
-                        roomId.startsWith('team_') // Any signed-in user can write to any team room (read rules prevent unauthorized access)
+        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId &&
+                       (roomId == 'all' || 
+                        (roomId == 'trainers' && isAdmin()) || 
+                        (roomId.startsWith('team_'))
                        );
         
         // DELETE:
