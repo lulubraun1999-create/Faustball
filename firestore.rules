@@ -129,49 +129,39 @@ service cloud.firestore {
 
     // --- /polls/{pollId} ---
     match /polls/{pollId} {
-        function isMemberOfVisibleTeamForPoll() {
-            let userTeams = getUserTeams();
-            return userTeams != null &&
-                'visibility' in resource.data && resource.data.visibility.type == 'specificTeams' &&
-                'teamIds' in resource.data.visibility &&
-                resource.data.visibility.teamIds.hasAny(userTeams);
-        }
+      function isMemberOfVisibleTeamForPoll() {
+        let userTeams = getUserTeams();
+        return 'visibility' in resource.data &&
+               resource.data.visibility.type == 'specificTeams' &&
+               'teamIds' in resource.data.visibility &&
+               resource.data.visibility.teamIds.hasAny(userTeams);
+      }
+    
+      function isVoteChangeOnly() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
+      }
+    
+      allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
 
-        function isVoteChangeOnly() {
-            // Allow changing only the votes field.
-            return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
-        }
-
-        allow read: if isSignedIn() &&
+      // Allow LIST operations only for specific, secure queries
+      allow list: if isSignedIn() &&
                     (
-                      // Rules for GET (single document)
-                      isAdmin() ||
-                      (resource.data.visibility.type == 'all') ||
-                      isMemberOfVisibleTeamForPoll()
-                    )
-                    ||
-                    (
-                      // Rules for LIST (queries)
-                      (
-                        request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
-                        request.query.where.keys().hasAll(['visibility.type', 'endDate']) &&
-                        request.query.where['visibility.type'] == 'all'
-                      )
-                      ||
-                      (
-                        request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
-                        request.query.where.keys().hasAll(['visibility.teamIds', 'endDate']) &&
-                        request.query.where['visibility.teamIds'].hasAny(getUserTeams())
-                      )
+                      // Query for 'all' polls
+                      (request.query.where.keys().hasAll(['visibility.type', 'endDate']) &&
+                       request.query.where['visibility.type'] == 'all') ||
+                      // Query for user's teams' polls
+                      (request.query.where.keys().hasAll(['visibility.teamIds', 'endDate']) &&
+                       request.query.where['visibility.teamIds'].hasAny(getUserTeams()))
                     );
-        
-        allow create, delete: if isSignedIn() && isAdmin();
-        
-        allow update: if isSignedIn() &&
-                        (isAdmin() || 
-                         (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
-                        );
+
+      allow create, delete: if isSignedIn() && isAdmin();
+      
+      allow update: if isSignedIn() &&
+                      (isAdmin() || 
+                       (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
+                      );
     }
+
 
     // --- /news/{newsId} ---
     match /news/{newsId} {

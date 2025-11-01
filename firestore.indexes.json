@@ -28,24 +28,6 @@
           "order": "ASCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "polls",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibility.type",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibility.teamIds",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "endDate",
-          "order": "ASCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []
