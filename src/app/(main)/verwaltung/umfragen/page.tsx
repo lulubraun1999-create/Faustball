@@ -36,6 +36,7 @@ export default function UmfragenPage() {
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
   // *** KORREKTUR: Spezifische, sichere Abfragen verwenden ***
+  const nowTimestamp = Timestamp.now();
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 

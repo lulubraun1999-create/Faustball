@@ -157,14 +157,14 @@ service cloud.firestore {
         
         allow list: if isSignedIn() && 
                     (isAdmin() || 
-                     (request.query.get('where') != null && 
+                      (request.query.get('where') != null && 
                       request.query.where[0][0] == 'visibility.type' && 
                       request.query.where[0][2] == 'all') ||
-                     (request.query.get('where') != null &&
+                      (request.query.get('where') != null &&
                       request.query.where[0][0] == 'visibility.type' && request.query.where[0][2] == 'specificTeams' &&
                       request.query.where[1][0] == 'visibility.teamIds' && request.query.where[1][1] == 'array-contains-any' &&
-                      request.query.where[1][2].hasAny(getUserTeams())
-                     )
+                      getUserTeams().size() > 0 && request.query.where[1][2].hasAny(getUserTeams())
+                      )
                     );
 
         allow create, delete: if isSignedIn() && isAdmin();
@@ -194,5 +194,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
