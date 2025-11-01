@@ -141,35 +141,16 @@ service cloud.firestore {
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
         
-        // GET: individual document read
         allow get: if isSignedIn() && (
                     isAdmin() ||
                     (resource.data.visibility.type == 'all') ||
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        // LIST: collection query - MUST BE SPECIFIC
-        allow list: if isSignedIn() && 
-                    (
-                      isAdmin() // Admins können immer alles auflisten.
-                      ||
-                      // Erlaubt die Abfrage für öffentliche, noch nicht abgelaufene Umfragen.
-                      (
-                       request.query.where[0] == ['visibility.type', '==', 'all'] &&
-                       request.query.where[1] == ['endDate', '>=', request.time]
-                      )
-                      ||
-                      // Erlaubt die Abfrage für Team-spezifische, noch nicht abgelaufene Umfragen.
-                      (
-                       request.query.where[0] == ['visibility.type', '==', 'specificTeams'] &&
-                       request.query.where[1] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
-                       request.query.where[2] == ['endDate', '>=', request.time]
-                      )
-                    );
+        allow list: if isSignedIn();
 
         allow create, delete: if isSignedIn() && isAdmin();
         
-        // UPDATE: for voting
         allow update: if isSignedIn() &&
                         (isAdmin() || 
                          (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
