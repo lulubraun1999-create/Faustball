@@ -53,8 +53,6 @@ service cloud.firestore {
 
 
     // --- Polls ---
-    // The client performs two separate queries (one for 'all', one for specific teams).
-    // The rules must allow both queries to execute. Security is enforced by the client queries.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
