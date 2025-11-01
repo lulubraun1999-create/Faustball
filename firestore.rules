@@ -174,17 +174,15 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        allow read: if isSignedIn();
-        // Create is handled by the `sendMessage` cloud function, 
-        // which performs its own permission checks.
-        // We deny direct client creation but allow the function to write.
-        allow create: if false; 
-        allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
-    }
-    
-    match /chats/{roomId}/messages {
-        allow list: if isSignedIn();
-        allow create: if false;
+      // Allow any signed-in user to get or list messages in any room.
+      // Write access is controlled by the 'sendMessage' cloud function.
+      allow read: if isSignedIn();
+
+      // Deny direct client creation.
+      allow create: if false;
+
+      // Allow owner or admin to delete their own messages.
+      allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
 }
