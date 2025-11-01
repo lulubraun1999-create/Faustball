@@ -10,46 +10,38 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Use exists() for safer checks than get()
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
-    function isMemberOfTeams(teamIds) {
-        return exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
-               get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
-    }
 
     // --- User & Member Data ---
     match /users/{userId} {
-      allow read, update: if isAdmin() || isOwner(userId);
-      allow create: if isSignedIn(); // Allow any signed-in user to create their own record
+      allow read, update: if isOwner(userId) || isAdmin();
+      allow create: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      // User can manage their own member data, admins can manage all
-      allow read, update, create: if isAdmin() || isOwner(memberId);
+      allow read, update: if isOwner(memberId) || isAdmin();
+      allow create: if isSignedIn();
       allow delete: if isAdmin();
     }
 
-    // --- Publicly Readable Data for any Signed-in User ---
+    // --- Groups & Group Membership ---
     match /groups/{groupId} {
       allow read: if isSignedIn();
       allow write: if isAdmin(); // create, update, delete
 
-      // Allow reading members of any group, but only admins can change membership
       match /members/{memberId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
     }
     
-    // Appointment Types and Locations are public read for any signed-in user
+    // --- Publicly Readable Data for any Signed-in User ---
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -60,38 +52,35 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // News are public read for any signed-in user
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
-    // Penalty catalog is public read for any signed-in user
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
     }
-    
-    // Appointment exceptions are handled by appointment rules
-    match /appointmentExceptions/{exceptionId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-    
+
     // --- Collections with specific access logic ---
     
     // Polls can be read by anyone signed in. Client queries handle filtering.
     match /polls/{pollId} {
         allow read: if isSignedIn();
-        // Admins can create and delete polls
         allow create, delete: if isAdmin();
         // Any signed-in user can vote (update the votes array).
         allow update: if isSignedIn(); 
     }
 
-    // Appointments are readable by anyone, writteable by admins
+    // Appointments are readable by anyone, writable by admins
     match /appointments/{appointmentId} {
       allow read: if isSignedIn(); 
+      allow write: if isAdmin();
+    }
+
+    // Appointment exceptions follow appointment rules
+    match /appointmentExceptions/{exceptionId} {
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
