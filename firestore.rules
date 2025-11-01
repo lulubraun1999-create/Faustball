@@ -80,3 +80,5 @@ service cloud.firestore {
     match /treasury/{transactionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
   }
 }
+
+    

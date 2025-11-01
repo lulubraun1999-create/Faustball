@@ -35,8 +35,6 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  const nowTimestamp = useMemo(() => Timestamp.now(), []);
-
   // Sichere und spezifische Abfragen
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
@@ -283,3 +281,5 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
+
+    
