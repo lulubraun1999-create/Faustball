@@ -9,18 +9,15 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Custom claim 'admin' must be set to true.
       return isSignedIn() && request.auth.token.admin == true;
     }
 
     function isOwner(userId) {
-      // User is the owner of the document.
       return isSignedIn() && request.auth.uid == userId;
     }
     
     function getMemberTeams(userId) {
-      // Gets the teams array from the user's member profile.
-      // Important: Use path escaping for security rule variables.
+      // Use path escaping for security rule variables.
       return get(/databases/$(database)/documents/members/$(userId)).data.teams;
     }
 
@@ -40,13 +37,11 @@ service cloud.firestore {
 
     // --- Publicly Readable Data for any Signed-in User ---
     // These collections can be listed and read by any authenticated user.
-    // Client-side queries handle the filtering of data relevant to the user.
-    // Writes are restricted to admins.
+    // Client-side queries handle filtering. Writes are restricted.
     match /groups/{groupId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
 
-      // Members subcollection is also readable by any user, writable by admin.
       match /members/{memberId} {
           allow read: if isSignedIn();
           allow write: if isAdmin();
@@ -68,15 +63,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    match /polls/{pollId} {
-        // Allow any signed-in user to list and read all polls.
-        // The client-side queries will perform the actual filtering based on visibility.
-        allow read: if isSignedIn();
-        allow create, delete: if isAdmin();
-        // Allow any signed-in user to update (for voting).
-        allow update: if isSignedIn();
-    }
-
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
@@ -87,11 +73,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // --- Appointments & Responses ---
-    // Allow listing the collection for any authenticated user.
-    // The client-side queries will perform the actual filtering.
-    // Individual document reads (get) are more constrained.
+    // --- Collections with specific access logic ---
+
+    match /polls/{pollId} {
+      // Allow any authenticated user to read/list all polls.
+      // Client-side queries handle filtering for visibility.
+      // Update is allowed for any user to cast a vote.
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isSignedIn(); 
+    }
+
     match /appointments/{appointmentId} {
+      // Allow listing for any authenticated user. Client filters.
+      // GET is more constrained for security, though LIST is open.
       allow list: if isSignedIn(); 
       allow get: if isSignedIn() && 
                    (resource.data.visibility.type == 'all' || 
@@ -100,18 +95,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Users can create their own responses.
-    // They can read, update, or delete only their own responses. Admins have full access.
     match /appointmentResponses/{responseId} {
+      // Users can create their own responses.
+      // They can only read/update/delete their own responses. Admins have full access.
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin(); // Only admins can list all responses.
+      allow list: if isAdmin(); // Only admins can list ALL responses.
     }
 
-    // --- Team Treasury ---
-    // Admins can read/write everything.
-    // Authenticated users can only read transactions belonging to their teams.
     match /treasury/{transactionId} {
+      // Admins have full access.
+      // Users can read transactions belonging to their teams.
       allow read: if isAdmin() || (isSignedIn() && getMemberTeams(request.auth.uid).hasAny([resource.data.teamId]));
       allow write: if isAdmin();
     }
