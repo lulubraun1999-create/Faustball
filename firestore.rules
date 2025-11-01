@@ -18,13 +18,11 @@ service cloud.firestore {
     }
     
     function isMemberOfTeams(teamIds) {
-        // Use `exists` for safer checking. The `get` would fail if the member doc doesn't exist.
         return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
                get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
     // --- User & Member Data ---
-    // Users can only read/update their own data. Admins can read/update/delete any.
     match /users/{userId} {
       allow read, update: if isOwner(userId) || isAdmin();
       allow create: if isSignedIn();
@@ -38,7 +36,6 @@ service cloud.firestore {
     }
 
     // --- Groups & Group Membership ---
-    // Any signed-in user can read groups and their member lists. Only admins can write.
     match /groups/{groupId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -49,9 +46,7 @@ service cloud.firestore {
       }
     }
     
-    // --- Publicly Readable Collections ---
-    // These collections can be read (get and list) by any signed-in user.
-    // Write access is restricted to admins.
+    // --- Publicly Readable Collections (excluding polls for clarity) ---
     match /appointmentTypes/{typeId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /locations/{locationId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /news/{newsId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
@@ -59,26 +54,21 @@ service cloud.firestore {
     match /appointmentExceptions/{exceptionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /treasury/{transactionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
 
-    // --- Polls ---
-    // Any signed-in user can read polls (client-side queries handle visibility).
-    // Any signed-in user can vote (update the votes array).
+    // --- Polls (Corrected Rule) ---
+    // Any signed-in user can read/list polls and update them (to vote).
     // Only admins can create or delete polls.
     match /polls/{pollId} {
-      allow read: if isSignedIn();
+      allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); 
     }
 
     // --- Appointments ---
-    // Users can read appointments if they are public ('all') or if they are a member of one of the designated teams.
-    // Admins can write.
     match /appointments/{appointmentId} {
       allow read: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow write: if isAdmin();
     }
     
     // --- Appointment Responses ---
-    // Users can create their own responses. They can manage their own, admins can manage all.
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
