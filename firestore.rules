@@ -158,7 +158,7 @@ service cloud.firestore {
         allow list: if isSignedIn() &&
                      (
                        isAdmin() ||
-                       (request.query.keys().hasAll(['where']) && request.query.where[0].field == 'visibility.type' && request.query.where[0].value == 'all') ||
+                       (request.query.keys().hasAny(['where']) && request.query.where.field == 'visibility.type' && request.query.where.value == 'all') ||
                        (request.query.keys().hasAll(['where']) && request.query.where[0].field == 'visibility.type' && request.query.where[0].value == 'specificTeams' && request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].value.hasAny(getUserTeams()))
                      );
 
