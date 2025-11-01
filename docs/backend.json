@@ -351,31 +351,6 @@
         }
       },
       "required": ["userId", "startDate", "endDate", "reason", "createdAt"]
-    },
-    "ChatMessage": {
-      "title": "Chat Message",
-      "type": "object",
-      "description": "Represents a single message within a chat room.",
-      "properties": {
-        "userId": {
-          "type": "string",
-          "description": "The ID of the user who sent the message."
-        },
-        "userName": {
-          "type": "string",
-          "description": "The denormalized name of the user who sent the message."
-        },
-        "content": {
-          "type": "string",
-          "description": "The text content of the message."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Timestamp when the message was created. Used for TTL policy."
-        }
-      },
-      "required": ["userId", "userName", "content", "createdAt"]
     }
   },
   "auth": {
@@ -442,14 +417,6 @@
             "$ref": "#/backend/entities/Absence"
         },
         "description": "Stores user absences. Writable only by the user themselves or an admin."
-    },
-    "/chats/{roomId}/messages/{messageId}": {
-      "schema": {
-        "$ref": "#/backend/entities/ChatMessage"
-      },
-      "description": "Stores messages for a specific chat room. Read/write access is controlled by room type. TTL is enabled on 'createdAt'."
     }
   }
 }
-
-  
