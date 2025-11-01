@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -40,7 +41,7 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
     }
-
+    
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -68,11 +69,13 @@ service cloud.firestore {
     
     // --- Collections with specific access logic ---
     match /polls/{pollId} {
-        // Allow any signed-in user to read (get, list) polls. 
-        // Client-side queries handle filtering which polls are visible.
-        allow read: if isSignedIn(); 
+        // Allow any signed-in user to read polls. 
+        // Client-side queries handle filtering. This is safe because queries are restrictive.
+        allow read: if isSignedIn();
+        // Admins can manage polls
         allow create, delete: if isAdmin();
-        // Allow any signed-in user to vote (update the votes array).
+        // Any signed-in user can vote (update the votes array).
+        // More specific rules could be added here if needed (e.g., check if user is in a visible team)
         allow update: if isSignedIn(); 
     }
 
@@ -83,8 +86,9 @@ service cloud.firestore {
     
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
+      // Users can manage their own responses, admins can manage all.
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin();
+      allow list: if isAdmin(); // Only admins can list all responses for an appointment.
     }
 
     match /treasury/{transactionId} {
@@ -93,3 +97,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

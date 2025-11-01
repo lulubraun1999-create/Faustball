@@ -34,27 +34,50 @@ export default function UmfragenPage() {
   );
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
+  
+  const nowTimestamp = Timestamp.now();
 
-  // Query 1: Polls visible to 'all' that are not expired yet, to keep the list clean.
+  // Query 1: Polls visible to 'all' that are not expired yet.
   const pollsForAllQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'polls'), where('visibility.type', '==', 'all')) : null),
-    [firestore]
+    () => (firestore ? query(
+        collection(firestore, 'polls'), 
+        where('visibility.type', '==', 'all'),
+        where('endDate', '>=', nowTimestamp) // Nur aktive Umfragen laden
+    ) : null),
+    [firestore, nowTimestamp]
   );
   const { data: pollsForAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(pollsForAllQuery);
 
-  // Query 2: Polls visible to the user's teams
+  // Query 2: Polls visible to the user's teams that are not expired yet.
   const pollsForTeamsQuery = useMemoFirebase(
     () => (firestore && userTeamIds.length > 0
         ? query(
             collection(firestore, 'polls'),
             where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds)
+            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('endDate', '>=', nowTimestamp) // Nur aktive Umfragen laden
           )
         : null),
-    [firestore, userTeamIds]
+    [firestore, userTeamIds, nowTimestamp]
   );
   const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
-  
+
+  // Query 3: Expired polls (for the "abgelaufen" section)
+  const expiredPollsQuery = useMemoFirebase(
+    () => {
+      if (!firestore || !user) return null;
+      // This query might be too broad if there are many expired polls.
+      // For now, we query all expired polls and filter on client.
+      // A better long-term solution might be to query team-specific and public expired polls separately.
+      return query(
+        collection(firestore, 'polls'),
+        where('endDate', '<', nowTimestamp)
+      );
+    },
+    [firestore, user, nowTimestamp]
+  );
+  const { data: allExpiredPolls, isLoading: isLoadingExpiredPolls } = useCollection<Poll>(expiredPollsQuery);
+
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
   const handleVote = async (pollId: string, optionId: string | null) => {
@@ -66,14 +89,12 @@ export default function UmfragenPage() {
     const currentPoll = visiblePolls?.find((p) => p.id === pollId);
     if (!currentPoll) return;
     
-    // First, remove any existing vote from this user for this poll
     const existingVote = currentPoll.votes.find(v => v.userId === user.uid);
     
     try {
         if (existingVote) {
              await updateDoc(pollDocRef, { votes: arrayRemove(existingVote) });
         }
-        // Then, add the new vote
         const newVote = { userId: user.uid, optionId: optionId };
         await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
         
@@ -118,16 +139,23 @@ export default function UmfragenPage() {
   };
 
   const visiblePolls = useMemo(() => {
-    const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
-    return uniquePolls.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    const allActivePolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
+    const uniqueActivePolls = Array.from(new Map(allActivePolls.map(p => [p.id, p])).values());
+    return uniqueActivePolls.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
   }, [pollsForAll, pollsForTeams]);
 
-
-  const activePolls = visiblePolls?.filter(p => !isPast(p.endDate.toDate()));
-  const expiredPolls = visiblePolls?.filter(p => isPast(p.endDate.toDate()));
+  const expiredPolls = useMemo(() => {
+    if (!allExpiredPolls) return [];
+    const userTeamIdsSet = new Set(userTeamIds);
+    // Filter expired polls on the client to show only relevant ones
+    return allExpiredPolls
+      .filter(p => p.visibility.type === 'all' || p.visibility.teamIds.some(tid => userTeamIdsSet.has(tid)))
+      .sort((a, b) => b.endDate.toMillis() - a.endDate.toMillis());
+  }, [allExpiredPolls, userTeamIds]);
   
-  const isLoading = isLoadingPollsAll || isLoadingPollsTeams || isUserLoading || isLoadingMember;
+  const activePolls = visiblePolls;
+  
+  const isLoading = isLoadingPollsAll || isLoadingPollsTeams || isUserLoading || isLoadingMember || isLoadingExpiredPolls;
 
   if (isLoading) {
     return (
