@@ -10,7 +10,6 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Check for the custom claim 'admin' on the user's token.
       return isSignedIn() && request.auth.token.admin == true;
     }
     
@@ -19,15 +18,13 @@ service cloud.firestore {
     }
     
     function isMemberOfTeams(teamIds) {
-      // It's generally better to check claims if possible, but for dynamic teams,
-      // reading from the user's member profile is a common pattern.
-      // Ensure /members/{userId} rules allow the user to read their own document.
+      // Allow reading own member data to check team membership.
       return isSignedIn() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
     // --- User & Member Data ---
     match /users/{userId} {
-      // Admins can read any user profile. Users can read and update their own.
+      // Admins can read/update any user. Users can only read/update their own.
       allow read, update: if isOwner(userId) || isAdmin();
       // Any authenticated user can create their own user document upon sign-up.
       allow create: if isOwner(userId);
@@ -36,23 +33,23 @@ service cloud.firestore {
     }
 
     match /members/{memberId} {
-       // Admins can read any member profile. Users can read and update their own.
+       // Admins can read/update any member profile. Users can read/update their own.
       allow read, update: if isOwner(memberId) || isAdmin();
-      // Any authenticated user can create their own member document upon sign-up.
+       // Any authenticated user can create their own member document upon sign-up.
       allow create: if isOwner(memberId);
-      // Only admins can delete member profiles.
+       // Only admins can delete member profiles.
       allow delete: if isAdmin();
     }
 
     // --- Groups & Group Membership ---
     match /groups/{groupId} {
-      // All authenticated users can read group information (e.g., to list teams).
+      // All authenticated users can read group information.
       allow read: if isSignedIn();
       // Only admins can create, update, or delete groups.
       allow write: if isAdmin();
 
       match /members/{memberId} {
-        // All authenticated users can read the member lists of any group.
+        // All authenticated users can read member lists of any group.
         allow read: if isSignedIn();
         // Only admins can add/remove members from groups.
         allow write: if isAdmin();
@@ -61,7 +58,8 @@ service cloud.firestore {
 
     // --- Polls ---
     // The client queries are structured to only fetch relevant polls.
-    // Therefore, a simple check for authentication is sufficient for reading.
+    // The security rules need to allow these specific queries.
+    // 'list' (read for collections) is implicitly covered by 'read'.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       // Create and delete are admin-only actions. 'update' is for voting.
@@ -109,8 +107,8 @@ service cloud.firestore {
     }
 
     match /treasury/{transactionId} {
-      // Reading treasury might be restricted in a real app, but for now, allow all signed-in users.
-      allow read: if isSignedIn();
+      // Admins and members of the associated team can read transactions.
+      allow read: if isSignedIn() && (isAdmin() || isMemberOfTeams([resource.data.teamId]));
       // Only admins can manage the treasury.
       allow write: if isAdmin();
     }
