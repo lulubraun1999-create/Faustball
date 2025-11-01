@@ -42,7 +42,7 @@ service cloud.firestore {
       }
     }
 
-    // --- Publicly Readable Data ---
+    // --- Publicly Readable Data (for any signed-in user) ---
     // Any signed-in user can read these. Only admins can write.
     match /appointmentTypes/{typeId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /locations/{locationId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
@@ -53,8 +53,9 @@ service cloud.firestore {
 
 
     // --- Polls ---
-    // Users can list polls based on client-side queries (for their teams or public).
-    // They can update a poll to cast a vote. Only admins can create/delete.
+    // The client queries are specific enough to only request what the user is allowed to see.
+    // Therefore, we can allow a general 'list' and 'get' for any signed-in user.
+    // Updates are allowed for voting. Create/delete is admin-only.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
