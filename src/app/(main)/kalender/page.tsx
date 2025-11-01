@@ -63,6 +63,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import Link from 'next/link';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -382,9 +383,11 @@ export default function KalenderPage() {
                         {appointmentsOnDay.map(app => (
                            <Tooltip key={app.virtualId}>
                            <TooltipTrigger asChild>
+                           <Link href={`/verwaltung/termine#${app.virtualId}`}>
                              <div className="p-1 rounded-md bg-primary/10 text-primary text-xs truncate cursor-pointer hover:bg-primary/20">
                                <span>{app.isAllDay ? '' : format(app.startDate.toDate(), 'HH:mm')}</span> {app.title}
                              </div>
+                            </Link>
                            </TooltipTrigger>
                            <TooltipContent>
                              <p className="font-bold">{app.title}</p>

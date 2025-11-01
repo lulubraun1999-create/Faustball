@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useUser } from "@/firebase/auth/use-user";
 import { useCollection } from "@/firebase/firestore/use-collection";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -90,16 +90,13 @@ export default function VerwaltungTerminePage() {
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // State für Filter
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedTeam, setSelectedTeam] = useState<string>("all");
 
-  // State für Absage-Dialog
   const [isAbsageDialogOpen, setIsAbsageDialogOpen] = useState(false);
   const [currentAbsageApp, setCurrentAbsageApp] = useState<UnrolledAppointment | null>(null);
   const [absageGrund, setAbsageGrund] = useState("");
 
-  // Daten abrufen
   const memberProfileRef = useMemoFirebase(
       () => (auth.user ? doc(firestore, 'members', auth.user.uid) : null),
       [firestore, auth.user]
@@ -107,7 +104,6 @@ export default function VerwaltungTerminePage() {
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
   const userTeamIds = useMemo(() => profile?.teams || [], [profile]);
 
-  // KORREKTUR: Explizite Abfragen für öffentliche und Team-Termine
   const publicAppointmentsQuery = useMemoFirebase(
     () => (firestore ? query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all')) : null),
     [firestore]
@@ -120,7 +116,6 @@ export default function VerwaltungTerminePage() {
   const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(publicAppointmentsQuery);
   const { data: teamAppointments, isLoading: teamAppointmentsLoading } = useCollection<Appointment>(teamAppointmentsQuery);
 
-  // Kombinierte, einzigartige Terminliste
   const appointments = useMemo(() => {
     const all = [...(publicAppointments || []), ...(teamAppointments || [])];
     return Array.from(new Map(all.map(app => [app.id, app])).values());
@@ -132,7 +127,6 @@ export default function VerwaltungTerminePage() {
     return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
   }, [firestore, appointmentIds]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
-
 
   const allMembersRef = useMemoFirebase(
     () => (firestore ? collection(firestore, 'members') : null),
@@ -164,13 +158,26 @@ export default function VerwaltungTerminePage() {
   );
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsRef);
 
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
-  // Ladezustand
+  useEffect(() => {
+      const hash = window.location.hash.substring(1);
+      if (hash && rowRefs.current[hash]) {
+          setTimeout(() => {
+            rowRefs.current[hash]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            rowRefs.current[hash]?.classList.add('bg-accent/50', 'transition-all', 'duration-1000');
+            setTimeout(() => {
+                rowRefs.current[hash]?.classList.remove('bg-accent/50');
+            }, 3000)
+          }, 500); // Small delay to ensure everything is rendered
+      }
+  }, [filteredAppointments]); // Re-run when appointments are loaded/filtered
+
   const isLoading =
     auth.isUserLoading ||
     profileLoading ||
-    publicAppointmentsLoading || // Geändert
-    teamAppointmentsLoading || // Geändert
+    publicAppointmentsLoading ||
+    teamAppointmentsLoading ||
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
@@ -178,7 +185,6 @@ export default function VerwaltungTerminePage() {
     membersLoading ||
     isLoadingExceptions;
 
-  // Teams für Filter extrahieren, nur die, in denen der User Mitglied ist
   const { userTeams, teamsMap } = useMemo(() => {
     const allGroups = groups || [];
     const teamsMap = new Map(allGroups.filter(g => g.type === 'team').map((t: Group) => [t.id, t.name]));
@@ -194,15 +200,12 @@ export default function VerwaltungTerminePage() {
     return { userTeams, teamsMap };
   }, [groups, profile]);
   
-  
-  // Locations-Map
-   const locationsMap = useMemo(() => {
+  const locationsMap = useMemo(() => {
     const map = new Map<string, Location>();
     locations?.forEach((loc) => map.set(loc.id, loc));
     return map;
   }, [locations]);
 
-  // Entrollte Termine (inkl. Wiederholungen)
   const unrolledAppointments = useMemo(() => {
     if (!appointments || isLoadingExceptions) return [];
     
@@ -263,8 +266,6 @@ export default function VerwaltungTerminePage() {
     return allEvents.filter(event => event.instanceDate >= new Date());
   }, [appointments, exceptions, isLoadingExceptions]);
 
-
-  // Helper-Funktion: Prüft, ob der Benutzer auf einen Termin antworten darf
   const isUserRelevantForAppointment = (
     app: Appointment,
     userProfile: MemberProfile | null,
@@ -273,21 +274,17 @@ export default function VerwaltungTerminePage() {
     if (app.visibility.type === "all") return true;
     if (!app.visibility.teamIds || !userProfile.teams) return false;
 
-    // Prüft, ob es eine Überschneidung zwischen den Teams des Termins und den Teams des Benutzers gibt
     return app.visibility.teamIds.some((teamId) =>
       userProfile.teams?.includes(teamId),
     );
   };
 
-  // Gefilterte Termine
   const filteredAppointments = useMemo(() => {
     return unrolledAppointments
       .filter((app) => {
-        // Nach Typ filtern
         if (selectedType !== "all" && app.appointmentTypeId !== selectedType) {
           return false;
         }
-        // Nach Team filtern
         if (selectedTeam !== "all") {
           const isVisibleToAll = app.visibility.type === "all";
           const isVisibleToTeam =
@@ -296,7 +293,6 @@ export default function VerwaltungTerminePage() {
             return false;
           }
         }
-        // Nur relevante Termine für den Benutzer anzeigen
         if (!isUserRelevantForAppointment(app, profile)) {
           return false;
         }
@@ -365,7 +361,7 @@ export default function VerwaltungTerminePage() {
       const docRef = doc(firestore, 'appointmentResponses', responseId);
 
       const existingResponse = allResponses?.find(r => r.id === responseId);
-      if (!existingResponse) return; // Nothing to delete
+      if (!existingResponse) return;
 
       try {
           await deleteDoc(docRef);
@@ -396,7 +392,6 @@ export default function VerwaltungTerminePage() {
     }
   };
 
-  // Handler für Klick auf "Absage"
   const handleAbsageClick = (appointment: UnrolledAppointment) => {
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
     const userResponse = allResponses?.find(r => r.id === `${appointment.id}_${dateString}_${auth.user?.uid}`);
@@ -405,7 +400,6 @@ export default function VerwaltungTerminePage() {
     setIsAbsageDialogOpen(true);
   };
 
-  // Handler für Bestätigung im Absage-Dialog
   const handleAbsageSubmit = async () => {
     if (!absageGrund) {
       toast({
@@ -419,30 +413,25 @@ export default function VerwaltungTerminePage() {
 
     await setResponse(currentAbsageApp, "abgesagt", absageGrund);
     
-    // Dialog aufräumen
     setIsAbsageDialogOpen(false);
     setCurrentAbsageApp(null);
     setAbsageGrund("");
   };
 
-  // Helper zum Nachschlagen von Namen
   const getTypeName = (typeId: string) =>
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
-  // Formatiert Datum und Uhrzeit
     const formatDateTime = (app: UnrolledAppointment) => {
     if (!app.startDate) return "Kein Datum";
-    const start = app.instanceDate; // Use the specific instance date
+    const start = app.instanceDate;
     const originalStart = app.startDate.toDate();
 
-    // Preserve the original time
     start.setHours(originalStart.getHours());
     start.setMinutes(originalStart.getMinutes());
     start.setSeconds(originalStart.getSeconds());
 
     const end = app.endDate ? app.endDate.toDate() : undefined;
     if (end) {
-        // if end date exists, we need to calculate the duration and add it to the instance date
         const duration = end.getTime() - originalStart.getTime();
         end.setTime(start.getTime() + duration);
     }
@@ -487,7 +476,6 @@ export default function VerwaltungTerminePage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4 md:flex-row mb-4">
-              {/* Filter: Art */}
               <Select
                 value={selectedType}
                 onValueChange={setSelectedType}
@@ -506,7 +494,6 @@ export default function VerwaltungTerminePage() {
                 </SelectContent>
               </Select>
 
-              {/* Filter: Mannschaft */}
               <Select
                 value={selectedTeam}
                 onValueChange={setSelectedTeam}
@@ -527,7 +514,6 @@ export default function VerwaltungTerminePage() {
             </div>
 
             {isLoading ? (
-                // Skeleton-Loading-Ansicht
                 <div className="space-y-4">
                     {Array.from({ length: 3 }).map((_, i) => (
                         <Skeleton key={i} className="h-12 w-full" />
@@ -579,7 +565,11 @@ export default function VerwaltungTerminePage() {
                                         }
 
                                         return (
-                                            <TableRow key={app.instanceId} className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
+                                            <TableRow 
+                                                key={app.instanceId} 
+                                                id={app.instanceId} 
+                                                ref={el => rowRefs.current[app.instanceId] = el}
+                                                className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
                                             <TableCell className="font-medium">
                                                 {displayTitle}
                                             </TableCell>
@@ -691,7 +681,6 @@ export default function VerwaltungTerminePage() {
         </div>
       </TooltipProvider>
 
-      {/* Absage-Dialog */}
       <AlertDialog
         open={isAbsageDialogOpen}
         onOpenChange={setIsAbsageDialogOpen}
@@ -725,7 +714,6 @@ export default function VerwaltungTerminePage() {
   );
 }
 
-// Sub-component to display response status and details
 interface ResponseStatusProps {
   appointment: UnrolledAppointment;
   allMembers: MemberProfile[];
