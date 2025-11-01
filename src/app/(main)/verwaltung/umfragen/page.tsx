@@ -35,8 +35,6 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  const nowTimestamp = Timestamp.now();
-  
   // *** BEGINN DER KORREKTUR: Spezifische Abfragen statt einer allgemeinen Abfrage ***
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
