@@ -1,7 +1,7 @@
 
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, WriteBatch } from 'firebase-admin/firestore';
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException } from './types';
 import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
 
@@ -60,7 +60,7 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
     // 2. Firestore Dokumente (users und members) aktualisieren
-    const batch = db.batch();
+    const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
     
@@ -176,7 +176,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       }
 
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const batch = db.batch();
+      const batch: WriteBatch = db.batch();
 
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
@@ -231,7 +231,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
         
       const exceptionsSnap = await getDocs(exceptionsQuery);
-      exceptionsSnap.forEach((doc: any) => batch.delete(doc.ref));
+      exceptionsSnap.forEach((doc: { ref: admin.firestore.DocumentReference<admin.firestore.DocumentData>; }) => batch.delete(doc.ref));
       
       await batch.commit();
       return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
