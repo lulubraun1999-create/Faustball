@@ -68,27 +68,20 @@ service cloud.firestore {
     
     // --- Collections with specific access logic ---
     match /polls/{pollId} {
-        // Allow any authenticated user to read/list all polls.
-        // Client-side queries handle filtering for visibility.
         allow read: if isSignedIn();
-        // Allow creating/deleting only for admins.
         allow create, delete: if isAdmin();
-        // Allow any authenticated user to vote (update the 'votes' array).
         allow update: if isSignedIn(); 
     }
 
     match /appointments/{appointmentId} {
-      // Allow read for any authenticated user. Client filters.
       allow read: if isSignedIn(); 
       allow write: if isAdmin();
     }
     
     match /appointmentResponses/{responseId} {
-      // Users can create their own responses.
-      // They can only read/update/delete their own responses. Admins have full access.
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin(); // Only admins can list ALL responses.
+      allow list: if isAdmin();
     }
 
     match /treasury/{transactionId} {
