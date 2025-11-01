@@ -69,9 +69,11 @@ service cloud.firestore {
     }
     
     match /polls/{pollId} {
+        // Allow any signed-in user to list and read all polls.
+        // The client-side queries will perform the actual filtering based on visibility.
         allow read: if isSignedIn();
         allow create, delete: if isAdmin();
-        // Allow any signed-in user to update (for voting)
+        // Allow any signed-in user to update (for voting).
         allow update: if isSignedIn();
     }
 
