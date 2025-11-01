@@ -73,16 +73,15 @@ service cloud.firestore {
     
     // --- Polls ---
     match /polls/{pollId} {
-      // allow read: if isSignedIn(); // OLD RULE
-      allow list, get: if isSignedIn(); // NEW RULE
+      allow list, get: if isSignedIn();
       allow create, delete: if isAdmin();
       allow update: if isSignedIn(); 
     }
 
     // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow list: if isSignedIn();
+      allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow write: if isAdmin();
     }
     
