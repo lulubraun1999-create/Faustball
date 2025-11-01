@@ -18,7 +18,9 @@ service cloud.firestore {
     }
     
     function isMemberOfTeams(teamIds) {
-        return isSignedIn() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
+        // Use `exists` for safer checking. The `get` would fail if the member doc doesn't exist.
+        return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
     // --- User & Member Data ---
