@@ -149,35 +149,18 @@ service cloud.firestore {
                     );
         
         // LIST: collection query - MUST BE SPECIFIC
-        // KORREKTUR: Die 'list'-Regel wurde angepasst, um die exakten Abfragen vom Client zu erlauben.
         allow list: if isSignedIn() && 
                     (
-                      isAdmin() // Admins dürfen immer alles auflisten.
+                      isAdmin() // Admins können immer alles auflisten.
                       ||
                       // Erlaubt die Abfrage für öffentliche, noch nicht abgelaufene Umfragen.
                       (
-                       request.query.keys().hasAll(['where', 'limit', 'orderBy']) &&
                        request.query.where[0] == ['visibility.type', '==', 'all'] &&
                        request.query.where[1] == ['endDate', '>=', request.time]
                       )
                       ||
                       // Erlaubt die Abfrage für Team-spezifische, noch nicht abgelaufene Umfragen.
                       (
-                       request.query.keys().hasAll(['where', 'limit', 'orderBy']) &&
-                       request.query.where[0] == ['visibility.type', '==', 'specificTeams'] &&
-                       request.query.where[1] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
-                       request.query.where[2] == ['endDate', '>=', request.time]
-                      )
-                       // NEU: Alte Abfragen erlauben (optional, aber sicherheitshalber)
-                      ||
-                      (
-                       request.query.keys().hasOnly(['where']) &&
-                       request.query.where[0] == ['visibility.type', '==', 'all'] &&
-                       request.query.where[1] == ['endDate', '>=', request.time]
-                      )
-                      ||
-                      (
-                       request.query.keys().hasOnly(['where']) &&
                        request.query.where[0] == ['visibility.type', '==', 'specificTeams'] &&
                        request.query.where[1] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
                        request.query.where[2] == ['endDate', '>=', request.time]
