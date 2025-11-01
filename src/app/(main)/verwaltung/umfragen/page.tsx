@@ -283,5 +283,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
 }
 
     
-
-    
