@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react'; // React importieren
@@ -40,9 +41,6 @@ export default function DashboardPage() {
     const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
     // 2. Alle Ausnahmen (für Entfaltung)
-    //    HINWEIS: Dies funktioniert NUR, wenn der Benutzer ein ADMIN ist (gemäß unseren Regeln)
-    //    Für normale Benutzer müssen wir die Logik anpassen oder die Regeln lockern.
-    //    Wir gehen vorerst davon aus, dass der Admin das Dashboard betrachtet.
     const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
@@ -66,6 +64,7 @@ export default function DashboardPage() {
             where('visibility.type', '==', 'all'),
             where('endDate', '>=', nowTimestamp),
             orderBy('endDate', 'asc'),
+            orderBy('createdAt', 'desc'),
             limit(3)
         ) : null),
         [firestore, user]
@@ -78,6 +77,7 @@ export default function DashboardPage() {
             where('visibility.teamIds', 'array-contains-any', userTeamIds),
             where('endDate', '>=', nowTimestamp),
             orderBy('endDate', 'asc'),
+            orderBy('createdAt', 'desc'),
             limit(3)
         ) : null),
         [firestore, user, userTeamIds]
@@ -331,3 +331,5 @@ export default function DashboardPage() {
         </div>
     );
 }
+
+    

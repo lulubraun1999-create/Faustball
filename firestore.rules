@@ -75,7 +75,6 @@ service cloud.firestore {
         // Admins can manage polls
         allow create, delete: if isAdmin();
         // Any signed-in user can vote (update the votes array).
-        // More specific rules could be added here if needed (e.g., check if user is in a visible team)
         allow update: if isSignedIn(); 
     }
 
