@@ -53,6 +53,7 @@ import {
   subMonths,
   addDays,
   addWeeks,
+  addHours
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -183,7 +184,7 @@ export default function KalenderPage() {
       const unroll = (currentDate: Date) => {
         const dateStr = format(currentDate, 'yyyy-MM-dd');
         const instanceId = `${app.id}_${dateStr}`;
-        const exception = exceptionsMap.get(instanceId);
+        const exception = exceptionsMap.get(`${app.id}_${format(currentDate, 'yyyy-MM-dd')}`);
 
         let instance: UnrolledAppointment = {
           ...app,
@@ -237,7 +238,7 @@ export default function KalenderPage() {
 
   const handleDownloadIcs = useCallback(() => {
     const events: ics.EventAttributes[] = filteredAppointments.map((app) => {
-      const startDateTime = app.startDate.toDate();
+      const startDateTime = app.instanceDate;
       const endDateTime = app.endDate ? app.endDate.toDate() : addHours(startDateTime, 1);
       const location = app.locationId ? locationsMap.get(app.locationId) : null;
       
@@ -266,12 +267,6 @@ export default function KalenderPage() {
     });
   }, [filteredAppointments, locationsMap]);
   
-  function addHours(date: Date, hours: number) {
-      const newDate = new Date(date);
-      newDate.setHours(newDate.getHours() + hours);
-      return newDate;
-  }
-
   const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
   const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
@@ -344,9 +339,6 @@ export default function KalenderPage() {
                   ))}
                 </div>
               </div>
-              <Button onClick={handleDownloadIcs} className="w-full mt-4">
-                <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
-              </Button>
             </CardContent>
           </Card>
         </div>
@@ -358,6 +350,9 @@ export default function KalenderPage() {
                       <CalendarIcon className="h-8 w-8 text-primary" />
                       <span className="text-2xl font-headline">Kalender</span>
                   </div>
+                   <Button onClick={handleDownloadIcs} variant="outline">
+                    <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
+                  </Button>
               </CardTitle>
                  <CardDescription>
                   Hier werden alle wichtigen Termine, Spiele und Trainingseinheiten angezeigt.
@@ -383,17 +378,20 @@ export default function KalenderPage() {
                         {appointmentsOnDay.map(app => (
                            <Tooltip key={app.virtualId}>
                            <TooltipTrigger asChild>
-                           <Link href={`/verwaltung/termine#${app.virtualId}`}>
                              <div className="p-1 rounded-md bg-primary/10 text-primary text-xs truncate cursor-pointer hover:bg-primary/20">
-                               <span>{app.isAllDay ? '' : format(app.startDate.toDate(), 'HH:mm')}</span> {app.title}
+                               <span>{app.isAllDay ? '' : format(app.instanceDate, 'HH:mm')}</span> {app.title}
                              </div>
-                            </Link>
                            </TooltipTrigger>
-                           <TooltipContent>
+                           <TooltipContent className="w-64">
                              <p className="font-bold">{app.title}</p>
-                             <p>{typesMap.get(app.appointmentTypeId)}</p>
-                             <p>{format(app.startDate.toDate(), 'dd.MM.yy HH:mm')} Uhr</p>
-                             {app.locationId && <p>{locationsMap.get(app.locationId)?.name}</p>}
+                             <p className="text-sm text-muted-foreground">{typesMap.get(app.appointmentTypeId)}</p>
+                             <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
+                             {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
+                             <Button asChild size="sm" className="mt-3 w-full">
+                               <Link href={`/verwaltung/termine#${app.virtualId}`}>
+                                 Details & Rückmeldung
+                               </Link>
+                             </Button>
                            </TooltipContent>
                          </Tooltip>
                         ))}
@@ -410,3 +408,4 @@ export default function KalenderPage() {
     </TooltipProvider>
   );
 }
+
