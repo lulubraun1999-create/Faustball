@@ -10,38 +10,46 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Use exists() for safer checks than get()
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+    
+    function isMemberOfTeams(teamIds) {
+        return exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
+    }
 
     // --- User & Member Data ---
-    // Users can read/update their own data. Admins have full access.
     match /users/{userId} {
       allow read, update: if isAdmin() || isOwner(userId);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn(); // Allow any signed-in user to create their own record
       allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      allow read, update: if isAdmin() || isOwner(memberId);
-      allow create: if isOwner(memberId);
+      // User can manage their own member data, admins can manage all
+      allow read, update, create: if isAdmin() || isOwner(memberId);
       allow delete: if isAdmin();
     }
 
     // --- Publicly Readable Data for any Signed-in User ---
     match /groups/{groupId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin(); // create, update, delete
 
+      // Allow reading members of any group, but only admins can change membership
       match /members/{memberId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
     }
     
+    // Appointment Types and Locations are public read for any signed-in user
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -52,44 +60,48 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // News are public read for any signed-in user
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
+    // Penalty catalog is public read for any signed-in user
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
     }
     
+    // Appointment exceptions are handled by appointment rules
     match /appointmentExceptions/{exceptionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
     // --- Collections with specific access logic ---
+    
+    // Polls can be read by anyone signed in. Client queries handle filtering.
     match /polls/{pollId} {
-        // Allow any signed-in user to read polls. 
-        // Client-side queries handle filtering. This is safe because queries are restrictive.
         allow read: if isSignedIn();
-        // Admins can manage polls
+        // Admins can create and delete polls
         allow create, delete: if isAdmin();
         // Any signed-in user can vote (update the votes array).
         allow update: if isSignedIn(); 
     }
 
+    // Appointments are readable by anyone, writteable by admins
     match /appointments/{appointmentId} {
       allow read: if isSignedIn(); 
       allow write: if isAdmin();
     }
     
+    // Users can create their own responses. They can manage their own, admins can manage all.
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
-      // Users can manage their own responses, admins can manage all.
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin(); // Only admins can list all responses for an appointment.
     }
 
+    // Treasury can be read by any signed-in user (client filters by team) but only written by admins.
     match /treasury/{transactionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
