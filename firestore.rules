@@ -12,7 +12,6 @@ service cloud.firestore {
     
     function getUserTeams() {
       let memberData = getMemberDoc(request.auth.uid).data;
-      // Stellt sicher, dass das Feld 'teams' existiert und eine Liste ist
       return memberData != null && 'teams' in memberData && memberData.teams is list ? memberData.teams : [];
     }
     
@@ -74,18 +73,6 @@ service cloud.firestore {
             allow write: if isSignedIn() && isAdmin();
         }
     }
-    
-    // --- /appointmentTypes/{typeId} ---
-    match /appointmentTypes/{typeId} {
-        allow read: if true;
-        allow write: if isSignedIn() && isAdmin();
-    }
-
-    // --- /locations/{locationId} ---
-    match /locations/{locationId} {
-        allow read: if true;
-        allow write: if isSignedIn() && isAdmin();
-    }
 
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
@@ -141,22 +128,17 @@ service cloud.firestore {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
       }
       
-      // Allow GET if the poll is public, or if the user is a member of one of the designated teams.
       allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
 
-      // KORREKTUR: Die 'list'-Regel wird so angepasst, dass sie die Abfragemuster vom Client erlaubt, OHNE 'get()' zu verwenden.
       allow list: if isSignedIn();
       
-      // Allow CREATE/DELETE only for admins.
       allow create, delete: if isSignedIn() && isAdmin();
       
-      // Allow UPDATE for admins, OR for users if they are only changing the 'votes' array and are allowed to see the poll.
       allow update: if isSignedIn() &&
                       (isAdmin() || 
                        (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
                       );
     }
-
 
     // --- /news/{newsId} ---
     match /news/{newsId} {
@@ -177,12 +159,43 @@ service cloud.firestore {
 
     // --- Absences ---
     match /absences/{absenceId} {
-        // A user can read, create, update, and delete their own absences.
-        // An admin can read anyone's absences.
         allow read, delete: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
         allow create: if isSignedIn() && isOwner(request.resource.data.userId);
         allow update: if isSignedIn() && isOwner(request.resource.data.userId);
         allow list: if isSignedIn() && isAdmin();
     }
+    
+    // --- Chat ---
+    match /chats/{roomId}/messages/{messageId} {
+        function isTeamRoomMember(roomId) {
+          let teamId = roomId.split('_')[1];
+          return teamId in getUserTeams();
+        }
+
+        // READ: 
+        // - 'all' room: any signed-in user
+        // - 'trainers' room: only admins
+        // - team rooms ('team_*'): only members of that team
+        allow read: if isSignedIn() && 
+                    (roomId == 'all' || 
+                     (roomId == 'trainers' && isAdmin()) ||
+                     (roomId.startsWith('team_') && isTeamRoomMember(roomId))
+                    );
+
+        // CREATE:
+        // - Same rules as read
+        // - User can only create messages as themselves
+        // - userName must match user's name
+        allow create: if read() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.userName == getMemberDoc(request.auth.uid).data.firstName + ' ' + getMemberDoc(request.auth.uid).data.lastName;
+        
+        // DELETE:
+        // - Admins can delete any message
+        // - Users can delete their own messages
+        allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
+    }
   }
 }
+
+  
