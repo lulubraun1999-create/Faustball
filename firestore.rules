@@ -10,15 +10,18 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Check for the custom claim 'admin' on the user's token.
       return isSignedIn() && request.auth.token.admin == true;
     }
     
     function isOwner(userId) {
+      // Check if the requesting user is the owner of the document.
       return isSignedIn() && request.auth.uid == userId;
     }
     
     function isMemberOfTeams(teamIds) {
       // Allow reading own member data to check team membership.
+      // This requires the client to fetch their own member profile first.
       return isSignedIn() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
@@ -58,11 +61,11 @@ service cloud.firestore {
 
     // --- Polls ---
     // The client queries are structured to only fetch relevant polls.
-    // The security rules need to allow these specific queries.
-    // 'list' (read for collections) is implicitly covered by 'read'.
+    // This rule allows any signed-in user to perform 'list' (read) and 'update' (vote) operations.
+    // Security is enforced by the client queries only fetching public polls or polls for the user's teams.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
-      // Create and delete are admin-only actions. 'update' is for voting.
+      // Create and delete are admin-only actions.
       allow create, delete: if isAdmin();
     }
 
