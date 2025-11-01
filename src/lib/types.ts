@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { FieldValue, Timestamp } from 'firebase/firestore';
 
 /**
  * Represents the core user data stored in Firestore under the /users collection.
@@ -99,8 +99,9 @@ export interface Appointment {
   rsvpDeadline?: Timestamp; // Optional deadline for responses
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
-  createdAt?: Timestamp; // Optional: Server timestamp when created
-  lastUpdated?: Timestamp;
+  createdAt?: Timestamp | FieldValue; // Optional: Server timestamp when created
+  lastUpdated?: Timestamp | FieldValue;
+  createdBy: string;
 }
 
 /**
@@ -134,8 +135,9 @@ export interface AppointmentException {
     description?: string; // Die neue Beschreibung für diesen Tag
     meetingPoint?: string; // Der neue Treffpunkt für diesen Tag
     meetingTime?: string; // Die neue Treffzeit für diesen Tag
+    isAllDay?: boolean; // Das neue isAllDay für diesen Tag
   };
-  createdAt: Timestamp; // Wann wurde die Ausnahme erstellt
+  createdAt?: Timestamp | FieldValue; // Wann wurde die Ausnahme erstellt
   userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
 }
 
