@@ -16,6 +16,10 @@ service cloud.firestore {
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
+    
+    function isMemberOf(teamId) {
+        return exists(/databases/$(database)/documents/members/$(request.auth.uid)) && teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams;
+    }
 
     // --- User & Member Data ---
     match /users/{userId} {
@@ -47,7 +51,6 @@ service cloud.firestore {
     }
 
     // --- Core Data Collections (Appointment Types & Locations) ---
-    // These are read by many, written by few.
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -70,17 +73,15 @@ service cloud.firestore {
     }
 
     // --- Appointment Exceptions ---
-    // Critical for displaying modified/cancelled appointments.
     match /appointmentExceptions/{exceptionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
     // --- Polls ---
-    // Users need to be able to list polls to see which ones apply to them.
-    // Client-side queries handle the actual filtering.
     match /polls/{pollId} {
-      // Allow any signed-in user to read polls and cast votes (update).
+      // Allow any signed-in user to READ/LIST polls. Client-side queries handle filtering.
+      // Allow users to VOTE (update) on any poll they can see.
       allow read, update: if isSignedIn();
       // Only admins can create or delete polls.
       allow create, delete: if isAdmin();
@@ -88,9 +89,8 @@ service cloud.firestore {
 
     // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      // Admins can read everything.
-      // Users can read appointments visible to 'all' or to their specific teams.
-      // This rule allows list queries to work. The client MUST apply the correct 'where' clauses.
+      // Allow any signed-in user to read any appointment document.
+      // The client query is responsible for filtering by team membership.
       allow read: if isSignedIn();
       // Only admins can create, update, or delete appointments.
       allow write: if isAdmin();
@@ -105,12 +105,9 @@ service cloud.firestore {
     }
 
     // --- Team Treasury ---
-    // This requires checking the user's teams, which is not possible in a 'list' rule without complex setup.
-    // A simpler approach for the MVP is to allow reads for admins only on the main list.
-    // Client can fetch transactions for specific teams if rules are adjusted later.
     match /treasury/{transactionId} {
       allow read: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) && resource.data.teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams);
-      allow list: if isAdmin(); // Only admins can list all transactions at once.
+      allow list: if isAdmin();
       allow write: if isAdmin();
     }
   }
