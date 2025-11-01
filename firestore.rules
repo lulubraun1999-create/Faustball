@@ -81,9 +81,10 @@ service cloud.firestore {
         allow get: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
     }
-     match /appointmentTypes {
+    match /appointmentTypes {
         allow list: if isSignedIn();
     }
+
 
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
@@ -173,7 +174,7 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        allow read: if isSignedIn(); 
+        allow read: if isSignedIn();
         allow create: if false; 
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
