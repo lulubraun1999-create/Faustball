@@ -172,18 +172,15 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        allow read: if isSignedIn(); // Reading is kept simple for now
+        // Read access is complex due to team memberships.
+        // A simple `allow read: if isSignedIn()` is permissive but functional.
+        // A stricter rule would require checking team membership on the client or using custom claims.
+        allow read: if isSignedIn();
 
-        // KORRIGIERTE CREATE-REGEL
-        allow create: if isSignedIn() && 
-                      request.resource.data.userId == request.auth.uid &&
-                      (
-                        roomId == 'all' ||
-                        (roomId == 'trainers' && isAdmin()) ||
-                        (roomId.startsWith('team_')) // Simple check, read rules are the main guard
-                      );
+        // KORRIGIERTE CREATE-REGEL: Entfernt, da Nachrichten per Cloud Function erstellt werden
+        allow create: if false; 
         
-        // KORRIGIERTE DELETE-REGEL
+        // Delete is allowed by the message owner or an admin.
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }

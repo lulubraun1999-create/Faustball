@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -9,17 +8,17 @@ import {
   useMemoFirebase,
   errorEmitter,
   FirestorePermissionError,
-  useDoc
+  useDoc,
+  initializeFirebase,
 } from '@/firebase';
 import {
   collection,
   query,
   orderBy,
-  addDoc,
-  serverTimestamp,
   deleteDoc,
   doc,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -65,6 +64,7 @@ export default function ChatPage() {
   const firestore = useFirestore();
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
   const [newMessage, setNewMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const memberProfileRef = useMemoFirebase(
       () => (user ? doc(firestore, 'members', user.uid) : null),
@@ -125,46 +125,50 @@ export default function ChatPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firestore || !user || !selectedRoom || !newMessage.trim()) return;
+    if (!user || !selectedRoom || !newMessage.trim()) return;
 
-    const messageData = {
-      userId: user.uid,
-      userName: `${userProfile?.firstName} ${userProfile?.lastName}`,
-      content: newMessage.trim(),
-      createdAt: serverTimestamp(),
-    };
-
-    const messagesColRef = collection(firestore, 'chats', selectedRoom.id, 'messages');
-
-    // Clear input optimistically
+    setIsSending(true);
+    const content = newMessage.trim();
+    const roomId = selectedRoom.id;
+    
+    // Optimistically clear input
     setNewMessage('');
 
-    // Use .catch() for error handling instead of try/catch
-    addDoc(messagesColRef, messageData)
-      .catch((serverError) => {
-        // This block will ONLY run if Firestore security rules deny the request
-        console.error("Firebase permission error on addDoc:", serverError);
+    try {
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+        const sendMessageFn = httpsCallable(functions, 'sendMessage');
+        
+        await sendMessageFn({ roomId, content });
+
+    } catch (error: any) {
+        console.error("Error calling sendMessage function:", error);
+        // Revert optimistic UI update
+        setNewMessage(content);
+        // Optionally show a toast to the user
         errorEmitter.emit(
           'permission-error',
           new FirestorePermissionError({
-            path: `chats/${selectedRoom.id}/messages`,
+            path: `chats/${roomId}/messages`,
             operation: 'create',
-            requestResourceData: messageData,
+            requestResourceData: { content },
           })
         );
-      });
+    } finally {
+        setIsSending(false);
+    }
   };
 
   const handleDeleteMessage = async (messageId: string) => {
     if (!firestore || !selectedRoom) return;
-    try {
-        await deleteDoc(doc(firestore, 'chats', selectedRoom.id, 'messages', messageId));
-    } catch(e) {
+    const docRef = doc(firestore, 'chats', selectedRoom.id, 'messages', messageId);
+    
+    deleteDoc(docRef).catch((e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `chats/${selectedRoom.id}/messages/${messageId}`,
+            path: docRef.path,
             operation: 'delete',
         }));
-    }
+    })
   };
 
   const isLoading = isUserLoading || isLoadingMember || isLoadingGroups;
@@ -266,9 +270,10 @@ export default function ChatPage() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder={`Nachricht in #${selectedRoom?.name || 'Chat'}...`}
                     autoComplete="off"
+                    disabled={isSending}
                 />
-                <Button type="submit" size="icon" disabled={!newMessage.trim()}>
-                    <Send className="h-4 w-4" />
+                <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
+                    {isSending ? <Loader2 className="h-4 w-4 animate-spin"/> : <Send className="h-4 w-4" />}
                 </Button>
             </form>
           </CardFooter>
