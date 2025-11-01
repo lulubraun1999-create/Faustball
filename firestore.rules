@@ -20,6 +20,7 @@ service cloud.firestore {
     
     function getMemberTeams(userId) {
       // Gets the teams array from the user's member profile.
+      // Important: Use path escaping for security rule variables.
       return get(/databases/$(database)/documents/members/$(userId)).data.teams;
     }
 
@@ -66,6 +67,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    
+    match /polls/{pollId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isAdmin();
+        // Allow any signed-in user to update (for voting)
+        allow update: if isSignedIn();
+    }
 
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
@@ -77,25 +85,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // --- Polls ---
-    // Any authenticated user can read (list and get) polls. Client-side queries handle filtering.
-    // Voting is an update operation, allowed for any signed-in user.
-    // Creating and deleting polls is admin-only.
-    match /polls/{pollId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); // Allows adding a vote to the votes array
-    }
-
     // --- Appointments & Responses ---
-    // Appointments can be read by any signed-in user if they are public ('all') 
-    // or if the user is a member of one of the specified teams.
+    // Allow listing the collection for any authenticated user.
+    // The client-side queries will perform the actual filtering.
+    // Individual document reads (get) are more constrained.
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn() && 
+      allow list: if isSignedIn(); 
+      allow get: if isSignedIn() && 
                    (resource.data.visibility.type == 'all' || 
                     (resource.data.visibility.teamIds.size() > 0 && 
                      getMemberTeams(request.auth.uid).hasAny(resource.data.visibility.teamIds)));
-      allow list: if isSignedIn(); // Allow collection queries for any signed-in user
       allow write: if isAdmin();
     }
     
