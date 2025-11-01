@@ -9,29 +9,25 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Custom claim 'admin' must be set to true.
       return isSignedIn() && request.auth.token.admin == true;
     }
 
     function isOwner(userId) {
+      // User is the owner of the document.
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    function isMemberOfAnyTeam() {
-      // This function relies on a 'teams' field in the /members/{userId} document.
-      // Make sure this field exists and is populated correctly for this rule to work.
-      return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
-    }
-    
-    function isMemberOfTeams(teamIds) {
-      let memberDoc = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
-      return isMemberOfAnyTeam() && 'teams' in memberDoc && memberDoc.teams.hasAny(teamIds);
+    function getMemberTeams(userId) {
+      // Gets the teams array from the user's member profile.
+      return get(/databases/$(database)/documents/members/$(userId)).data.teams;
     }
 
     // --- User & Member Data ---
-    // Users can only read/update their own data. Admins have full access.
+    // Users can read/update their own data. Admins have full access.
     match /users/{userId} {
       allow read, update: if isAdmin() || isOwner(userId);
-      allow create: if !exists(/databases/$(database)/documents/users/$(userId)); 
+      allow create: if isSignedIn(); 
       allow delete: if isAdmin();
     }
 
@@ -43,6 +39,7 @@ service cloud.firestore {
 
     // --- Publicly Readable Data for any Signed-in User ---
     // These collections can be listed and read by any authenticated user.
+    // Client-side queries handle the filtering of data relevant to the user.
     // Writes are restricted to admins.
     match /groups/{groupId} {
       allow read: if isSignedIn();
@@ -87,14 +84,18 @@ service cloud.firestore {
     match /polls/{pollId} {
       allow read: if isSignedIn();
       allow create, delete: if isAdmin();
-      allow update: if isSignedIn();
+      allow update: if isSignedIn(); // Allows adding a vote to the votes array
     }
 
     // --- Appointments & Responses ---
-    // Appointments can be read by any signed-in user.
-    // This allows client queries to filter based on team visibility.
+    // Appointments can be read by any signed-in user if they are public ('all') 
+    // or if the user is a member of one of the specified teams.
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && 
+                   (resource.data.visibility.type == 'all' || 
+                    (resource.data.visibility.teamIds.size() > 0 && 
+                     getMemberTeams(request.auth.uid).hasAny(resource.data.visibility.teamIds)));
+      allow list: if isSignedIn(); // Allow collection queries for any signed-in user
       allow write: if isAdmin();
     }
     
@@ -107,11 +108,10 @@ service cloud.firestore {
     }
 
     // --- Team Treasury ---
-    // Transactions can be listed by any member of any team.
-    // Getting a specific transaction is only allowed if the user is a member of that transaction's team.
+    // Admins can read/write everything.
+    // Authenticated users can only read transactions belonging to their teams.
     match /treasury/{transactionId} {
-      allow list: if isMemberOfAnyTeam() || isAdmin();
-      allow get: if (isMemberOfAnyTeam() && isMemberOfTeams([resource.data.teamId])) || isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && getMemberTeams(request.auth.uid).hasAny([resource.data.teamId]));
       allow write: if isAdmin();
     }
   }
