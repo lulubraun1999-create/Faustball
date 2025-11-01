@@ -101,7 +101,7 @@ service cloud.firestore {
 
         allow read: if isSignedIn() && (
                       isAdmin() ||
-                      resource.data.visibility.type == 'all' ||
+                      (resource.data.visibility.type == 'all') ||
                       isMemberOfVisibleTeam()
                     );
         allow write: if isSignedIn() && isAdmin();
@@ -147,7 +147,7 @@ service cloud.firestore {
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        // Let 'get' rule handle list queries implicitly
+        // Listen werden über die 'get'-Regel pro Dokument validiert, keine explizite 'list'-Regel nötig.
         allow list: if false; 
 
         allow create, delete: if isSignedIn() && isAdmin();
