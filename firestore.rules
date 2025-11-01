@@ -67,7 +67,7 @@ service cloud.firestore {
     // Polls can be listed/read by anyone signed in. Client queries handle filtering.
     // Users can vote (update), but only admins can create/delete.
     match /polls/{pollId} {
-        allow list, get: if isSignedIn();
+        allow read: if isSignedIn();
         allow create, delete: if isAdmin();
         // Any signed-in user can vote (update the votes array).
         allow update: if isSignedIn(); 
