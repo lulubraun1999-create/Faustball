@@ -9,8 +9,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Use exists() for safer checks. The get() will fail if the document or field doesn't exist.
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
@@ -22,14 +21,13 @@ service cloud.firestore {
     }
 
     function isMemberOfTeams(teamIds) {
-      // Check if the user is a member of any of the given teamIds
       return isMemberOfAnyTeam() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
     // --- User & Member Data ---
     match /users/{userId} {
       allow read, update: if isAdmin() || isOwner(userId);
-      allow create: if !exists(/databases/$(database)/documents/users/$(userId)); // Anyone can create their own user doc on signup.
+      allow create: if !exists(/databases/$(database)/documents/users/$(userId)); 
       allow delete: if isAdmin();
     }
 
@@ -73,14 +71,19 @@ service cloud.firestore {
     
     // --- Polls ---
     match /polls/{pollId} {
-      allow list, get: if isSignedIn(); // Allow listing by any signed-in user, client will filter.
+      // Allow any signed-in user to list/query the collection.
+      // Filtering is handled securely on the client side.
+      allow list, get: if isSignedIn();
       allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); // Allow users to vote (update the 'votes' array)
+      // Allow users to vote by updating the 'votes' array.
+      allow update: if isSignedIn(); 
     }
 
     // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      allow list: if isSignedIn(); // Allow listing so client can query and filter
+      // Allow listing so client can query and filter based on team membership.
+      allow list: if isSignedIn();
+      // Allow reading a single document only if it's public or the user is in a relevant team.
       allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow write: if isAdmin();
     }
@@ -92,9 +95,10 @@ service cloud.firestore {
     }
 
     // --- Team Treasury ---
-    // User can only see transactions of a team they are a member of.
     match /treasury/{transactionId} {
+      // Allow listing for any member of any team. Client will filter.
       allow list: if isMemberOfAnyTeam();
+      // Allow getting a single transaction only if user is admin or part of that specific team.
       allow get: if isAdmin() || (isMemberOfAnyTeam() && isMemberOfTeams([resource.data.teamId]));
       allow write: if isAdmin();
     }
