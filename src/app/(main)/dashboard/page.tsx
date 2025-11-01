@@ -55,33 +55,13 @@ export default function DashboardPage() {
     );
     const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
 
-    // 4. Aktuelle Umfragen (nur die sichtbaren)
-    const nowTimestamp = Timestamp.now();
-    //    - Query 1: Umfragen für 'all'
-    const currentPollsAllQuery = useMemoFirebase(
-        () => (firestore && user ? query(
-            collection(firestore, 'polls'),
-            where('visibility.type', '==', 'all'),
-            where('endDate', '>=', nowTimestamp),
-            orderBy('endDate', 'asc'),
-            limit(3)
-        ) : null),
-        [firestore, user]
+    // 4. Aktuelle Umfragen - Alle Umfragen laden und client-seitig filtern
+    const allPollsRef = useMemoFirebase(
+        () => (firestore ? collection(firestore, 'polls') : null),
+        [firestore]
     );
-    //    - Query 2: Umfragen für die eigenen Teams
-    const currentPollsTeamsQuery = useMemoFirebase(
-        () => (firestore && user && userTeamIds.length > 0 ? query(
-            collection(firestore, 'polls'),
-            // where('visibility.type', '==', 'specificTeams'), // This is implicit with teamIds filter
-            where('visibility.teamIds', 'array-contains-any', userTeamIds),
-            where('endDate', '>=', nowTimestamp),
-            orderBy('endDate', 'asc'),
-            limit(3)
-        ) : null),
-        [firestore, user, userTeamIds]
-    );
-    const { data: pollsAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(currentPollsAllQuery);
-    const { data: pollsTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(currentPollsTeamsQuery);
+    const { data: allPolls, isLoading: isLoadingPolls } = useCollection<Poll>(allPollsRef);
+
 
     // 5. Eigene Teams (basierend auf dem Member-Profil)
     const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
@@ -90,12 +70,21 @@ export default function DashboardPage() {
     
     // --- Datenverarbeitung ---
     
-    // Kombiniere und sortiere Umfragen
+    // Kombiniere und sortiere Umfragen - client-seitiges Filtern
     const currentPolls = useMemo(() => {
-        const combined = [...(pollsAll || []), ...(pollsTeams || [])];
-        const uniquePolls = Array.from(new Map(combined.map(poll => [poll.id, poll])).values());
-        return uniquePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
-    }, [pollsAll, pollsTeams]);
+        if (!allPolls) return [];
+        const now = new Date();
+        const visiblePolls = allPolls.filter(poll => {
+            const isPublic = poll.visibility.type === 'all';
+            const isTeamMember = poll.visibility.teamIds?.some(teamId => userTeamIds.includes(teamId));
+            return isPublic || isTeamMember;
+        });
+
+        const activePolls = visiblePolls.filter(poll => poll.endDate.toDate() >= now);
+        
+        return activePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
+    }, [allPolls, userTeamIds]);
+
 
     // Finde die Namen der eigenen Teams
     const myTeams = useMemo(() => {
@@ -191,7 +180,7 @@ export default function DashboardPage() {
     }, [appointments, exceptions, isLoadingExceptions, userTeamIds]);
 
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups;
 
     if (isLoading) {
         return (
@@ -330,5 +319,3 @@ export default function DashboardPage() {
         </div>
     );
 }
-
-    

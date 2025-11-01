@@ -11,7 +11,7 @@ import {
   FirestorePermissionError,
   useDoc,
 } from '@/firebase';
-import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, where, Timestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import type { Poll, MemberProfile } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,33 +35,22 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  // KORREKTUR: Explizite Abfragen für alle sichtbaren Umfragen (aktiv und abgelaufen)
-  const pollsForAllQuery = useMemoFirebase(
-    () => (firestore ? query(
-        collection(firestore, 'polls'), 
-        where('visibility.type', '==', 'all')
-    ) : null),
+  // Alle Umfragen laden
+  const allPollsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'polls') : null),
     [firestore]
   );
-  const { data: pollsForAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(pollsForAllQuery);
-
-  const pollsForTeamsQuery = useMemoFirebase(
-    () => (firestore && userTeamIds.length > 0
-        ? query(
-            collection(firestore, 'polls'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds)
-          )
-        : null),
-    [firestore, userTeamIds]
-  );
-  const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
+  const { data: allPolls, isLoading: isLoadingPolls } = useCollection<Poll>(allPollsRef);
   
-  // KORREKTUR: Kombinierte und eindeutige Liste aller sichtbaren Umfragen
+  // Client-seitiges Filtern der sichtbaren Umfragen
   const visiblePolls = useMemo(() => {
-    const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
-    return uniquePolls;
-  }, [pollsForAll, pollsForTeams]);
+    if (!allPolls) return [];
+    return allPolls.filter(poll => {
+      const isPublic = poll.visibility.type === 'all';
+      const isTeamMember = poll.visibility.teamIds?.some(teamId => userTeamIds.includes(teamId));
+      return isPublic || isTeamMember;
+    });
+  }, [allPolls, userTeamIds]);
 
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
@@ -151,7 +140,7 @@ export default function UmfragenPage() {
     return { activePolls: active, expiredPolls: expired };
   }, [visiblePolls]);
 
-  const isLoading = isLoadingPollsAll || isLoadingPollsTeams || isUserLoading || isLoadingMember;
+  const isLoading = isLoadingPolls || isUserLoading || isLoadingMember;
 
   if (isLoading) {
     return (
