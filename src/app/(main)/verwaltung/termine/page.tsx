@@ -105,30 +105,26 @@ export default function VerwaltungTerminePage() {
       [firestore, auth.user]
   );
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
-  
-  const appointmentsRef = useMemoFirebase(() => {
-    if (!firestore || !profile || !profile.teams || profile.teams.length === 0) return null;
-    return query(
-        collection(firestore, 'appointments'),
-        where('visibility.teamIds', 'array-contains-any', profile.teams)
-    );
-  }, [firestore, profile]);
-  const { data: teamAppointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
-  
-  const allPublicAppointmentsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-         collection(firestore, 'appointments'),
-         where('visibility.type', '==', 'all')
-     );
-  }, [firestore]);
-  const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(allPublicAppointmentsQuery);
+  const userTeamIds = useMemo(() => profile?.teams || [], [profile]);
 
+  // KORREKTUR: Explizite Abfragen für öffentliche und Team-Termine
+  const publicAppointmentsQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all')) : null),
+    [firestore]
+  );
+  const teamAppointmentsQuery = useMemoFirebase(
+    () => (firestore && userTeamIds.length > 0 ? query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds)) : null),
+    [firestore, userTeamIds]
+  );
+
+  const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(publicAppointmentsQuery);
+  const { data: teamAppointments, isLoading: teamAppointmentsLoading } = useCollection<Appointment>(teamAppointmentsQuery);
+
+  // Kombinierte, einzigartige Terminliste
   const appointments = useMemo(() => {
-    if (!teamAppointments && !publicAppointments) return [];
-    const all = [...(teamAppointments || []), ...(publicAppointments || [])];
+    const all = [...(publicAppointments || []), ...(teamAppointments || [])];
     return Array.from(new Map(all.map(app => [app.id, app])).values());
-  }, [teamAppointments, publicAppointments]);
+  }, [publicAppointments, teamAppointments]);
   
   const appointmentIds = useMemo(() => appointments?.map(app => app.id) || [], [appointments]);
   const exceptionsRef = useMemoFirebase(() => {
@@ -173,8 +169,8 @@ export default function VerwaltungTerminePage() {
   const isLoading =
     auth.isUserLoading ||
     profileLoading ||
-    appointmentsLoading ||
-    publicAppointmentsLoading ||
+    publicAppointmentsLoading || // Geändert
+    teamAppointmentsLoading || // Geändert
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
@@ -826,3 +822,5 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
+
+    

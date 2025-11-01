@@ -36,9 +36,25 @@ export default function DashboardPage() {
 
     // --- Angepasste Datenabfragen ---
 
-    // 1. Alle Termine (für Entfaltung)
-    const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
-    const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
+    // 1. Alle öffentlichen Termine & Termine für die eigenen Teams
+    const publicAppointmentsQuery = useMemoFirebase(
+        () => (firestore ? query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all')) : null),
+        [firestore]
+    );
+    const teamAppointmentsQuery = useMemoFirebase(
+        () => (firestore && userTeamIds.length > 0 ? query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds)) : null),
+        [firestore, userTeamIds]
+    );
+
+    const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
+    const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
+    
+    // Kombinierte, einzigartige Terminliste
+    const appointments = useMemo(() => {
+        const all = [...(publicAppointments || []), ...(teamAppointments || [])];
+        return Array.from(new Map(all.map(app => [app.id, app])).values());
+    }, [publicAppointments, teamAppointments]);
+
 
     // 2. Alle Ausnahmen (für Entfaltung)
     const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
@@ -64,7 +80,6 @@ export default function DashboardPage() {
             where('visibility.type', '==', 'all'),
             where('endDate', '>=', nowTimestamp),
             orderBy('endDate', 'asc'),
-            orderBy('createdAt', 'desc'),
             limit(3)
         ) : null),
         [firestore, user]
@@ -77,7 +92,6 @@ export default function DashboardPage() {
             where('visibility.teamIds', 'array-contains-any', userTeamIds),
             where('endDate', '>=', nowTimestamp),
             orderBy('endDate', 'asc'),
-            orderBy('createdAt', 'desc'),
             limit(3)
         ) : null),
         [firestore, user, userTeamIds]
@@ -108,7 +122,7 @@ export default function DashboardPage() {
 
     // Logik zum Entfalten der Termine
     const unrolledAppointments = useMemo(() => {
-        if (!appointments || isLoadingExceptions) return []; // Warte auf BEIDE Sammlungen
+        if (!appointments || isLoadingExceptions) return [];
         
         const exceptionsMap = new Map<string, AppointmentException>();
         exceptions?.forEach(ex => {
@@ -123,10 +137,6 @@ export default function DashboardPage() {
 
         appointments.forEach(app => {
             if (!app.startDate) return;
-
-            // Prüfe Sichtbarkeit der Serie
-            const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIds.includes(teamId)));
-            if (!isVisible) return; // Überspringe Termine, die nicht sichtbar sind
 
             const originalDateStartOfDay = startOfDay(app.startDate.toDate());
             const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
@@ -189,10 +199,10 @@ export default function DashboardPage() {
         
         return allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis()).slice(0, 5);
         
-    }, [appointments, exceptions, isLoadingExceptions, userTeamIds]);
+    }, [appointments, exceptions, isLoadingExceptions]);
 
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingPublicAppointments || isLoadingTeamAppointments || isLoadingExceptions || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
 
     if (isLoading) {
         return (

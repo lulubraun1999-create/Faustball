@@ -17,14 +17,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    function isMemberOfTeams(teamIds) {
-        // This function checks if the user is a member of any of the provided team IDs.
-        // It requires that the user has a document in the 'members' collection
-        // and that their 'teams' array field contains at least one of the teamIds.
-        return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
-               get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
-    }
-    
     // --- User & Member Data ---
     match /users/{userId} {
       // Users can read/update their own data, or an admin can.
@@ -63,18 +55,16 @@ service cloud.firestore {
     match /appointmentExceptions/{exceptionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /treasury/{transactionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
 
-    // --- Polls (Corrected Rule) ---
-    // Any signed-in user can read/list polls and update them (to vote).
-    // Only admins can create or delete polls.
+    // --- Polls ---
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
     }
 
     // --- Appointments ---
-    // Users can read appointments if they are public ('all') or if they are a member of one of the specified teams.
+    // KORREKTUR: Vereinfachte Regel. Client-Abfragen sind für die Filterung verantwortlich.
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
@@ -86,3 +76,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
