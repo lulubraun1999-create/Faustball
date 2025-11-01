@@ -134,22 +134,25 @@ export default function ChatPage() {
       createdAt: serverTimestamp(),
     };
 
-    try {
-      await addDoc(
-        collection(firestore, 'chats', selectedRoom.id, 'messages'),
-        messageData
-      );
-      setNewMessage('');
-    } catch (error) {
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: `chats/${selectedRoom.id}/messages`,
-          operation: 'create',
-          requestResourceData: messageData,
-        })
-      );
-    }
+    const messagesColRef = collection(firestore, 'chats', selectedRoom.id, 'messages');
+
+    // Clear input optimistically
+    setNewMessage('');
+
+    // Use .catch() for error handling instead of try/catch
+    addDoc(messagesColRef, messageData)
+      .catch((serverError) => {
+        // This block will ONLY run if Firestore security rules deny the request
+        console.error("Firebase permission error on addDoc:", serverError);
+        errorEmitter.emit(
+          'permission-error',
+          new FirestorePermissionError({
+            path: `chats/${selectedRoom.id}/messages`,
+            operation: 'create',
+            requestResourceData: messageData,
+          })
+        );
+      });
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -274,5 +277,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-  
