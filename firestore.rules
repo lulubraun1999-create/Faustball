@@ -74,10 +74,8 @@ service cloud.firestore {
     }
     
     // --- Polls ---
-    // Allow any signed-in user to LIST polls. The client queries handle the actual filtering.
-    // The `get` rule remains to secure individual document reads if ever needed.
     match /polls/{pollId} {
-      allow list: if isSignedIn(); // This is the key fix for collection queries.
+      allow list: if isSignedIn(); // Allow any signed-in user to query the collection.
       allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow update: if isSignedIn(); // Allow users to vote (update the 'votes' array)
       allow create, delete: if isAdmin();
