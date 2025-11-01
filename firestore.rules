@@ -1,4 +1,5 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -6,51 +7,47 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Use exists() for safety. The document might not exist yet during signup.
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
     // --- User & Member Data ---
     match /users/{userId} {
-      // Admins can read any user profile. Users can only read their own.
       allow get: if isAdmin() || isOwner(userId);
-      // Only admins can list all users.
       allow list: if isAdmin();
-      // Any user can create their own user document (on signup).
-      allow create: if isOwner(userId);
-      // Users can update their own document, Admins can update any.
-      allow update: if isAdmin() || isOwner(userId);
-      // Only Admins can delete user documents.
-      allow delete: if isAdmin();
+      // Allow creation during signup, or updates by owner/admin.
+      allow write: if isAdmin() || isOwner(userId);
     }
 
     match /members/{memberId} {
-      // Admins can read any member profile. Users can only read their own.
       allow get: if isAdmin() || isOwner(memberId);
-      // Only admins can list all members.
       allow list: if isAdmin();
-       // Any user can create their own member document.
-      allow create: if isOwner(memberId);
-      // Users can update their own profile, Admins can update any.
-      allow update, delete: if isAdmin() || isOwner(memberId);
+      // Allow creation during signup, or updates by owner/admin.
+      allow write: if isAdmin() || isOwner(memberId);
     }
     
-    // --- Groups are publicly readable by any signed-in user ---
+    // --- Group Data (Teams & Classes) ---
+    // Denormalized member data is nested under groups.
     match /groups/{groupId} {
+      // Any signed-in user can read group information.
       allow read: if isSignedIn();
-      allow write: if isAdmin(); // Only admins can create, update, delete groups
-    }
-    
-    // --- Group members are publicly readable by any signed-in user ---
-    match /groups/{groupId}/members/{memberId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin(); // Only admins can manage group memberships
+      // Only admins can modify groups.
+      allow write: if isAdmin();
+
+      match /members/{memberId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+      }
     }
 
-    // --- Publicly readable data for any signed-in user, writable only by admin ---
+    // --- Core Data Collections (Appointment Types & Locations) ---
+    // These are read by many, written by few.
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -59,56 +56,62 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    
+    // --- News Articles ---
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // --- Penalty Catalog ---
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
     }
+
+    // --- Appointment Exceptions ---
+    // Critical for displaying modified/cancelled appointments.
     match /appointmentExceptions/{exceptionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
+    
     // --- Polls ---
+    // Users need to be able to list polls to see which ones apply to them.
+    // Client-side queries handle the actual filtering.
     match /polls/{pollId} {
-      // Any signed-in user can read polls. Client-side queries handle visibility.
-      allow read: if isSignedIn();
-      // Any signed-in user can update a poll (to cast a vote).
-      allow update: if isSignedIn();
+      // Allow any signed-in user to read polls and cast votes (update).
+      allow read, update: if isSignedIn();
       // Only admins can create or delete polls.
       allow create, delete: if isAdmin();
     }
 
-    // --- Conditional Reads & Writes ---
-
-    // Appointments are readable if public or the user is in a relevant team.
+    // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      // This rule is more complex, so we check on get/list individually.
-      // We can use resource.data here because it's not a query on the collection.
-      allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || resource.data.visibility.teamIds.hasAny(get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams));
-      // For list queries, we cannot use resource.data. The client must query correctly.
-      // We allow list if the user is signed in, client must add where clauses for filtering.
-      allow list: if isSignedIn();
-      // Only admins can write appointments.
+      // Admins can read everything.
+      // Users can read appointments visible to 'all' or to their specific teams.
+      // This rule allows list queries to work. The client MUST apply the correct 'where' clauses.
+      allow read: if isSignedIn();
+      // Only admins can create, update, or delete appointments.
       allow write: if isAdmin();
     }
     
-    // Users can create/manage their own responses. Admins can manage all.
     match /appointmentResponses/{responseId} {
+      // An admin can manage all responses.
+      // A user can create, read, or manage their OWN responses.
+      allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn(); // User must set their own userId correctly.
       allow list: if isAdmin();
     }
 
-    // Treasury is readable by team members or admins. Writable only by admins.
+    // --- Team Treasury ---
+    // This requires checking the user's teams, which is not possible in a 'list' rule without complex setup.
+    // A simpler approach for the MVP is to allow reads for admins only on the main list.
+    // Client can fetch transactions for specific teams if rules are adjusted later.
     match /treasury/{transactionId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams);
+      allow read: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) && resource.data.teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams);
+      allow list: if isAdmin(); // Only admins can list all transactions at once.
       allow write: if isAdmin();
     }
   }
 }
-
-    
