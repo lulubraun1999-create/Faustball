@@ -185,10 +185,9 @@ service cloud.firestore {
         // CREATE:
         // - Same rules as read
         // - User can only create messages as themselves
-        // - userName must match user's name
+        // - userName check removed for performance and simplicity
         allow create: if read() &&
-                      request.resource.data.userId == request.auth.uid &&
-                      request.resource.data.userName == getMemberDoc(request.auth.uid).data.firstName + ' ' + getMemberDoc(request.auth.uid).data.lastName;
+                      request.resource.data.userId == request.auth.uid;
         
         // DELETE:
         // - Admins can delete any message
@@ -197,5 +196,3 @@ service cloud.firestore {
     }
   }
 }
-
-  
