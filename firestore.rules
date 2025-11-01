@@ -191,7 +191,7 @@ service cloud.firestore {
         allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && (
             roomId == 'all' ||
             (roomId == 'trainers' && isAdmin()) ||
-            roomId.startsWith('team_') // Simplified for safety; read rules still protect who sees what.
+            roomId.startsWith('team_')
         );
         
         // DELETE:
