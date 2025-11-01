@@ -35,6 +35,7 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
+  // KORREKTUR: Explizite Abfragen für alle sichtbaren Umfragen (aktiv und abgelaufen)
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
@@ -55,6 +56,7 @@ export default function UmfragenPage() {
   );
   const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
   
+  // KORREKTUR: Kombinierte und eindeutige Liste aller sichtbaren Umfragen
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
@@ -76,10 +78,14 @@ export default function UmfragenPage() {
     const existingVote = currentPoll.votes.find(v => v.userId === user.uid);
     
     try {
+        const batch = [];
         // First, remove the existing vote if there is one
         if (existingVote) {
-             await updateDoc(pollDocRef, { votes: arrayRemove(existingVote) });
+             batch.push(updateDoc(pollDocRef, { votes: arrayRemove(existingVote) }));
         }
+        
+        await Promise.all(batch);
+
         // Then, add the new vote
         const newVote = { userId: user.uid, optionId: optionId };
         await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
@@ -284,5 +290,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
-
-    
