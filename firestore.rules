@@ -148,17 +148,20 @@ service cloud.firestore {
       allow list: if isSignedIn() && (
                       // Admins can list anything
                       isAdmin() ||
-                      // Rule for "All" polls query from client
-                      (request.query.where.keys().hasAll(['visibility.type', 'endDate']) && 
-                       request.query.where['visibility.type'] == 'all' &&
-                       request.query.where.endDate >= timestamp.now()) ||
-                      // Rule for specific teams query from client
-                      (request.query.where.keys().hasAll(['visibility.teamIds', 'endDate']) &&
-                       request.query.where['visibility.teamIds'].hasAny(getUserTeams()) &&
-                       request.query.where.endDate >= timestamp.now()) ||
-                      // Rule for simpler client queries (umfragen page)
-                      (request.query.where.keys().hasAll(['visibility.type']) && request.query.where['visibility.type'] == 'all') ||
-                      (request.query.where.keys().hasAll(['visibility.teamIds']) && request.query.where['visibility.teamIds'].hasAny(getUserTeams()))
+                      // Rule for Dashboard "All" polls query
+                      (request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
+                       request.query.where[0] == ['visibility.type', '==', 'all'] &&
+                       request.query.where[1] == ['endDate', '>=', request.time]) ||
+                      // Rule for Dashboard "Teams" polls query
+                      (request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
+                       request.query.where[0] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
+                       request.query.where[1] == ['endDate', '>=', request.time]) ||
+                      // Rule for "umfragen" page "All" polls query
+                      (request.query.keys().hasAll(['where']) &&
+                       request.query.where[0] == ['visibility.type', '==', 'all']) ||
+                      // Rule for "umfragen" page "Teams" polls query
+                      (request.query.keys().hasAll(['where']) &&
+                       request.query.where[0] == ['visibility.teamIds', 'array-contains-any', getUserTeams()])
                     );
       
       // Allow CREATE/DELETE only for admins.
@@ -190,5 +193,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
