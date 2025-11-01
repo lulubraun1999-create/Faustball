@@ -141,19 +141,19 @@ service cloud.firestore {
             // Allow changing only the votes field.
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
-        
-        allow get: if isSignedIn() && (
-                    isAdmin() ||
-                    (resource.data.visibility.type == 'all') ||
-                    isMemberOfVisibleTeamForPoll()
-                    );
-        
-        // This rule allows the client to perform list queries.
-        // It is now safe because the client queries are backed by indexes and are specific.
-        allow list: if isSignedIn() 
-                    && (
-                      request.query.where.get('visibility.type', null) == 'all'
-                      || (request.query.where.get('visibility.type', null) == 'specificTeams' && request.query.where.get('visibility.teamIds', null) != null)
+
+        // CORRECTED READ RULE: Combine get and list
+        allow read: if isSignedIn() && 
+                    (
+                      // 'get' rule
+                      isAdmin() || (resource.data.visibility.type == 'all') || isMemberOfVisibleTeamForPoll() ||
+                      // 'list' rules
+                      (request.query.where.get('visibility.type', null) == 'all') ||
+                      (
+                        request.query.where.get('visibility.type', null) == 'specificTeams' &&
+                        request.query.where.get('visibility.teamIds', null) != null &&
+                        request.query.where.get('visibility.teamIds', null).hasAny(getUserTeams())
+                      )
                     );
         
         allow create, delete: if isSignedIn() && isAdmin();
