@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -36,6 +35,8 @@ export default function UmfragenPage() {
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
   const nowTimestamp = Timestamp.now();
+  
+  // *** BEGINN DER KORREKTUR: Spezifische Abfragen statt einer allgemeinen Abfrage ***
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
@@ -61,9 +62,11 @@ export default function UmfragenPage() {
   
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
+    // Eindeutige Umfragen sicherstellen, falls eine Umfrage sowohl 'all' als auch ein Team betrifft (sollte nicht passieren, aber sicher ist sicher)
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
     return uniquePolls;
   }, [pollsForAll, pollsForTeams]);
+  // *** ENDE DER KORREKTUR ***
 
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
@@ -80,9 +83,11 @@ export default function UmfragenPage() {
     const existingVote = currentPoll.votes.find(v => v.userId === user.uid);
     
     try {
+        // First, remove the existing vote if there is one
         if (existingVote) {
              await updateDoc(pollDocRef, { votes: arrayRemove(existingVote) });
         }
+        // Then, add the new vote
         const newVote = { userId: user.uid, optionId: optionId };
         await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
         
@@ -109,7 +114,10 @@ export default function UmfragenPage() {
       const currentPoll = visiblePolls?.find(p => p.id === pollId);
       const userVote = currentPoll?.votes.find(v => v.userId === user.uid);
 
-      if (!userVote) return;
+      if (!userVote) {
+          setVotingStates((prev) => ({ ...prev, [`retract-${pollId}`]: false }));
+          return;
+      }
       
       try {
           await updateDoc(pollDocRef, {
@@ -130,6 +138,7 @@ export default function UmfragenPage() {
     const active: Poll[] = [];
     const expired: Poll[] = [];
     
+    // We iterate over 'visiblePolls' now, which already contains only what the user should see.
     visiblePolls.forEach(poll => {
         if (isPast(poll.endDate.toDate())) {
             expired.push(poll);
@@ -164,7 +173,7 @@ export default function UmfragenPage() {
       <div className="space-y-8">
         <div>
             <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Aktive Umfragen</h2>
-            {activePolls && activePolls.length > 0 ? (
+            {activePolls.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {activePolls.map(poll => (
                         <PollCard key={poll.id} poll={poll} user={user} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
@@ -180,7 +189,7 @@ export default function UmfragenPage() {
 
          <div>
             <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Abgelaufene Umfragen</h2>
-            {expiredPolls && expiredPolls.length > 0 ? (
+            {expiredPolls.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {expiredPolls.map(poll => (
                         <PollCard key={poll.id} poll={poll} user={user} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
@@ -283,5 +292,3 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
-
-    
