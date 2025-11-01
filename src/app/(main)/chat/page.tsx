@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -145,7 +146,8 @@ export default function ChatPage() {
         console.error("Error calling sendMessage function:", error);
         // Revert optimistic UI update
         setNewMessage(content);
-        // Optionally show a toast to the user
+        
+        // This will now catch genuine errors from the cloud function
         errorEmitter.emit(
           'permission-error',
           new FirestorePermissionError({

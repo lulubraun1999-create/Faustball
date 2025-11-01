@@ -7,7 +7,6 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isAdmin() { return request.auth.token.admin == true; }
     
-    // KORRIGIERT: Prüft jetzt sicher für create, update und delete Operationen.
     function isOwner(userId) { 
       return request.auth.uid == userId;
     }
@@ -172,15 +171,8 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        // Read access is complex due to team memberships.
-        // A simple `allow read: if isSignedIn()` is permissive but functional.
-        // A stricter rule would require checking team membership on the client or using custom claims.
-        allow read: if isSignedIn();
-
-        // KORRIGIERTE CREATE-REGEL: Entfernt, da Nachrichten per Cloud Function erstellt werden
-        allow create: if false; 
-        
-        // Delete is allowed by the message owner or an admin.
+        allow read: if isSignedIn(); // Simplified read rule
+        allow create: if false; // All creates must go through the Cloud Function
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
