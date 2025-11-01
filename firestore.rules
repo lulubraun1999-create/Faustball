@@ -187,12 +187,12 @@ service cloud.firestore {
 
         // CREATE:
         // Allow creating a message if user is authenticated and the creator.
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid &&
-          (
+        // This rule is structured to be safe for write operations by avoiding `get()` calls.
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && (
             roomId == 'all' ||
             (roomId == 'trainers' && isAdmin()) ||
-            (roomId.startsWith('team_'))
-          );
+            roomId.startsWith('team_') // Simplified for safety; read rules still protect who sees what.
+        );
         
         // DELETE:
         // - Admins can delete any message
