@@ -310,3 +310,117 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden', error.message);
     }
 });
+
+/**
+ * Verarbeitet eine Abwesenheitsmeldung, indem sie für alle Termine des Benutzers im angegebenen Zeitraum
+ * eine Absage ("cancelled") als Ausnahme erstellt.
+ */
+export const processAbsence = onCall(async (request: CallableRequest) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    const userId = request.auth.uid;
+    const { startDate, endDate, reason } = request.data;
+    
+    if (!startDate || !endDate || !reason) {
+        throw new HttpsError('invalid-argument', 'Missing required fields: startDate, endDate, reason.');
+    }
+
+    const absenceStartDate = startOfDay(new Date(startDate));
+    const absenceEndDate = startOfDay(new Date(endDate));
+
+    if (!isDateValid(absenceStartDate) || !isDateValid(absenceEndDate)) {
+        throw new HttpsError('invalid-argument', 'Invalid date format provided.');
+    }
+
+    const batch = db.batch();
+    
+    // 1. Abwesenheit in der 'absences'-Sammlung speichern
+    const absenceRef = db.collection('absences').doc();
+    batch.set(absenceRef, {
+        userId,
+        startDate: Timestamp.fromDate(absenceStartDate),
+        endDate: Timestamp.fromDate(absenceEndDate),
+        reason,
+        createdAt: serverTimestamp(),
+    });
+
+    // 2. Relevante Termine finden und Ausnahmen erstellen
+    // Termine, die für den User sichtbar sind (alle oder spezifische Teams)
+    const memberDoc = await db.collection('members').doc(userId).get();
+    const userTeams = memberDoc.data()?.teams || [];
+
+    const publicAppointmentsQuery = db.collection('appointments').where('visibility.type', '==', 'all');
+    const teamAppointmentsQuery = userTeams.length > 0
+        ? db.collection('appointments').where('visibility.teamIds', 'array-contains-any', userTeams)
+        : null;
+
+    const [publicSnapshot, teamSnapshot] = await Promise.all([
+        publicAppointmentsQuery.get(),
+        teamAppointmentsQuery ? teamAppointmentsQuery.get() : Promise.resolve({ docs: [] }),
+    ]);
+
+    const allAppointmentsMap = new Map();
+    publicSnapshot.forEach(doc => allAppointmentsMap.set(doc.id, doc.data() as Appointment));
+    teamSnapshot.forEach(doc => allAppointmentsMap.set(doc.id, doc.data() as Appointment));
+
+    const exceptionsColRef = db.collection('appointmentExceptions');
+
+    for (const app of allAppointmentsMap.values()) {
+        if (!app.startDate) continue;
+
+        let currentDate = app.startDate.toDate();
+        const recurrenceEndDate = app.recurrenceEndDate ? app.recurrenceEndDate.toDate() : addDays(absenceEndDate, 1);
+
+        let iter = 0;
+        const MAX_ITERATIONS = 500; // Sicherheitsnetz gegen Endlosschleifen
+
+        while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
+            const currentDayStart = startOfDay(currentDate);
+
+            // Prüfen, ob der Termin im Abwesenheitszeitraum liegt
+            if (currentDayStart >= absenceStartDate && currentDayStart <= absenceEndDate) {
+                
+                // Ausnahme erstellen (oder aktualisieren, falls schon vorhanden)
+                const exceptionData: Omit<AppointmentException, 'id'> = {
+                    originalAppointmentId: app.id,
+                    originalDate: Timestamp.fromDate(currentDayStart),
+                    status: 'cancelled',
+                    userId: userId,
+                    createdAt: serverTimestamp()
+                };
+
+                // ID für die Ausnahme generieren, um Duplikate zu vermeiden.
+                const exceptionId = `${app.id}_${userId}_${format(currentDayStart, 'yyyy-MM-dd')}`;
+                const exceptionDocRef = exceptionsColRef.doc(exceptionId);
+
+                // Setzt (erstellt oder überschreibt) die Absage für diesen Tag
+                batch.set(exceptionDocRef, exceptionData, { merge: true });
+            }
+
+            if (!app.recurrence || app.recurrence === 'none') {
+                break; // Schleife verlassen, wenn es keine Wiederholung gibt
+            }
+
+            // Nächstes Datum berechnen
+            switch (app.recurrence) {
+                case 'daily': currentDate = addDays(currentDate, 1); break;
+                case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+                case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+                case 'monthly': currentDate = addMonths(currentDate, 1); break;
+                default: iter = MAX_ITERATIONS; break; // Schleife beenden
+            }
+            iter++;
+        }
+    }
+
+    try {
+        await batch.commit();
+        return { status: 'success', message: 'Absence processed and appointments cancelled.' };
+    } catch (error: any) {
+        console.error('Error processing absence:', error);
+        throw new HttpsError('internal', 'Could not process absence.', error.message);
+    }
+});
+

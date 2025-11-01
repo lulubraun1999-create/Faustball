@@ -57,7 +57,13 @@ const absenceSchema = z.object({
   startDate: z.string().min(1, 'Startdatum ist erforderlich.'),
   endDate: z.string().min(1, 'Enddatum ist erforderlich.'),
   reason: z.string().min(1, 'Ein Grund ist erforderlich (z.B. Urlaub, Krank).'),
-}).refine(data => data.endDate >= data.startDate, {
+}).refine(data => {
+    try {
+        return new Date(data.endDate) >= new Date(data.startDate);
+    } catch {
+        return false;
+    }
+}, {
     message: "Das Enddatum darf nicht vor dem Startdatum liegen.",
     path: ["endDate"],
 });
@@ -91,12 +97,9 @@ export default function VerwaltungAbwesenheitenPage() {
   const onSubmit = async (data: AbsenceFormValues) => {
     if (!firestore || !user) return;
 
-    const absenceData = {
+    // Daten für die Cloud Function vorbereiten (Datumsangaben als Strings)
+    const absenceDataForFunction = {
       ...data,
-      userId: user.uid,
-      startDate: parseISO(data.startDate),
-      endDate: parseISO(data.endDate),
-      createdAt: serverTimestamp(),
     };
 
     try {
@@ -104,11 +107,11 @@ export default function VerwaltungAbwesenheitenPage() {
       const functions = getFunctions(firebaseApp);
       const processAbsence = httpsCallable(functions, 'processAbsence');
 
-      await processAbsence(absenceData);
+      await processAbsence(absenceDataForFunction);
       
       toast({
         title: 'Abwesenheit gespeichert',
-        description: 'Deine Termine in diesem Zeitraum wurden automatisch abgesagt.',
+        description: 'Deine Termine in diesem Zeitraum wurden automatisch als abgesagt markiert.',
       });
       form.reset();
     } catch (error: any) {
@@ -302,3 +305,4 @@ export default function VerwaltungAbwesenheitenPage() {
     </div>
   );
 }
+

@@ -201,3 +201,16 @@ export interface TreasuryTransaction {
     memberId?: string;
     status: 'paid' | 'unpaid';
 }
+
+/**
+ * Represents a user's planned absence.
+ * Stored in Firestore under the /absences collection.
+ */
+export interface Absence {
+  id: string;
+  userId: string;
+  startDate: Timestamp;
+  endDate: Timestamp;
+  reason: string;
+  createdAt: Timestamp | FieldValue;
+}
