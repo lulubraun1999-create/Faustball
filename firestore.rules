@@ -131,31 +131,40 @@ service cloud.firestore {
     match /polls/{pollId} {
       function isMemberOfVisibleTeamForPoll() {
         let userTeams = getUserTeams();
-        return 'visibility' in resource.data &&
-               resource.data.visibility.type == 'specificTeams' &&
-               'teamIds' in resource.data.visibility &&
-               resource.data.visibility.teamIds.hasAny(userTeams);
+        // Check resource.data, not request.resource.data, as this is for read/get
+        return resource.data.visibility.type == 'specificTeams' &&
+               userTeams.hasAny(resource.data.visibility.teamIds);
       }
-    
+
       function isVoteChangeOnly() {
+        // Ensure only 'votes' can be changed by non-admins
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
       }
-    
+      
+      // Allow GET if the poll is public, or if the user is a member of one of the designated teams.
       allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
 
-      // Allow LIST operations only for specific, secure queries
-      allow list: if isSignedIn() &&
-                    (
-                      // Query for 'all' polls
-                      (request.query.where.keys().hasAll(['visibility.type', 'endDate']) &&
-                       request.query.where['visibility.type'] == 'all') ||
-                      // Query for user's teams' polls
+      // Allow LIST if the query is secure and matches what the client sends.
+      allow list: if isSignedIn() && (
+                      // Admins can list anything
+                      isAdmin() ||
+                      // Rule for "All" polls query from client
+                      (request.query.where.keys().hasAll(['visibility.type', 'endDate']) && 
+                       request.query.where['visibility.type'] == 'all' &&
+                       request.query.where['endDate'] >= timestamp.now()) ||
+                      // Rule for specific teams query from client
                       (request.query.where.keys().hasAll(['visibility.teamIds', 'endDate']) &&
-                       request.query.where['visibility.teamIds'].hasAny(getUserTeams()))
+                       request.query.where['visibility.teamIds'].hasAny(getUserTeams()) &&
+                       request.query.where['endDate'] >= timestamp.now()) ||
+                      // Rule for simpler client queries (umfragen page)
+                      (request.query.where.keys().hasAll(['visibility.type']) && request.query.where['visibility.type'] == 'all') ||
+                      (request.query.where.keys().hasAll(['visibility.teamIds']) && request.query.where['visibility.teamIds'].hasAny(getUserTeams()))
                     );
-
+      
+      // Allow CREATE/DELETE only for admins.
       allow create, delete: if isSignedIn() && isAdmin();
       
+      // Allow UPDATE for admins, OR for users if they are only changing the 'votes' array and are allowed to see the poll.
       allow update: if isSignedIn() &&
                       (isAdmin() || 
                        (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
