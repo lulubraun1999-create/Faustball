@@ -305,106 +305,106 @@ export default function KalenderPage() {
 
   return (
     <TooltipProvider>
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div className="md:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filter</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h3 className="font-semibold mb-2">Mannschaften</h3>
-                <div className="space-y-2">
-                  {userTeams.map(team => (
-                    <div key={team.id} className="flex items-center space-x-2">
-                      <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
-                        setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
-                      }}/>
-                      <Label htmlFor={`team-${team.id}`}>{team.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Terminarten</h3>
-                 <div className="space-y-2">
-                  {appointmentTypes?.map(type => (
-                    <div key={type.id} className="flex items-center space-x-2">
-                      <Checkbox id={`type-${type.id}`} checked={selectedTypes.includes(type.id)} onCheckedChange={checked => {
-                        setSelectedTypes(prev => checked ? [...prev, type.id] : prev.filter(id => id !== type.id))
-                      }}/>
-                      <Label htmlFor={`type-${type.id}`}>{type.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        <div className="md:col-span-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                      <CalendarIcon className="h-8 w-8 text-primary" />
-                      <span className="text-2xl font-headline">Kalender</span>
-                  </div>
-                   <Button onClick={handleDownloadIcs} variant="outline">
-                    <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
-                  </Button>
-              </CardTitle>
-                 <CardDescription>
-                  Hier werden alle wichtigen Termine, Spiele und Trainingseinheiten angezeigt.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border">
-                <Header />
-                <DayLabels />
-                <div className="grid grid-cols-7">
-                  {days.map((day) => {
-                    const appointmentsOnDay = filteredAppointments.filter(app => isSameDay(app.instanceDate, day));
-                    return (
-                    <div
-                      key={day.toString()}
-                      className={cn(
-                        "h-36 border-t border-r p-2 flex flex-col overflow-hidden",
-                        !isSameMonth(day, currentDate) && "bg-muted/50 text-muted-foreground"
-                      )}
-                    >
-                      <span className={cn("font-semibold", isSameDay(day, new Date()) && "text-primary font-bold")}>{format(day, 'd')}</span>
-                      <div className="mt-1 flex-grow overflow-y-auto space-y-1">
-                        {appointmentsOnDay.map(app => (
-                           <Tooltip key={app.virtualId}>
-                           <TooltipTrigger asChild>
-                             <div className="p-1 rounded-md bg-primary/10 text-primary text-xs truncate cursor-pointer hover:bg-primary/20">
-                               <span>{app.isAllDay ? '' : format(app.instanceDate, 'HH:mm')}</span> {app.title}
-                             </div>
-                           </TooltipTrigger>
-                           <TooltipContent className="w-64">
-                             <p className="font-bold">{app.title}</p>
-                             <p className="text-sm text-muted-foreground">{typesMap.get(app.appointmentTypeId)}</p>
-                             <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
-                             {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
-                             <Button asChild size="sm" className="mt-3 w-full">
-                               <Link href={`/verwaltung/termine#${app.virtualId}`}>
-                                 Details & Rückmeldung
-                               </Link>
-                             </Button>
-                           </TooltipContent>
-                         </Tooltip>
-                        ))}
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="md:col-span-1">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filter</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h3 className="font-semibold mb-2">Mannschaften</h3>
+                  <div className="space-y-2">
+                    {userTeams.map(team => (
+                      <div key={team.id} className="flex items-center space-x-2">
+                        <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
+                          setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
+                        }}/>
+                        <Label htmlFor={`team-${team.id}`}>{team.name}</Label>
                       </div>
-                    </div>
-                  )})}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <div>
+                  <h3 className="font-semibold mb-2">Terminarten</h3>
+                  <div className="space-y-2">
+                    {appointmentTypes?.map(type => (
+                      <div key={type.id} className="flex items-center space-x-2">
+                        <Checkbox id={`type-${type.id}`} checked={selectedTypes.includes(type.id)} onCheckedChange={checked => {
+                          setSelectedTypes(prev => checked ? [...prev, type.id] : prev.filter(id => id !== type.id))
+                        }}/>
+                        <Label htmlFor={`type-${type.id}`}>{type.name}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="md:col-span-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <CalendarIcon className="h-8 w-8 text-primary" />
+                        <span className="text-2xl font-headline">Kalender</span>
+                    </div>
+                    <Button onClick={handleDownloadIcs} variant="outline">
+                      <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
+                    </Button>
+                </CardTitle>
+                  <CardDescription>
+                    Hier werden alle wichtigen Termine, Spiele und Trainingseinheiten angezeigt.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-lg border">
+                  <Header />
+                  <DayLabels />
+                  <div className="grid grid-cols-7">
+                    {days.map((day) => {
+                      const appointmentsOnDay = filteredAppointments.filter(app => isSameDay(app.instanceDate, day));
+                      return (
+                      <div
+                        key={day.toString()}
+                        className={cn(
+                          "h-36 border-t border-r p-2 flex flex-col overflow-hidden",
+                          !isSameMonth(day, currentDate) && "bg-muted/50 text-muted-foreground"
+                        )}
+                      >
+                        <span className={cn("font-semibold", isSameDay(day, new Date()) && "text-primary font-bold")}>{format(day, 'd')}</span>
+                        <div className="mt-1 flex-grow overflow-y-auto space-y-1">
+                          {appointmentsOnDay.map(app => (
+                            <Tooltip key={app.virtualId}>
+                              <TooltipTrigger asChild>
+                                <div className="p-1 rounded-md bg-primary/10 text-primary text-xs truncate cursor-pointer hover:bg-primary/20">
+                                  <span>{app.isAllDay ? '' : format(app.instanceDate, 'HH:mm')}</span> {app.title}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="w-64">
+                                <p className="font-bold">{app.title}</p>
+                                <p className="text-sm text-muted-foreground">{typesMap.get(app.appointmentTypeId)}</p>
+                                <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
+                                {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
+                                <Button asChild size="sm" className="mt-3 w-full">
+                                  <Link href={`/verwaltung/termine#${app.virtualId}`}>
+                                    Details & Rückmeldung
+                                  </Link>
+                                </Button>
+                              </TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </div>
+                      </div>
+                    )})}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
     </TooltipProvider>
   );
 }
