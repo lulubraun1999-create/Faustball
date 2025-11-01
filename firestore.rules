@@ -88,6 +88,8 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+
+
     match /penalties/{penaltyId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
