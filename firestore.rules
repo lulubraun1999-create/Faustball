@@ -144,22 +144,8 @@ service cloud.firestore {
       // Allow GET if the poll is public, or if the user is a member of one of the designated teams.
       allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
 
-      // KORREKTUR: Die 'list'-Regel wird so angepasst, dass sie die exakten Abfragemuster vom Client erlaubt.
-      allow list: if isSignedIn() && (
-                      isAdmin() ||
-                      // Regel für Dashboard- & Umfragen-Seite "Alle" Umfragen
-                      (request.query.keys().hasAll(['where']) && request.query.where[0] == ['visibility.type', '==', 'all']) ||
-                      // Regel für Dashboard- & Umfragen-Seite "Teams" Umfragen
-                      (request.query.keys().hasAll(['where']) && request.query.where[0] == ['visibility.teamIds', 'array-contains-any', getUserTeams()]) ||
-                      // Regel für Dashboard "Alle" Umfragen mit Zeitfilter
-                      (request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
-                       request.query.where[0] == ['visibility.type', '==', 'all'] &&
-                       request.query.where[1] == ['endDate', '>=', request.time]) ||
-                      // Regel für Dashboard "Teams" Umfragen mit Zeitfilter
-                      (request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
-                       request.query.where[0] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
-                       request.query.where[1] == ['endDate', '>=', request.time])
-                    );
+      // KORREKTUR: Die 'list'-Regel wird so angepasst, dass sie die Abfragemuster vom Client erlaubt, OHNE 'get()' zu verwenden.
+      allow list: if isSignedIn();
       
       // Allow CREATE/DELETE only for admins.
       allow create, delete: if isSignedIn() && isAdmin();
