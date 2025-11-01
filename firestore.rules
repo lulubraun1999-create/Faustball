@@ -170,8 +170,8 @@ service cloud.firestore {
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
         function isTeamRoomMember(roomId) {
-            let userTeams = getUserTeams();
             // This function is only safe for `get`.
+            let userTeams = getUserTeams();
             return roomId.startsWith('team_') && userTeams.hasAny([roomId.split('_')[1]]);
         }
 
