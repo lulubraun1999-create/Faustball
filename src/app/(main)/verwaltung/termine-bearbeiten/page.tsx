@@ -13,7 +13,9 @@ import {
   FirestorePermissionError,
   useUser,
   useDoc,
+  initializeFirebase, // For functions
 } from '@/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions'; // For functions
 import {
   collection,
   doc,
@@ -687,257 +689,73 @@ function AdminTerminePageContent() {
   };
 
   async function handleSaveSingleOnly() {
-    if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user)
-      return;
+    if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
-
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = pendingUpdateData.endDate
-      ? new Date(pendingUpdateData.endDate)
-      : null;
-    const originalDateStartOfDay = startOfDay(originalDate);
-
     try {
-      if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-        throw new Error('Ungültiges Datum im Formular.');
-      }
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+        const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-      const exceptionsColRef = collection(firestore, 'appointmentExceptions');
-      const existingException = exceptions?.find(
-        (ex) =>
-          ex.originalAppointmentId === selectedInstanceToEdit.originalId &&
-          isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
-      );
+        await saveSingleException({
+            pendingUpdateData,
+            selectedInstanceToEdit,
+            exceptions: exceptions || [],
+        });
 
-      const modifiedData: AppointmentException['modifiedData'] = {};
-      const formatForCompare = (ts: Timestamp | undefined) =>
-        ts ? ts.toMillis() : null;
-      const newStartMillis = Timestamp.fromDate(newStartDate).toMillis();
-      const newEndMillis = newEndDate
-        ? Timestamp.fromDate(newEndDate).toMillis()
-        : null;
+        toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
-      if (newStartMillis !== selectedInstanceToEdit.startDate.toMillis())
-        modifiedData.startDate = Timestamp.fromDate(newStartDate);
-      if (newEndMillis !== formatForCompare(selectedInstanceToEdit.endDate))
-        modifiedData.endDate = newEndDate
-          ? Timestamp.fromDate(newEndDate)
-          : undefined;
-          
-      if (pendingUpdateData.isAllDay !== (selectedInstanceToEdit.isAllDay ?? false))
-        modifiedData.isAllDay = pendingUpdateData.isAllDay;
-
-      const typeName = typesMap.get(selectedInstanceToEdit.appointmentTypeId);
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault =
-        !isSonstiges && selectedInstanceToEdit.title === typeName;
-      const originalDisplayTitle = titleIsDefault
-        ? ''
-        : selectedInstanceToEdit.title;
-
-      if (pendingUpdateData.title !== originalDisplayTitle) {
-        modifiedData.title =
-          pendingUpdateData.title && pendingUpdateData.title.trim() !== ''
-            ? pendingUpdateData.title.trim()
-            : typeName || 'Termin';
-      }
-
-      if (
-        pendingUpdateData.locationId !== (selectedInstanceToEdit.locationId ?? '')
-      )
-        modifiedData.locationId = pendingUpdateData.locationId || undefined;
-      if (
-        pendingUpdateData.description !==
-        (selectedInstanceToEdit.description ?? '')
-      )
-        modifiedData.description = pendingUpdateData.description || undefined;
-      if (
-        pendingUpdateData.meetingPoint !==
-        (selectedInstanceToEdit.meetingPoint ?? '')
-      )
-        modifiedData.meetingPoint = pendingUpdateData.meetingPoint || undefined;
-      if (
-        pendingUpdateData.meetingTime !==
-        (selectedInstanceToEdit.meetingTime ?? '')
-      )
-        modifiedData.meetingTime = pendingUpdateData.meetingTime || undefined;
-
-      if (Object.keys(modifiedData).length === 0) {
+    } catch (error: any) {
         toast({
-          title: 'Keine Änderungen',
-          description: 'Es wurden keine Änderungen vorgenommen.',
+            variant: "destructive",
+            title: "Fehler beim Speichern",
+            description: error.message || "Die Änderung konnte nicht gespeichert werden.",
         });
-        if (existingException && existingException.status === 'modified') {
-          const docRef = doc(
-            firestore,
-            'appointmentExceptions',
-            existingException.id
-          );
-          await deleteDoc(docRef);
-          toast({
-            title: 'Änderung zurückgesetzt',
-            description: 'Die Ausnahme für diesen Termin wurde entfernt.',
-          });
-        }
-        resetSingleInstanceDialogs();
+    } finally {
         setIsSubmitting(false);
-        return;
-      }
-
-      const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: serverTimestamp(),
-        userId: user.uid,
-      };
-
-      if (existingException) {
-        const docRef = doc(
-          firestore,
-          'appointmentExceptions',
-          existingException.id
-        );
-        await updateDoc(docRef, {
-          modifiedData: modifiedData,
-          status: 'modified',
-          userId: user.uid,
-        });
-        toast({ title: 'Terminänderung aktualisiert.' });
-      } else {
-        await addDoc(exceptionsColRef, exceptionData);
-        toast({ title: 'Termin erfolgreich geändert (Ausnahme erstellt).' });
-      }
-    } catch (error: any) {
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: 'appointmentExceptions',
-          operation: 'create',
-          requestResourceData: pendingUpdateData,
-        })
-      );
-    } finally {
-      setIsSubmitting(false);
-      resetSingleInstanceDialogs();
+        resetSingleInstanceDialogs();
     }
   }
-
+  
   async function handleSaveForFuture() {
-    if (!pendingUpdateData || !selectedInstanceToEdit || !firestore || !user)
-      return;
-
+    if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
-    const batch = writeBatch(firestore);
-
     try {
-      const originalAppointmentRef = doc(
-        firestore,
-        'appointments',
-        selectedInstanceToEdit.originalId
-      );
-      const originalAppointmentSnap = await getDoc(originalAppointmentRef);
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+        const saveFutureInstances = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      if (!originalAppointmentSnap.exists())
-        throw new Error('Original-Terminserie nicht gefunden');
-
-      const originalAppointmentData =
-        originalAppointmentSnap.data() as Appointment;
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
-      const dayBefore = addDays(instanceDate, -1);
-
-      // Step 1: Create the new series data object
-      const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate
-        ? new Date(pendingUpdateData.endDate)
-        : undefined;
-
-      const typeName = typesMap.get(
-        originalAppointmentData.appointmentTypeId
-      );
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault =
-        !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault
-        ? ''
-        : originalAppointmentData.title;
-
-      const finalTitle =
-        pendingUpdateData.title !== originalDisplayTitle
-          ? pendingUpdateData.title && pendingUpdateData.title.trim() !== ''
-            ? pendingUpdateData.title.trim()
-            : typeName
-          : originalAppointmentData.title;
-
-      const newAppointmentData: Omit<Appointment, 'id'> = {
-        ...originalAppointmentData,
-        title: finalTitle || 'Termin',
-        locationId:
-          pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description:
-          pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint:
-          pendingUpdateData.meetingPoint ??
-          originalAppointmentData.meetingPoint,
-        meetingTime:
-          pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        isAllDay:
-          pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-        createdBy: user.uid, // IMPORTANT: New creator is the current user
-        createdAt: serverTimestamp(), // IMPORTANT: New creation timestamp
-        lastUpdated: serverTimestamp(),
-      };
-
-      // Step 2: Add new appointment to batch
-      const newAppointmentRef = doc(collection(firestore, 'appointments'));
-      batch.set(newAppointmentRef, newAppointmentData);
-
-      // Step 3: Update old appointment's recurrence end date
-      const originalStartDate = originalAppointmentData.startDate.toDate();
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, {
-          recurrenceEndDate: Timestamp.fromDate(dayBefore),
+        const typesMapForFunction: Record<string, string> = {};
+        typesMap.forEach((value, key) => {
+          typesMapForFunction[key] = value;
         });
-      } else {
-        batch.delete(originalAppointmentRef);
-      }
+        
+        await saveFutureInstances({
+            pendingUpdateData,
+            selectedInstanceToEdit,
+            typesMap: typesMapForFunction,
+        });
 
-      // Step 4: Delete old exceptions that are now part of the new series
-      const exceptionsQuery = query(
-        collection(firestore, 'appointmentExceptions'),
-        where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
-        where(
-          'originalDate',
-          '>=',
-          Timestamp.fromDate(startOfDay(instanceDate))
-        )
-      );
-      const exceptionsSnap = await getDocs(exceptionsQuery);
-      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
+        toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
 
-      // Step 5: Commit batch
-      await batch.commit();
-
-      toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
-      console.error('Error splitting appointment series:', error);
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({
-          path: 'appointments',
-          operation: 'write',
-        })
-      );
+        console.error('Error splitting appointment series:', error);
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: error.message || "Die Terminserie konnte nicht aktualisiert werden.",
+        });
+        // Optional: Re-emit a generic error if needed for global handlers
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'appointments', // This is a complex operation, path is indicative
+            operation: 'write',
+            requestResourceData: { info: 'saveFutureAppointmentInstances failed' }
+        }));
     } finally {
-      setIsSubmitting(false);
-      resetSingleInstanceDialogs();
+        setIsSubmitting(false);
+        resetSingleInstanceDialogs();
     }
   }
+
 
   const handleCancelSingleInstance = async (
     appointment: UnrolledAppointment
