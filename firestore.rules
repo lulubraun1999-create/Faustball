@@ -8,7 +8,6 @@ service cloud.firestore {
     function isAdmin() { return request.auth.token.admin == true; }
     
     function isOwner(userId) { 
-      // Correctly handle create vs. read/update
       return request.auth.uid == userId;
     }
     
@@ -20,15 +19,6 @@ service cloud.firestore {
       let memberData = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
       return "teams" in memberData ? memberData.teams : [];
     }
-    
-    function isMemberOfDocTeamResource() {
-      let userTeams = getUserTeams(); 
-      return isSignedIn() &&
-             resource != null && resource.data != null &&
-             resource.data.keys().hasAny(['teamId']) &&
-             userTeams.size() > 0 &&
-             userTeams.hasAny([resource.data.teamId]);
-    }
 
     // --- /users/{userId} ---
     match /users/{userId} {
@@ -38,7 +28,6 @@ service cloud.firestore {
                  (!('role' in request.resource.data) || request.resource.data.role == 'user');
       }
       function isUpdatingOwnDocument() { 
-          // Regular users cannot change their own role.
           return request.auth.uid == userId && !('role' in request.resource.data); 
       }
       
@@ -55,7 +44,6 @@ service cloud.firestore {
             return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; 
         }
         function isUpdatingOwnProfile() {
-            // Check that the user is updating their own document and not changing critical fields
             return request.auth.uid == memberId && 
                    request.resource.data.userId == resource.data.userId &&
                    !('role' in request.resource.data);
@@ -70,11 +58,11 @@ service cloud.firestore {
 
     // --- /groups/** ---
     match /groups/{groupId} {
-        allow read: if true;
+        allow read: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
         
         match /members/{memberId} {
-            allow read: if true;
+            allow read: if isSignedIn();
             allow write: if isSignedIn() && isAdmin();
         }
     }
@@ -92,7 +80,6 @@ service cloud.firestore {
         allow list: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
     }
-
 
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
@@ -138,22 +125,17 @@ service cloud.firestore {
     match /polls/{pollId} {
       function isMemberOfVisibleTeamForPoll() {
         let userTeams = getUserTeams();
-        // Check resource.data, not request.resource.data, as this is for read/get
         return resource.data.visibility.type == 'specificTeams' &&
                userTeams.hasAny(resource.data.visibility.teamIds);
       }
 
       function isVoteChangeOnly() {
-        // Ensure only 'votes' can be changed by non-admins
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
       }
       
       allow get: if isSignedIn() && (isAdmin() || resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll());
-
       allow list: if isSignedIn();
-      
       allow create, delete: if isSignedIn() && isAdmin();
-      
       allow update: if isSignedIn() &&
                       (isAdmin() || 
                        (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
@@ -162,18 +144,18 @@ service cloud.firestore {
 
     // --- /news/{newsId} ---
     match /news/{newsId} {
-        allow read: if true;
+        allow read: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- Treasury & Penalties ---
     match /treasury/{transactionId} {
-        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+        allow read: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
     }
 
     match /penalties/{penaltyId} {
-       allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+       allow read: if isSignedIn();
        allow write: if isSignedIn() && isAdmin();
     }
 
@@ -187,8 +169,8 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        allow read: if isSignedIn(); // Simplified read rule
-        allow create: if false; // All creates must go through the Cloud Function
+        allow read: if isSignedIn(); 
+        allow create: if false; 
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
