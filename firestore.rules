@@ -9,7 +9,6 @@ service cloud.firestore {
     
     // KORRIGIERT: Prüft jetzt sicher für create, update und delete Operationen.
     function isOwner(userId) { 
-      // Bei 'create' existiert 'resource.data' noch nicht, daher 'request.resource.data' verwenden.
       return request.auth.uid == userId;
     }
     
@@ -173,14 +172,15 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn(); // Reading is kept simple for now
 
         // KORRIGIERTE CREATE-REGEL
-        allow create: if isSignedIn() &&
-                      isOwner(request.resource.data.userId) && (
+        allow create: if isSignedIn() && 
+                      request.resource.data.userId == request.auth.uid &&
+                      (
                         roomId == 'all' ||
                         (roomId == 'trainers' && isAdmin()) ||
-                        roomId.startsWith('team_')
+                        (roomId.startsWith('team_')) // Simple check, read rules are the main guard
                       );
         
         // KORRIGIERTE DELETE-REGEL
