@@ -70,15 +70,19 @@ service cloud.firestore {
     // --- /locations/{locationId} ---
     match /locations/{locationId} {
         allow get: if isSignedIn();
-        allow list: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
+    }
+    match /locations {
+        allow list: if isSignedIn();
     }
     
     // --- /appointmentTypes/{typeId} ---
     match /appointmentTypes/{typeId} {
         allow get: if isSignedIn();
-        allow list: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
+    }
+     match /appointmentTypes {
+        allow list: if isSignedIn();
     }
 
     // --- /appointments/{appointmentId} ---
