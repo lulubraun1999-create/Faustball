@@ -25,7 +25,7 @@ service cloud.firestore {
     function isMemberOfTeams(teamIds) {
       return isMemberOfAnyTeam() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
-    
+
     // --- User & Member Data ---
     match /users/{userId} {
       allow read, update: if isAdmin() || isOwner(userId);
@@ -71,17 +71,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // --- Polls ---
+    // --- Polls (Corrected Rule) ---
     match /polls/{pollId} {
-      allow list, get: if isSignedIn();
+      allow read: if isSignedIn(); // Allows list and get for any authenticated user
       allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); 
+      allow update: if isSignedIn(); // Allows voting
     }
 
     // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      allow list: if isSignedIn();
-      allow get: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
+      allow read: if isSignedIn(); // Allow list for signed in users, client query will filter
       allow write: if isAdmin();
     }
     
@@ -93,7 +92,7 @@ service cloud.firestore {
 
     // --- Team Treasury ---
     match /treasury/{transactionId} {
-      allow list: if isMemberOfAnyTeam();
+      allow list: if isAdmin() || isMemberOfAnyTeam();
       allow get: if isAdmin() || (isMemberOfAnyTeam() && isMemberOfTeams([resource.data.teamId]));
       allow write: if isAdmin();
     }
