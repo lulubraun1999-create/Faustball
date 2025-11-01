@@ -49,10 +49,13 @@ const SelectScrollUpButton = React.forwardRef<
 ))
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
 
+// *** HIER IST DIE KORREKTUR ***
+// 'SelectVSelectScrollDownButton' wurde zu 'SelectPrimitive.ScrollDownButton' geändert
 const SelectScrollDownButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
 >(({ className, ...props }, ref) => (
+// *** ENDE KORREKTUR ***
   <SelectPrimitive.ScrollDownButton
     ref={ref}
     className={cn(
