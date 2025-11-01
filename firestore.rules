@@ -18,18 +18,24 @@ service cloud.firestore {
     }
     
     function isMemberOfTeams(teamIds) {
+        // This function checks if the user is a member of any of the provided team IDs.
+        // It requires that the user has a document in the 'members' collection
+        // and that their 'teams' array field contains at least one of the teamIds.
         return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
                get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
     
     // --- User & Member Data ---
     match /users/{userId} {
+      // Users can read/update their own data, or an admin can.
+      // Anyone signed in can create a user document (on registration).
       allow read, update: if isOwner(userId) || isAdmin();
       allow create: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
+      // Members can read/update their own profile, or an admin can.
       allow read, update: if isOwner(memberId) || isAdmin();
       allow create: if isSignedIn();
       allow delete: if isAdmin();
@@ -37,16 +43,19 @@ service cloud.firestore {
 
     // --- Groups & Group Membership ---
     match /groups/{groupId} {
+      // Any signed-in user can read group information. Only admins can modify it.
       allow read: if isSignedIn();
       allow write: if isAdmin();
 
       match /members/{memberId} {
+        // Denormalized group member data is readable by anyone signed in, writable by admins.
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
     }
     
-    // --- Publicly Readable Collections (excluding polls for clarity) ---
+    // --- Publicly Readable Collections ---
+    // These collections can be read by any signed-in user. Only admins can write to them.
     match /appointmentTypes/{typeId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /locations/{locationId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /news/{newsId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
@@ -63,12 +72,14 @@ service cloud.firestore {
     }
 
     // --- Appointments ---
+    // Users can read appointments if they are public ('all') or if they are a member of one of the specified teams.
     match /appointments/{appointmentId} {
       allow read: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
       allow write: if isAdmin();
     }
     
     // --- Appointment Responses ---
+    // Users can create their own responses. They can only manage their own responses. Admins can manage all.
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
