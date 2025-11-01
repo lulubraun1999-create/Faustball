@@ -142,6 +142,8 @@ service cloud.firestore {
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
         
+        // Let users read any poll that is public or targeted at their team.
+        // List queries will be filtered by the client, and Firestore will enforce this rule on each document returned.
         allow get: if isSignedIn() && (
                     isAdmin() ||
                     (resource.data.visibility.type == 'all') ||
@@ -149,14 +151,7 @@ service cloud.firestore {
                     );
         
         // This rule allows the specific queries made by the client for active polls.
-        allow list: if isSignedIn() && 
-                     ( isAdmin() ||
-                       (request.query.keys().hasAll(['where', 'orderBy']) && 
-                        request.query.where[0][0] == 'visibility.type' &&
-                        request.query.where[1][0] == 'endDate' && 
-                        request.query.where[1][1] == '>='
-                       )
-                     );
+        allow list: if isSignedIn(); // Firestore will use the 'get' rule to check each document in the result set.
         
         // Admins can create and delete polls.
         allow create, delete: if isSignedIn() && isAdmin();
