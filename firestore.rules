@@ -174,5 +174,15 @@ service cloud.firestore {
        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
        allow write: if isSignedIn() && isAdmin();
     }
+
+    // --- Absences ---
+    match /absences/{absenceId} {
+        // A user can read, create, update, and delete their own absences.
+        // An admin can read anyone's absences.
+        allow read, delete: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+        allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+        allow update: if isSignedIn() && isOwner(request.resource.data.userId);
+        allow list: if isSignedIn() && isAdmin();
+    }
   }
 }

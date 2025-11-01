@@ -320,6 +320,37 @@
         }
       },
       "required": ["teamId", "description", "amount"]
+    },
+    "Absence": {
+      "title": "Absence",
+      "type": "object",
+      "description": "Represents a user's planned absence, like a vacation or sickness.",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who is absent."
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The start date of the absence."
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The end date of the absence."
+        },
+        "reason": {
+          "type": "string",
+          "description": "The reason for the absence (e.g., 'Urlaub', 'Krank')."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the absence was created."
+        }
+      },
+      "required": ["userId", "startDate", "endDate", "reason", "createdAt"]
     }
   },
   "auth": {
@@ -380,6 +411,12 @@
         "$ref": "#/backend/entities/Penalty"
       },
       "description": "Stores the penalty catalog rules for all teams. Writable only by admins."
+    },
+    "/absences/{absenceId}": {
+        "schema": {
+            "$ref": "#/backend/entities/Absence"
+        },
+        "description": "Stores user absences. Writable only by the user themselves or an admin."
     }
   }
 }
