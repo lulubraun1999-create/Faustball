@@ -159,13 +159,13 @@ service cloud.firestore {
           // Admins dürfen alles auflisten
           isAdmin() ||
           // Erlaube die Abfrage für öffentliche Umfragen
-          request.query.where.size() == 1 &&
-          'visibility.type' in request.query.where && request.query.where['visibility.type'] == 'all'
+          request.query.where.size() >= 1 &&
+          request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'all'
           ||
           // Erlaube die Abfrage für teamspezifische Umfragen
-          request.query.where.size() == 2 &&
-          'visibility.type' in request.query.where && request.query.where['visibility.type'] == 'specificTeams' &&
-          'visibility.teamIds' in request.query.where && request.query.where['visibility.teamIds'][1].hasAny(getUserTeams())
+          request.query.where.size() >= 2 &&
+          request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'specificTeams' &&
+          request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].op == 'array-contains-any' && request.query.where[1].value.hasAny(getUserTeams())
         );
 
         // WRITE-Regeln
@@ -197,5 +197,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
