@@ -51,6 +51,8 @@ import {
   format,
   addMonths,
   subMonths,
+  addDays,
+  addWeeks,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -153,7 +155,7 @@ export default function KalenderPage() {
       allGroups?.filter(
         (g) => g.type === 'team' && userTeamIds.includes(g.id)
       ) || [];
-    const types = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
+    const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
     return { userTeams: teams, typesMap, locationsMap: locs };
   }, [allGroups, userTeamIds, appointmentTypes, locations]);
