@@ -134,24 +134,31 @@ service cloud.firestore {
             return userTeams != null &&
                 'visibility' in resource.data && resource.data.visibility.type == 'specificTeams' &&
                 'teamIds' in resource.data.visibility &&
-                userTeams.hasAny(resource.data.visibility.teamIds);
+                resource.data.visibility.teamIds.hasAny(userTeams);
         }
 
         function isVoteChangeOnly() {
+            // Allow changing only the votes field.
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
         
+        // Let users read polls if they are an admin, if the poll is public, or if they are a member of a team the poll is visible to.
+        // List operations are implicitly secured by this get rule.
         allow get: if isSignedIn() && (
                     isAdmin() ||
                     (resource.data.visibility.type == 'all') ||
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        // Listen werden über die 'get'-Regel pro Dokument validiert, keine explizite 'list'-Regel nötig.
+        // No explicit list rule needed; 'get' rule will be evaluated for each document in a query result.
         allow list: if false; 
 
+        // Admins can create and delete polls.
         allow create, delete: if isSignedIn() && isAdmin();
         
+        // Allow updates if:
+        // 1. The user is an admin.
+        // 2. OR The user is only changing their vote AND is allowed to see the poll.
         allow update: if isSignedIn() &&
                         (isAdmin() || 
                          (isVoteChangeOnly() && (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll()))
