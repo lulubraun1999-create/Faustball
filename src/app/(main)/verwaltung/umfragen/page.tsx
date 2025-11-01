@@ -60,6 +60,12 @@ export default function UmfragenPage() {
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
+  const visiblePolls = useMemo(() => {
+    const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
+    const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
+    return uniquePolls;
+  }, [pollsForAll, pollsForTeams]);
+
   const handleVote = async (pollId: string, optionId: string | null) => {
     if (!firestore || !user || !optionId) return;
 
@@ -117,12 +123,6 @@ export default function UmfragenPage() {
           setVotingStates((prev) => ({ ...prev, [`retract-${pollId}`]: false }));
       }
   };
-
-  const visiblePolls = useMemo(() => {
-    const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
-    return uniquePolls;
-  }, [pollsForAll, pollsForTeams]);
 
   const { activePolls, expiredPolls } = useMemo(() => {
     const active: Poll[] = [];
@@ -281,5 +281,7 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
+
+    
 
     

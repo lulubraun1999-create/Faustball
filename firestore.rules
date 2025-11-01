@@ -45,7 +45,7 @@ service cloud.firestore {
       }
     }
     
-    // --- Publicly Readable Data for any Signed-in User ---
+    // --- Collections readable by any signed-in user ---
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -66,9 +66,19 @@ service cloud.firestore {
        allow write: if isAdmin();
     }
 
-    // --- Collections with specific access logic ---
+    match /appointmentExceptions/{exceptionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Treasury can be read by any signed-in user (client filters by team) but only written by admins.
+    match /treasury/{transactionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
     
-    // Polls can be listed/read by anyone signed in. Client queries handle filtering.
+    // Polls are readable by any signed-in user.
+    // Client-side queries are responsible for filtering which polls are visible.
     // Users can vote (update), but only admins can create/delete.
     match /polls/{pollId} {
         allow read: if isSignedIn();
@@ -77,15 +87,11 @@ service cloud.firestore {
         allow update: if isSignedIn(); 
     }
 
+    // --- Collections with specific access logic ---
+
     // Appointments are readable by anyone, writable by admins
     match /appointments/{appointmentId} {
       allow read: if isSignedIn(); 
-      allow write: if isAdmin();
-    }
-
-    // Appointment exceptions follow appointment rules
-    match /appointmentExceptions/{exceptionId} {
-      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
@@ -94,11 +100,7 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
-
-    // Treasury can be read by any signed-in user (client filters by team) but only written by admins.
-    match /treasury/{transactionId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
   }
 }
+
+    
