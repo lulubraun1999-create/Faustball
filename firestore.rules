@@ -11,8 +11,10 @@ service cloud.firestore {
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
     
     function getUserTeams() {
-      let memberData = getMemberDoc(request.auth.uid).data;
-      return memberData != null && 'teams' in memberData && memberData.teams is list ? memberData.teams : [];
+      // WICHTIG: Diese Funktion ist nur in `get`-Regeln zuverlässig, nicht in `list` oder `write`.
+      if (!isSignedIn()) { return []; }
+      let memberData = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+      return "teams" in memberData ? memberData.teams : [];
     }
     
     function isMemberOfDocTeamResource() {
@@ -168,8 +170,9 @@ service cloud.firestore {
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
         function isTeamRoomMember(roomId) {
-          let teamId = roomId.split('_')[1];
-          return teamId in getUserTeams();
+            let userTeams = getUserTeams();
+            // Diese Funktion ist nur für `get` sicher. Für `list`/`write` müssen Team-IDs im `request` übergeben werden.
+            return roomId.startsWith('team_') && userTeams.hasAny([roomId.split('_')[1]]);
         }
 
         // READ: 
@@ -179,15 +182,19 @@ service cloud.firestore {
         allow read: if isSignedIn() && 
                     (roomId == 'all' || 
                      (roomId == 'trainers' && isAdmin()) ||
-                     (roomId.startsWith('team_') && isTeamRoomMember(roomId))
+                     isTeamRoomMember(roomId)
                     );
 
         // CREATE:
-        // - Same rules as read
-        // - User can only create messages as themselves
-        // - userName check removed for performance and simplicity
-        allow create: if read() &&
-                      request.resource.data.userId == request.auth.uid;
+        // Die Logik muss hier dupliziert werden, da resource.data bei create nicht existiert.
+        // Die `read()`-Funktion kann nicht wiederverwendet werden.
+        allow create: if isSignedIn() &&
+                      request.resource.data.userId == request.auth.uid &&
+                      (
+                        roomId == 'all' ||
+                        (roomId == 'trainers' && isAdmin()) ||
+                        isTeamRoomMember(roomId) // isTeamRoomMember ist hier sicher, da es auf request.auth zugreift
+                      );
         
         // DELETE:
         // - Admins can delete any message
