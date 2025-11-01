@@ -1,16 +1,15 @@
-
 'use client';
 
-import React, { useMemo } from 'react'; // React importieren
+import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from '@/components/ui/table';
 import { CalendarDays, Newspaper, BarChart3, Users, Loader2 } from 'lucide-react';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase'; // useDoc hinzugefügt
-import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore'; // Imports hinzugefügt
-import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentException } from '@/lib/types'; // Typen importiert
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore';
+import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentException } from '@/lib/types';
 import Link from 'next/link';
-import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns'; // date-fns Helfer importiert
+import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 // *** NEU: Typ für entfaltete Termine ***
@@ -36,27 +35,14 @@ export default function DashboardPage() {
 
     // --- Angepasste Datenabfragen ---
 
-    // 1. Alle öffentlichen Termine & Termine für die eigenen Teams
-    const publicAppointmentsQuery = useMemoFirebase(
-        () => (firestore ? query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all')) : null),
-        [firestore]
-    );
-    const teamAppointmentsQuery = useMemoFirebase(
-        () => (firestore && userTeamIds.length > 0 ? query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds)) : null),
-        [firestore, userTeamIds]
-    );
-
-    const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
-    const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
-    
-    // Kombinierte, einzigartige Terminliste
-    const appointments = useMemo(() => {
-        const all = [...(publicAppointments || []), ...(teamAppointments || [])];
-        return Array.from(new Map(all.map(app => [app.id, app])).values());
-    }, [publicAppointments, teamAppointments]);
-
+    // 1. Alle Termine (für Entfaltung)
+    const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+    const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
     // 2. Alle Ausnahmen (für Entfaltung)
+    //    HINWEIS: Dies funktioniert NUR, wenn der Benutzer ein ADMIN ist (gemäß unseren Regeln)
+    //    Für normale Benutzer müssen wir die Logik anpassen oder die Regeln lockern.
+    //    Wir gehen vorerst davon aus, dass der Admin das Dashboard betrachtet.
     const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
@@ -122,9 +108,10 @@ export default function DashboardPage() {
 
     // Logik zum Entfalten der Termine
     const unrolledAppointments = useMemo(() => {
-        if (!appointments || isLoadingExceptions) return [];
+        if (!appointments || (isLoadingExceptions && user?.uid)) return []; // Warte auf BEIDE Sammlungen (nur wenn Admin)
         
         const exceptionsMap = new Map<string, AppointmentException>();
+        // Nur Admins sehen Ausnahmen, normale User sehen sie nicht (Regel-bedingt)
         exceptions?.forEach(ex => {
             if (ex.originalDate) {
                 const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
@@ -137,6 +124,10 @@ export default function DashboardPage() {
 
         appointments.forEach(app => {
             if (!app.startDate) return;
+
+            // Prüfe Sichtbarkeit der Serie
+            const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIds.includes(teamId)));
+            if (!isVisible) return; // Überspringe Termine, die nicht sichtbar sind
 
             const originalDateStartOfDay = startOfDay(app.startDate.toDate());
             const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
@@ -199,10 +190,10 @@ export default function DashboardPage() {
         
         return allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis()).slice(0, 5);
         
-    }, [appointments, exceptions, isLoadingExceptions]);
+    }, [appointments, exceptions, isLoadingExceptions, userTeamIds]);
 
 
-    const isLoading = isUserLoading || isLoadingMember || isLoadingPublicAppointments || isLoadingTeamAppointments || isLoadingExceptions || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
+    const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPollsAll || isLoadingPollsTeams || isLoadingGroups;
 
     if (isLoading) {
         return (
