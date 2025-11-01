@@ -20,20 +20,24 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export function VerwaltungDropdown() {
-  const { isAdmin, isUserLoading, userProfile } = useUser();
+  const { isAdmin, isUserLoading } = useUser();
   const [isClient, setIsClient] = useState(false);
   const pathname = usePathname();
 
-  // This ensures the component only renders the dynamic part on the client after hydration
+  // This ensures the component only renders on the client after hydration
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // On the server and during initial client render, showAdminMenu will be false.
-  // It will only be true on the client after the user state has been determined.
-  const showAdminMenu = isClient && !isUserLoading && (isAdmin || userProfile?.role === 'admin');
   const isVerwaltungActive = pathname.startsWith('/verwaltung');
 
+  // Do not render anything on the server or during the initial client render
+  // to avoid hydration mismatch. The useEffect above will trigger a re-render
+  // on the client, at which point the menu will appear.
+  if (!isClient) {
+    return null;
+  }
+  
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -71,8 +75,15 @@ export function VerwaltungDropdown() {
           <Link href="/verwaltung/abwesenheiten">Abwesenheiten</Link>
         </DropdownMenuItem>
         
-        {/* This block will only render on the client, avoiding the hydration mismatch */}
-        {showAdminMenu ? (
+        {isUserLoading ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Lade Admin-Status...</span>
+            </DropdownMenuItem>
+          </>
+        ) : isAdmin ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
@@ -100,14 +111,6 @@ export function VerwaltungDropdown() {
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-          </>
-        ) : isClient && isUserLoading ? ( // Show a loader only on the client while checking auth
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              <span>Lade Admin-Status...</span>
-            </DropdownMenuItem>
           </>
         ) : null}
       </DropdownMenuContent>
