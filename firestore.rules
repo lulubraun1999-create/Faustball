@@ -9,8 +9,8 @@ service cloud.firestore {
     
     // KORRIGIERT: Prüft jetzt sicher für create, update und delete Operationen.
     function isOwner(userId) { 
-      return (request.method == 'create' && request.resource.data.userId == userId) || 
-             (request.method != 'create' && resource.data.userId == userId);
+      // Bei 'create' existiert 'resource.data' noch nicht, daher 'request.resource.data' verwenden.
+      return request.auth.uid == userId;
     }
     
     // WARNING: This function is NOT reliable in 'list' or 'write' rules. 
@@ -47,7 +47,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && isAdmin();
       allow create: if isCreatingOwnDocument();
       allow update: if isSignedIn() && (isUpdatingOwnDocument() || isAdmin());
-      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
     }
 
     // --- /members/{memberId} ---
@@ -66,7 +66,7 @@ service cloud.firestore {
         allow list: if isSignedIn() && isAdmin();
         allow create: if isCreatingOwnProfile();
         allow update: if isSignedIn() && (isUpdatingOwnProfile() || isAdmin());
-        allow delete: if isSignedIn() && (request.auth.uid == memberId || isAdmin());
+        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
     }
 
     // --- /groups/** ---
@@ -173,23 +173,18 @@ service cloud.firestore {
     
     // --- Chat ---
     match /chats/{roomId}/messages/{messageId} {
-        // READ: Allow reads if user is signed in.
-        // Specific room access is controlled by the UI and what queries it makes.
         allow read: if isSignedIn();
 
-        // CREATE: Allow if user is authenticated, it's their own message,
-        // and the room is one of the valid types. No "get" calls are made here.
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && (
-            roomId == 'all' ||
-            (roomId == 'trainers' && isAdmin()) ||
-            roomId.startsWith('team_')
-        );
+        // KORRIGIERTE CREATE-REGEL
+        allow create: if isSignedIn() &&
+                      isOwner(request.resource.data.userId) && (
+                        roomId == 'all' ||
+                        (roomId == 'trainers' && isAdmin()) ||
+                        roomId.startsWith('team_')
+                      );
         
-        // DELETE: Admins can delete any message, users can delete their own.
-        // KORRIGIERT: Verwendet die jetzt sichere isOwner-Funktion.
+        // KORRIGIERTE DELETE-REGEL
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
 }
-
-    
