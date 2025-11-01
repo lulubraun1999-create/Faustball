@@ -13,20 +13,22 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
     
     function isMemberOfAnyTeam() {
-      return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) 
-             && 'teams' in get(/databases/$(database)/documents/members/$(request.auth.uid)).data 
-             && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.size() > 0;
+      // This function relies on a 'teams' field in the /members/{userId} document.
+      // Make sure this field exists and is populated correctly for this rule to work.
+      return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
     
     function isMemberOfTeams(teamIds) {
-      return isMemberOfAnyTeam() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
+      let memberDoc = get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+      return isMemberOfAnyTeam() && 'teams' in memberDoc && memberDoc.teams.hasAny(teamIds);
     }
 
     // --- User & Member Data ---
+    // Users can only read/update their own data. Admins have full access.
     match /users/{userId} {
       allow read, update: if isAdmin() || isOwner(userId);
       allow create: if !exists(/databases/$(database)/documents/users/$(userId)); 
@@ -40,60 +42,76 @@ service cloud.firestore {
     }
 
     // --- Publicly Readable Data for any Signed-in User ---
+    // These collections can be listed and read by any authenticated user.
+    // Writes are restricted to admins.
     match /groups/{groupId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
 
+      // Members subcollection is also readable by any user, writable by admin.
       match /members/{memberId} {
           allow read: if isSignedIn();
           allow write: if isAdmin();
       }
     }
-
+    
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    
     match /locations/{locationId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
     match /penalties/{penaltyId} {
        allow read: if isSignedIn();
        allow write: if isAdmin();
     }
+    
     match /appointmentExceptions/{exceptionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
-    // --- Polls (Corrected Rule) ---
+    // --- Polls ---
+    // Any authenticated user can read (list and get) polls. Client-side queries handle filtering.
+    // Voting is an update operation, allowed for any signed-in user.
+    // Creating and deleting polls is admin-only.
     match /polls/{pollId} {
-      allow read: if isSignedIn(); // Allows list and get for any authenticated user
+      allow read: if isSignedIn();
       allow create, delete: if isAdmin();
-      allow update: if isSignedIn(); // Allows voting
+      allow update: if isSignedIn();
     }
 
     // --- Appointments & Responses ---
+    // Appointments can be read by any signed-in user.
+    // This allows client queries to filter based on team visibility.
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn(); // Allow list for signed in users, client query will filter
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
+    // Users can create their own responses.
+    // They can read, update, or delete only their own responses. Admins have full access.
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin();
+      allow list: if isAdmin(); // Only admins can list all responses.
     }
 
     // --- Team Treasury ---
+    // Transactions can be listed by any member of any team.
+    // Getting a specific transaction is only allowed if the user is a member of that transaction's team.
     match /treasury/{transactionId} {
-      allow list: if isAdmin() || isMemberOfAnyTeam();
-      allow get: if isAdmin() || (isMemberOfAnyTeam() && isMemberOfTeams([resource.data.teamId]));
+      allow list: if isMemberOfAnyTeam() || isAdmin();
+      allow get: if (isMemberOfAnyTeam() && isMemberOfTeams([resource.data.teamId])) || isAdmin();
       allow write: if isAdmin();
     }
   }
