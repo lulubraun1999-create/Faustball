@@ -143,19 +143,26 @@ service cloud.firestore {
         }
 
         // CORRECTED READ RULE: Combine get and list
-        allow read: if isSignedIn() && 
+        allow read: if isSignedIn() &&
                     (
-                      // 'get' rule
-                      isAdmin() || (resource.data.visibility.type == 'all') || isMemberOfVisibleTeamForPoll() ||
-                      // 'list' rules
-                      (request.query.where.get('visibility.type', null) == 'all') ||
+                      // Rules for GET (single document)
+                      isAdmin() ||
+                      (resource.data.visibility.type == 'all') ||
+                      isMemberOfVisibleTeamForPoll()
+                      ||
+                      // Rules for LIST (queries)
                       (
-                        request.query.where.get('visibility.type', null) == 'specificTeams' &&
-                        request.query.where.get('visibility.teamIds', null) != null &&
-                        request.query.where.get('visibility.teamIds', null).hasAny(getUserTeams())
+                        request.query.where.keys().hasAll(['visibility.type', 'endDate']) &&
+                        request.query.where['visibility.type'] == 'all'
+                      )
+                      ||
+                      (
+                        request.query.where.keys().hasAll(['visibility.type', 'visibility.teamIds', 'endDate']) &&
+                        request.query.where['visibility.type'] == 'specificTeams' &&
+                        request.query.where['visibility.teamIds'].hasAny(getUserTeams())
                       )
                     );
-        
+
         allow create, delete: if isSignedIn() && isAdmin();
         
         allow update: if isSignedIn() &&
