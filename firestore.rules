@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -7,13 +8,11 @@ service cloud.firestore {
     function isAdmin() { return request.auth.token.admin == true; }
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
     
-    // Gibt die Teams des Benutzers als Liste zurück, oder eine leere Liste, wenn keine vorhanden sind
     function getUserTeams() {
       let memberData = getMemberDoc(request.auth.uid).data;
       return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
     
-    // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das gelesene Dokument gehört
     function isMemberOfDocTeamResource() {
       let userTeams = getUserTeams(); 
       return isSignedIn() &&
@@ -117,6 +116,7 @@ service cloud.firestore {
     // --- /appointmentExceptions/{exceptionId} ---
     match /appointmentExceptions/{exceptionId} {
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
+        function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
         
         function isMemberOfOriginalAppointmentTeamFromResource() {
            let originalAppointment = getOriginalAppointmentFromResource();
@@ -130,43 +130,44 @@ service cloud.firestore {
         }
 
         allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
-        allow list: if isSignedIn() && isAdmin(); 
+        allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isAdmin() && exists(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
         allow update, delete: if isSignedIn() && isAdmin();
     }
 
     // --- /polls/{pollId} ---
     match /polls/{pollId} {
-        function isMemberOfVisibleTeamForPoll() {
+        function isMemberOfVisibleTeamForPollResource() {
           let memberTeams = getUserTeams();
           return memberTeams != null &&
                  resource.data != null &&
-                 'visibility' in resource.data &&
+                 resource.data.keys().hasAny(['visibility']) &&
                  resource.data.visibility.type == 'specificTeams' &&
-                 'teamIds' in resource.data.visibility &&
+                 resource.data.visibility.keys().hasAny(['teamIds']) &&
                  resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
+        // GET-Regel: Einzelne Dokumente lesen
         allow get: if isSignedIn() && (
                      isAdmin() ||
-                     ('visibility' in resource.data && resource.data.visibility.type == 'all') ||
-                     isMemberOfVisibleTeamForPoll()
+                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') || 
+                     isMemberOfVisibleTeamForPollResource()
                    );
-        
-        allow list: if isSignedIn() && 
-                    (
-                      (request.query.keys().hasAll(['where', 'limit', 'orderBy']) && request.query.where.field == 'visibility.type' && request.query.where.value == 'all') ||
-                      (request.query.keys().hasAll(['where', 'limit', 'orderBy']) && request.query.where.field == 'visibility.teamIds' && request.query.where.arrayConfig == 'contains-any') ||
-                      (request.query.keys().hasAll(['where']) && request.query.where.field == 'visibility.type' && request.query.where.value == 'all') ||
-                      (request.query.keys().hasAll(['where']) && request.query.where.field == 'visibility.teamIds' && request.query.where.arrayConfig == 'contains-any') 
-                    );
+                   
+        // LIST-Regel: Sammlungen abfragen
+        allow list: if isSignedIn() &&
+                     (
+                       isAdmin() ||
+                       (request.query.keys().hasAll(['where']) && request.query.where[0].field == 'visibility.type' && request.query.where[0].value == 'all') ||
+                       (request.query.keys().hasAll(['where']) && request.query.where[0].field == 'visibility.type' && request.query.where[0].value == 'specificTeams' && request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].value.hasAny(getUserTeams()))
+                     );
 
+        // WRITE-Regeln
         allow create, delete: if isSignedIn() && isAdmin();
-        
         allow update: if isSignedIn() && (
                       isAdmin() ||
                       ( (resource.data != null &&
-                         (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPoll())) &&
+                         (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource())) &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']) )
                     );
     }
