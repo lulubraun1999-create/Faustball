@@ -10,24 +10,25 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // In production, you might want to check a custom claim or a document in a specific 'admins' collection.
-      // For this app, we'll check the 'role' field in the user's own document.
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+    
+    function isMemberOfTeams(teamIds) {
+      return isSignedIn() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
+    }
 
     // --- User & Member Data ---
     match /users/{userId} {
       allow read, update: if isOwner(userId) || isAdmin();
-      allow create: if isSignedIn(); // Allow user creation upon signup
+      allow create: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      // Members can read/update their own profile. Admins can manage all.
       allow read, update: if isOwner(memberId) || isAdmin();
       allow create: if isSignedIn();
       allow delete: if isAdmin();
@@ -36,25 +37,32 @@ service cloud.firestore {
     // --- Groups & Group Membership ---
     match /groups/{groupId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin(); // create, update, delete groups
+      allow write: if isAdmin();
 
       match /members/{memberId} {
         allow read: if isSignedIn();
-        allow write: if isAdmin(); // add/remove members from groups
+        allow write: if isAdmin();
       }
     }
 
     // --- Polls ---
-    // Any signed-in user can read polls (client-side queries will filter them).
-    // Any signed-in user can vote (update the 'votes' array).
-    // Only admins can create or delete polls.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
     }
 
-    // --- Appointments, Types, and Locations ---
+    // --- Appointments ---
     match /appointments/{appointmentId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+    }
+    
+    // --- Responses, Exceptions, Types, Locations ---
+    match /appointmentResponses/{responseId} {
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+    match /appointmentExceptions/{exceptionId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
     }
@@ -66,18 +74,8 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isAdmin();
     }
-    match /appointmentExceptions/{exceptionId} {
-        allow read: if isSignedIn();
-        allow write: if isAdmin();
-    }
-    match /appointmentResponses/{responseId} {
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-        allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-    }
     
-
     // --- News, Treasury, Penalties ---
-    // Generally readable by all signed-in users, writable only by admins.
     match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -87,8 +85,6 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
-
 
     match /penalties/{penaltyId} {
       allow read: if isSignedIn();
