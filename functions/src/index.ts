@@ -423,4 +423,3 @@ export const processAbsence = onCall(async (request: CallableRequest) => {
         throw new HttpsError('internal', 'Could not process absence.', error.message);
     }
 });
-
