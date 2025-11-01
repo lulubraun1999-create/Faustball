@@ -72,7 +72,7 @@ export default function DashboardPage() {
     const currentPollsTeamsQuery = useMemoFirebase(
         () => (firestore && user && userTeamIds.length > 0 ? query(
             collection(firestore, 'polls'),
-            where('visibility.type', '==', 'specificTeams'),
+            // where('visibility.type', '==', 'specificTeams'), // This is implicit with teamIds filter
             where('visibility.teamIds', 'array-contains-any', userTeamIds),
             where('endDate', '>=', nowTimestamp),
             orderBy('endDate', 'asc'),

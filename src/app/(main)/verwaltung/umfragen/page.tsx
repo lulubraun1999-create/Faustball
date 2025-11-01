@@ -35,7 +35,6 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  // *** BEGINN DER KORREKTUR: Spezifische Abfragen statt einer allgemeinen Abfrage ***
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
@@ -49,7 +48,6 @@ export default function UmfragenPage() {
     () => (firestore && userTeamIds.length > 0
         ? query(
             collection(firestore, 'polls'),
-            where('visibility.type', '==', 'specificTeams'),
             where('visibility.teamIds', 'array-contains-any', userTeamIds)
           )
         : null),
@@ -59,11 +57,9 @@ export default function UmfragenPage() {
   
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    // Eindeutige Umfragen sicherstellen, falls eine Umfrage sowohl 'all' als auch ein Team betrifft (sollte nicht passieren, aber sicher ist sicher)
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
     return uniquePolls;
   }, [pollsForAll, pollsForTeams]);
-  // *** ENDE DER KORREKTUR ***
 
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
@@ -135,7 +131,6 @@ export default function UmfragenPage() {
     const active: Poll[] = [];
     const expired: Poll[] = [];
     
-    // We iterate over 'visiblePolls' now, which already contains only what the user should see.
     visiblePolls.forEach(poll => {
         if (isPast(poll.endDate.toDate())) {
             expired.push(poll);
