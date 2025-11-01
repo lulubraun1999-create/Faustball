@@ -147,7 +147,10 @@ service cloud.firestore {
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        allow list: if isSignedIn();
+        allow list: if isSignedIn() && (
+            (request.query.where.visibility.type == 'all' && request.query.where.endDate >= timestamp.now()) ||
+            (request.query.where.visibility.type == 'specificTeams' && request.query.where.endDate >= timestamp.now())
+        );
 
         allow create, delete: if isSignedIn() && isAdmin();
         
