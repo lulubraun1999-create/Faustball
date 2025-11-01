@@ -160,19 +160,6 @@ export default function VerwaltungTerminePage() {
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
-  useEffect(() => {
-      const hash = window.location.hash.substring(1);
-      if (hash && rowRefs.current[hash]) {
-          setTimeout(() => {
-            rowRefs.current[hash]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            rowRefs.current[hash]?.classList.add('bg-accent/50', 'transition-all', 'duration-1000');
-            setTimeout(() => {
-                rowRefs.current[hash]?.classList.remove('bg-accent/50');
-            }, 3000)
-          }, 500); // Small delay to ensure everything is rendered
-      }
-  }, [filteredAppointments]); // Re-run when appointments are loaded/filtered
-
   const isLoading =
     auth.isUserLoading ||
     profileLoading ||
@@ -305,6 +292,19 @@ export default function VerwaltungTerminePage() {
           (b.startDate as Timestamp).toMillis(),
       );
   }, [unrolledAppointments, selectedType, selectedTeam, profile]);
+
+  useEffect(() => {
+      const hash = window.location.hash.substring(1);
+      if (hash && rowRefs.current[hash]) {
+          setTimeout(() => {
+            rowRefs.current[hash]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            rowRefs.current[hash]?.classList.add('bg-accent/50', 'transition-all', 'duration-1000');
+            setTimeout(() => {
+                rowRefs.current[hash]?.classList.remove('bg-accent/50');
+            }, 3000)
+          }, 500); // Small delay to ensure everything is rendered
+      }
+  }, [filteredAppointments]); // Re-run when appointments are loaded/filtered
 
   const groupedAppointments = useMemo(() => {
     const groups: Record<string, UnrolledAppointment[]> = {};
