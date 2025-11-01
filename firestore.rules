@@ -148,15 +148,23 @@ service cloud.firestore {
                     isMemberOfVisibleTeamForPoll()
                     );
         
-        // LIST: collection query
-        allow list: if isSignedIn() && (
-            isAdmin() || 
-            (request.query.where[0] == ['visibility.type', '==', 'all']) ||
-            (
-                request.query.where[0] == ['visibility.type', '==', 'specificTeams'] &&
-                request.query.where[1] == ['visibility.teamIds', 'array-contains-any', getUserTeams()]
-            )
-        );
+        // LIST: collection query - MUST BE SPECIFIC
+        allow list: if isSignedIn() && 
+                    (
+                      (request.query.keys().hasOnly(['where', 'limit', 'orderBy']) &&
+                       request.query.where[0] == ['visibility.type', '==', 'all'] &&
+                       request.query.where[1] == ['endDate', '>=', request.time]
+                      ) 
+                      ||
+                      (request.query.keys().hasOnly(['where', 'limit', 'orderBy']) &&
+                       request.query.where[0] == ['visibility.type', '==', 'specificTeams'] &&
+                       request.query.where[1] == ['visibility.teamIds', 'array-contains-any', getUserTeams()] &&
+                       request.query.where[2] == ['endDate', '>=', request.time]
+                      )
+                      ||
+                      isAdmin() // Admins can list without filters
+                    );
+
 
         allow create, delete: if isSignedIn() && isAdmin();
         
@@ -185,3 +193,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

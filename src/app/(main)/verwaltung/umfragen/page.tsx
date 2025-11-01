@@ -39,9 +39,10 @@ export default function UmfragenPage() {
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
-        where('visibility.type', '==', 'all')
+        where('visibility.type', '==', 'all'),
+        where('endDate', '>=', nowTimestamp)
     ) : null),
-    [firestore]
+    [firestore, nowTimestamp]
   );
   const { data: pollsForAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(pollsForAllQuery);
 
@@ -50,10 +51,11 @@ export default function UmfragenPage() {
         ? query(
             collection(firestore, 'polls'),
             where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds)
+            where('visibility.teamIds', 'array-contains-any', userTeamIds),
+            where('endDate', '>=', nowTimestamp)
           )
         : null),
-    [firestore, userTeamIds]
+    [firestore, userTeamIds, nowTimestamp]
   );
   const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
   
@@ -281,3 +283,5 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
+
+    
