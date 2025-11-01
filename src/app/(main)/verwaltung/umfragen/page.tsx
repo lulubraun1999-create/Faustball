@@ -35,7 +35,6 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  // *** KORREKTUR: Spezifische, sichere Abfragen verwenden ***
   const nowTimestamp = Timestamp.now();
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
@@ -60,7 +59,6 @@ export default function UmfragenPage() {
   
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    // Stellt sicher, dass jede Umfrage nur einmal angezeigt wird, auch wenn sie 'all' ist UND für ein Team des Nutzers sichtbar ist
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
     return uniquePolls;
   }, [pollsForAll, pollsForTeams]);
@@ -81,8 +79,6 @@ export default function UmfragenPage() {
     
     try {
         if (existingVote) {
-             // Firestore erlaubt das direkte Modifizieren eines Array-Elements nicht,
-             // also entfernen wir das alte und fügen das neue hinzu.
              await updateDoc(pollDocRef, { votes: arrayRemove(existingVote) });
         }
         const newVote = { userId: user.uid, optionId: optionId };
@@ -140,9 +136,7 @@ export default function UmfragenPage() {
         }
     });
 
-    // Sortiere aktive Umfragen: Neueste zuerst
     active.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-    // Sortiere abgelaufene Umfragen: Die, die am kürzesten abgelaufen sind, zuerst
     expired.sort((a,b) => b.endDate.toMillis() - a.endDate.toMillis());
 
     return { activePolls: active, expiredPolls: expired };
