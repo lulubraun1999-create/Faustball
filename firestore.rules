@@ -10,7 +10,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      // In production, you might want to check a custom claim or a document in a specific 'admins' collection.
+      // For this app, we'll check the 'role' field in the user's own document.
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
@@ -18,65 +20,77 @@ service cloud.firestore {
     }
 
     // --- User & Member Data ---
-    // Users can read/update their own core data. Admins can manage all.
     match /users/{userId} {
       allow read, update: if isOwner(userId) || isAdmin();
-      allow create: if isSignedIn(); 
+      allow create: if isSignedIn(); // Allow user creation upon signup
       allow delete: if isAdmin();
     }
 
-    // Members can read/update their own profile. Admins can manage all.
     match /members/{memberId} {
+      // Members can read/update their own profile. Admins can manage all.
       allow read, update: if isOwner(memberId) || isAdmin();
       allow create: if isSignedIn();
       allow delete: if isAdmin();
     }
 
     // --- Groups & Group Membership ---
-    // All signed-in users can view groups and team rosters. Only admins can modify them.
     match /groups/{groupId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin(); // create, update, delete groups
 
       match /members/{memberId} {
         allow read: if isSignedIn();
-        allow write: if isAdmin();
+        allow write: if isAdmin(); // add/remove members from groups
       }
     }
 
     // --- Polls ---
-    // Client-side queries are responsible for filtering which polls are visible.
-    // The rules allow any signed-in user to read and vote (update). Admins can create/delete.
+    // Any signed-in user can read polls (client-side queries will filter them).
+    // Any signed-in user can vote (update the 'votes' array).
+    // Only admins can create or delete polls.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
     }
-    
-    // --- Appointments & Related Data ---
-    // Client-side queries are responsible for filtering. This rule allows the necessary queries to run.
+
+    // --- Appointments, Types, and Locations ---
     match /appointments/{appointmentId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+    }
+    match /appointmentTypes/{typeId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+    }
+    match /locations/{locationId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+    }
+    match /appointmentExceptions/{exceptionId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+    }
+    match /appointmentResponses/{responseId} {
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+    
+
+    // --- News, Treasury, Penalties ---
+    // Generally readable by all signed-in users, writable only by admins.
+    match /news/{newsId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-    
-    // Users can create their own responses. They can only read/update/delete their own responses. Admins can manage all.
-    match /appointmentResponses/{responseId} {
-      allow create: if isSignedIn();
-      allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-    }
-    
-    // Admins can manage exceptions.
-    match /appointmentExceptions/{exceptionId} {
-       allow read: if isSignedIn();
-       allow write: if isAdmin();
+
+    match /treasury/{transactionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
-    // --- General Admin-Writable, Publicly-Readable Data ---
-    // Any signed-in user can read these. Only admins can write.
-    match /appointmentTypes/{typeId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /locations/{locationId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /news/{newsId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /penalties/{penaltyId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /treasury/{transactionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /penalties/{penaltyId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }
