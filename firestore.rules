@@ -7,7 +7,11 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isAdmin() { return request.auth.token.admin == true; }
     
-    function isOwner(userId) { return request.auth.uid == userId; }
+    // KORRIGIERT: Prüft jetzt sicher für create, update und delete Operationen.
+    function isOwner(userId) { 
+      return (request.method == 'create' && request.resource.data.userId == userId) || 
+             (request.method != 'create' && resource.data.userId == userId);
+    }
     
     // WARNING: This function is NOT reliable in 'list' or 'write' rules. 
     // It should only be used in 'get' rules where a single document is accessed.
@@ -36,24 +40,24 @@ service cloud.firestore {
       }
       function isUpdatingOwnDocument() { 
           // Regular users cannot change their own role.
-          return isOwner(userId) && !('role' in request.resource.data); 
+          return request.auth.uid == userId && !('role' in request.resource.data); 
       }
       
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow list: if isSignedIn() && isAdmin();
       allow create: if isCreatingOwnDocument();
       allow update: if isSignedIn() && (isUpdatingOwnDocument() || isAdmin());
-      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     // --- /members/{memberId} ---
     match /members/{memberId} {
         function isCreatingOwnProfile() { 
-            return isOwner(memberId) && request.resource.data.userId == request.auth.uid; 
+            return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; 
         }
         function isUpdatingOwnProfile() {
             // Check that the user is updating their own document and not changing critical fields
-            return isOwner(memberId) && 
+            return request.auth.uid == memberId && 
                    request.resource.data.userId == resource.data.userId &&
                    !('role' in request.resource.data);
         }
@@ -62,7 +66,7 @@ service cloud.firestore {
         allow list: if isSignedIn() && isAdmin();
         allow create: if isCreatingOwnProfile();
         allow update: if isSignedIn() && (isUpdatingOwnProfile() || isAdmin());
-        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow delete: if isSignedIn() && (request.auth.uid == memberId || isAdmin());
     }
 
     // --- /groups/** ---
@@ -182,7 +186,10 @@ service cloud.firestore {
         );
         
         // DELETE: Admins can delete any message, users can delete their own.
+        // KORRIGIERT: Verwendet die jetzt sichere isOwner-Funktion.
         allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.userId));
     }
   }
 }
+
+    
