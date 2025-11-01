@@ -154,21 +154,8 @@ service cloud.firestore {
                      isMemberOfVisibleTeamForPollResource()
                    );
                    
-        // KORRIGIERTE LIST-Regel
-        allow list: if isSignedIn() && (
-          // Admins dürfen alles auflisten
-          isAdmin() ||
-          // Erlaube die Abfrage für öffentliche Umfragen
-          (request.query.keys().hasAny(['where']) &&
-           request.query.where.field == 'visibility.type' &&
-           request.query.where.op == '==' &&
-           request.query.where.value == 'all')
-          ||
-          // Erlaube die Abfrage für teamspezifische Umfragen
-          (request.query.keys().hasAll(['where', 'where']) &&
-           request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'specificTeams' &&
-           request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].op == 'array-contains-any' && request.query.where[1].value.hasAny(getUserTeams()))
-        );
+        // LIST-Regel
+        allow list: if isSignedIn();
 
         // WRITE-Regeln
         allow create, delete: if isSignedIn() && isAdmin();
@@ -199,3 +186,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
