@@ -68,8 +68,11 @@ service cloud.firestore {
     
     // --- Collections with specific access logic ---
     match /polls/{pollId} {
-        allow read: if isSignedIn();
+        // Allow any signed-in user to read (get, list) polls. 
+        // Client-side queries handle filtering which polls are visible.
+        allow read: if isSignedIn(); 
         allow create, delete: if isAdmin();
+        // Allow any signed-in user to vote (update the votes array).
         allow update: if isSignedIn(); 
     }
 
