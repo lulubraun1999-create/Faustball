@@ -1,7 +1,10 @@
+
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, WriteBatch } from 'firebase-admin/firestore'; // Importiere Timestamp und WriteBatch
-import type { Appointment, AppointmentException } from './types'; // Importiere deine Typen
+import { onCall, HttpsError } from 'firebase-functions/v2/httpshttps';
+import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc } from 'firebase-admin/firestore';
+import type { Appointment, AppointmentException } from './types';
+import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
+
 
 // Firebase Admin SDK initialisieren
 if (admin.apps.length === 0) {
@@ -99,10 +102,7 @@ export const saveSingleAppointmentException = onCall(async (request) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
-    if (!user) { // user-Variable aus dem Kontext holen (oder request.auth.uid)
-        throw new HttpsError('unauthenticated', 'User must be authenticated.');
-    }
-
+    
     const { pendingUpdateData, selectedInstanceToEdit, exceptions } = request.data;
     const userId = request.auth.uid; // ID des Admins, der die Änderung vornimmt
 
@@ -137,7 +137,7 @@ export const saveSingleAppointmentException = onCall(async (request) => {
         originalDate: Timestamp.fromDate(originalDateStartOfDay),
         status: 'modified',
         modifiedData: modifiedData,
-        createdAt: Timestamp.now(), // serverTimestamp() in .set/add verwenden
+        createdAt: serverTimestamp(), // serverTimestamp() in .set/add verwenden
         userId: userId,
     };
 
@@ -162,9 +162,6 @@ export const saveSingleAppointmentException = onCall(async (request) => {
 export const saveFutureAppointmentInstances = onCall(async (request) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
-    }
-    if (!user) {
-        throw new HttpsError('unauthenticated', 'User must be authenticated.');
     }
     
     const { pendingUpdateData, selectedInstanceToEdit, typesMap } = request.data;
@@ -206,10 +203,8 @@ export const saveFutureAppointmentInstances = onCall(async (request) => {
           ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
           : originalAppointmentData.title;
 
-      // *** HIER IST DIE KORREKTUR (Zeile 127 in deinem Screenshot) ***
-      // Wir müssen ...originalAppointmentData verwenden, um alle Felder zu kopieren
       const newAppointmentData: Omit<Appointment, 'id'> = {
-        ...originalAppointmentData, // <-- DAS HAT GEFEHLT!
+        ...originalAppointmentData, 
         
         title: finalTitle || 'Termin',
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
@@ -225,6 +220,7 @@ export const saveFutureAppointmentInstances = onCall(async (request) => {
         
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp(),
+        createdBy: userId,
       };
 
       batch.set(newAppointmentRef, newAppointmentData);
@@ -234,7 +230,7 @@ export const saveFutureAppointmentInstances = onCall(async (request) => {
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
         
-      const exceptionsSnap = await getDocs(exceptionsQuery); // getDocs importieren
+      const exceptionsSnap = await getDocs(exceptionsQuery);
       exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
       
       await batch.commit();
