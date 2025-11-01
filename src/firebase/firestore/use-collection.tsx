@@ -37,10 +37,10 @@ export interface InternalQuery extends Query<DocumentData> {
   }
 }
 
-// Kleine Hilfs-Error-Map, um die Fehlermeldung sauber zu halten
+// HILFSOBJEKT FÜR BESSERE FEHLERMELDUNGEN (NEU)
 const memoErrors = {
   notMemoized: (hookName: string, path: string) => 
-    `[Firebase-Hook-Fehler] in ${hookName}: Die übergebene Query/Referenz für den Pfad "${path}" wurde nicht korrekt mit 'useMemoFirebase' memoisert. Dies führt zu unnötigen re-renders und Datenabfragen.`,
+    `[Firebase-Hook-Fehler] in ${hookName}: Die übergebene Query/Referenz für den Pfad "${path}" wurde nicht korrekt mit 'useMemoFirebase' memoisert. Dies führt zu Endlosschleifen und Daten-Lecks.`,
 };
 
 /**
@@ -76,7 +76,7 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
-    // Initialisiere unsubscribe, damit es im return-Block verfügbar ist
+    // KORREKTUR 1: 'unsubscribe' außerhalb des try-Blocks deklarieren
     let unsubscribe: (() => void) | undefined;
 
     try {
@@ -112,14 +112,12 @@ export function useCollection<T = any>(
         }
       );
     } catch (e: any) {
-      // Fange synchrone Fehler ab (z.B. wenn die Query ungültig ist)
+      // Fängt synchrone Fehler ab (z.B. bei ungültiger Query)
       setError(e);
       setIsLoading(false);
     }
 
-
-    // *** KORREKTUR FÜR DEN ABSTURZ ***
-    // Wir prüfen, ob 'unsubscribe' eine Funktion ist, bevor wir sie aufrufen.
+    // KORREKTUR 1 (Fortsetzung): Absturzsichere Cleanup-Funktion
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
@@ -127,8 +125,11 @@ export function useCollection<T = any>(
     };
   }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
   
+  // KORREKTUR 2: Verbesserte Fehlermeldung, die nicht abstürzt
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
-    throw new Error(memoErrors.notMemoized('useCollection', (memoizedTargetRefOrQuery as any)._query?.path?.toString() ?? (memoizdTargetRefOrQuery as any).path ?? 'unknown path'));
+    // Diese Zeile stürzt nicht mehr ab, sondern gibt eine klare Fehlermeldung aus
+    throw new Error(memoErrors.notMemoized('useCollection', (memoizedTargetRefOrQuery as any)._query?.path?.toString() ?? (memoizedTargetRefOrQuery as any).path ?? 'unbekannter Pfad'));
   }
+
   return { data, isLoading, error };
 }
