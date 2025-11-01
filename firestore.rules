@@ -9,35 +9,39 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Use exists() for safety. The document might not exist yet during signup.
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
-    
-    function isMemberOf(teamId) {
-        return exists(/databases/$(database)/documents/members/$(request.auth.uid)) && teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams;
+
+    function isTeamMember() {
+      // Check if the user has a member profile with a list of teams
+      return isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) && 'teams' in get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+    }
+
+    function isMemberOfTeams(teamIds) {
+      // Check if the user is a member of any of the given teamIds
+      return isTeamMember() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny(teamIds);
     }
 
     // --- User & Member Data ---
     match /users/{userId} {
-      allow get: if isAdmin() || isOwner(userId);
-      allow list: if isAdmin();
-      // Allow creation during signup, or updates by owner/admin.
-      allow write: if isAdmin() || isOwner(userId);
+      allow get, list: if isAdmin() || isOwner(userId);
+      allow create; // Allow user creation during signup
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      allow get: if isAdmin() || isOwner(memberId);
-      allow list: if isAdmin();
-      // Allow creation during signup, or updates by owner/admin.
-      allow write: if isAdmin() || isOwner(memberId);
+      allow get, list: if isAdmin() || isOwner(memberId);
+      allow create; // Allow member profile creation during signup
+      allow update: if isAdmin() || isOwner(memberId);
+      allow delete: if isAdmin();
     }
-    
-    // --- Group Data (Teams & Classes) ---
-    // Denormalized member data is nested under groups.
+
+    // --- Group Data (Teams & Classes) & Subcollections ---
     match /groups/{groupId} {
       // Any signed-in user can read group information.
       allow read: if isSignedIn();
@@ -50,7 +54,7 @@ service cloud.firestore {
       }
     }
 
-    // --- Core Data Collections (Appointment Types & Locations) ---
+    // --- Core Data Collections ---
     match /appointmentTypes/{typeId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -81,24 +85,23 @@ service cloud.firestore {
     // --- Polls ---
     match /polls/{pollId} {
       // Allow any signed-in user to READ/LIST polls. Client-side queries handle filtering.
+      allow read: if isSignedIn();
       // Allow users to VOTE (update) on any poll they can see.
-      allow read, update: if isSignedIn();
+      allow update: if isSignedIn();
       // Only admins can create or delete polls.
       allow create, delete: if isAdmin();
     }
 
     // --- Appointments & Responses ---
     match /appointments/{appointmentId} {
-      // Allow any signed-in user to read any appointment document.
-      // The client query is responsible for filtering by team membership.
-      allow read: if isSignedIn();
+      // Allow read if the appointment is public OR the user is a member of one of its teams.
+      allow read: if isSignedIn() && (resource.data.visibility.type == 'all' || isMemberOfTeams(resource.data.visibility.teamIds));
+      allow list: if isSignedIn(); // Allow listing so client can query and filter
       // Only admins can create, update, or delete appointments.
       allow write: if isAdmin();
     }
     
     match /appointmentResponses/{responseId} {
-      // An admin can manage all responses.
-      // A user can create, read, or manage their OWN responses.
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow list: if isAdmin();
@@ -106,7 +109,7 @@ service cloud.firestore {
 
     // --- Team Treasury ---
     match /treasury/{transactionId} {
-      allow read: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)) && resource.data.teamId in get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams);
+      allow read: if isAdmin() || (isTeamMember() && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.teams.hasAny([resource.data.teamId]));
       allow list: if isAdmin();
       allow write: if isAdmin();
     }
