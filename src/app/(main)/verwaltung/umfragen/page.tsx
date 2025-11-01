@@ -35,7 +35,9 @@ export default function UmfragenPage() {
   const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
   const userTeamIds = useMemo(() => member?.teams || [], [member]);
   
-  // *** BEGINN DER KORREKTUR: Spezifische und sichere Abfragen verwenden ***
+  const nowTimestamp = useMemo(() => Timestamp.now(), []);
+
+  // Sichere und spezifische Abfragen
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
@@ -59,11 +61,9 @@ export default function UmfragenPage() {
   
   const visiblePolls = useMemo(() => {
     const allPolls = [...(pollsForAll || []), ...(pollsForTeams || [])];
-    // Duplikate entfernen, falls eine Umfrage sowohl 'all' ist als auch ein Team-Tag hat
     const uniquePolls = Array.from(new Map(allPolls.map(p => [p.id, p])).values());
     return uniquePolls;
   }, [pollsForAll, pollsForTeams]);
-  // *** ENDE DER KORREKTUR ***
 
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
