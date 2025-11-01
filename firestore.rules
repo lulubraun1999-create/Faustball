@@ -53,6 +53,8 @@ service cloud.firestore {
 
 
     // --- Polls ---
+    // Users can list polls based on client-side queries (for their teams or public).
+    // They can update a poll to cast a vote. Only admins can create/delete.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
