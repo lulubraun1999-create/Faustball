@@ -142,27 +142,29 @@ service cloud.firestore {
             return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
         }
 
-        // CORRECTED READ RULE: Combine get and list
         allow read: if isSignedIn() &&
                     (
                       // Rules for GET (single document)
                       isAdmin() ||
                       (resource.data.visibility.type == 'all') ||
                       isMemberOfVisibleTeamForPoll()
-                      ||
+                    )
+                    ||
+                    (
                       // Rules for LIST (queries)
                       (
+                        request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
                         request.query.where.keys().hasAll(['visibility.type', 'endDate']) &&
                         request.query.where['visibility.type'] == 'all'
                       )
                       ||
                       (
-                        request.query.where.keys().hasAll(['visibility.type', 'visibility.teamIds', 'endDate']) &&
-                        request.query.where['visibility.type'] == 'specificTeams' &&
+                        request.query.keys().hasAll(['where', 'orderBy', 'limit']) &&
+                        request.query.where.keys().hasAll(['visibility.teamIds', 'endDate']) &&
                         request.query.where['visibility.teamIds'].hasAny(getUserTeams())
                       )
                     );
-
+        
         allow create, delete: if isSignedIn() && isAdmin();
         
         allow update: if isSignedIn() &&
