@@ -159,13 +159,15 @@ service cloud.firestore {
           // Admins dürfen alles auflisten
           isAdmin() ||
           // Erlaube die Abfrage für öffentliche Umfragen
-          request.query.where.size() >= 1 &&
-          request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'all'
+          (request.query.keys().hasAny(['where']) &&
+           request.query.where.field == 'visibility.type' &&
+           request.query.where.op == '==' &&
+           request.query.where.value == 'all')
           ||
           // Erlaube die Abfrage für teamspezifische Umfragen
-          request.query.where.size() >= 2 &&
-          request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'specificTeams' &&
-          request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].op == 'array-contains-any' && request.query.where[1].value.hasAny(getUserTeams())
+          (request.query.keys().hasAll(['where', 'where']) &&
+           request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'specificTeams' &&
+           request.query.where[1].field == 'visibility.teamIds' && request.query.where[1].op == 'array-contains-any' && request.query.where[1].value.hasAny(getUserTeams()))
         );
 
         // WRITE-Regeln
