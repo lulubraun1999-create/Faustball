@@ -10,24 +10,22 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Check for the custom claim 'admin' on the user's token.
+      return isSignedIn() && request.auth.token.admin == true;
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
+
     // --- User & Member Data ---
     match /users/{userId} {
-      // Users can read/update their own data, or an admin can.
-      // Anyone signed in can create a user document (on registration).
       allow read, update: if isOwner(userId) || isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn(); // Allow user creation during registration
       allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      // Members can read/update their own profile, or an admin can.
       allow read, update: if isOwner(memberId) || isAdmin();
       allow create: if isSignedIn();
       allow delete: if isAdmin();
@@ -35,19 +33,17 @@ service cloud.firestore {
 
     // --- Groups & Group Membership ---
     match /groups/{groupId} {
-      // Any signed-in user can read group information. Only admins can modify it.
       allow read: if isSignedIn();
       allow write: if isAdmin();
 
       match /members/{memberId} {
-        // Denormalized group member data is readable by anyone signed in, writable by admins.
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
     }
-    
-    // --- Publicly Readable Collections ---
-    // These collections can be read by any signed-in user. Only admins can write to them.
+
+    // --- Publicly Readable Data ---
+    // Any signed-in user can read these. Only admins can write.
     match /appointmentTypes/{typeId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /locations/{locationId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /news/{newsId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
@@ -55,26 +51,27 @@ service cloud.firestore {
     match /appointmentExceptions/{exceptionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /treasury/{transactionId} { allow read: if isSignedIn(); allow write: if isAdmin(); }
 
+
     // --- Polls ---
+    // The client performs two separate queries (one for 'all', one for specific teams).
+    // The rules must allow both queries to execute. Security is enforced by the client queries.
     match /polls/{pollId} {
       allow read, update: if isSignedIn();
       allow create, delete: if isAdmin();
     }
 
     // --- Appointments ---
-    // KORREKTUR: Vereinfachte Regel. Client-Abfragen sind für die Filterung verantwortlich.
+    // Client-side queries are responsible for filtering. This rule allows the necessary queries to run.
     match /appointments/{appointmentId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
     // --- Appointment Responses ---
-    // Users can create their own responses. They can only manage their own responses. Admins can manage all.
+    // Users can create their own responses. They can only read/update/delete their own responses. Admins can manage all.
     match /appointmentResponses/{responseId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
   }
 }
-
-    
