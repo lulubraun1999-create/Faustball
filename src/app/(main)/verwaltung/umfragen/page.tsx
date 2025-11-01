@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -40,10 +41,9 @@ export default function UmfragenPage() {
   const pollsForAllQuery = useMemoFirebase(
     () => (firestore ? query(
         collection(firestore, 'polls'), 
-        where('visibility.type', '==', 'all'),
-        where('endDate', '>=', nowTimestamp)
+        where('visibility.type', '==', 'all')
     ) : null),
-    [firestore, nowTimestamp]
+    [firestore]
   );
   const { data: pollsForAll, isLoading: isLoadingPollsAll } = useCollection<Poll>(pollsForAllQuery);
 
@@ -52,11 +52,10 @@ export default function UmfragenPage() {
         ? query(
             collection(firestore, 'polls'),
             where('visibility.type', '==', 'specificTeams'),
-            where('visibility.teamIds', 'array-contains-any', userTeamIds),
-            where('endDate', '>=', nowTimestamp)
+            where('visibility.teamIds', 'array-contains-any', userTeamIds)
           )
         : null),
-    [firestore, userTeamIds, nowTimestamp]
+    [firestore, userTeamIds]
   );
   const { data: pollsForTeams, isLoading: isLoadingPollsTeams } = useCollection<Poll>(pollsForTeamsQuery);
   
@@ -292,3 +291,5 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         </Card>
     )
 }
+
+    
