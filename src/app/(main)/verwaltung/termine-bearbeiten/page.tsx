@@ -719,31 +719,32 @@ function AdminTerminePageContent() {
   async function handleSaveForFuture() {
     if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
+    const { isAdmin } = useUser.getState(); // Assuming useUser has a Zustand-like getState
+
+    if (!isAdmin) {
+        toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
+        setIsSubmitting(false);
+        return;
+    }
 
     try {
+        const batch = writeBatch(firestore);
+
+        // Logic from your old client-side implementation
         const originalAppointmentRef = doc(firestore, 'appointments', selectedInstanceToEdit.originalId);
         const originalAppointmentSnap = await getDoc(originalAppointmentRef);
-        if (!originalAppointmentSnap.exists()) {
-            throw new Error('Original-Terminserie nicht gefunden');
-        }
-
+        if (!originalAppointmentSnap.exists()) throw new Error('Original-Terminserie nicht gefunden');
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-        const batch = writeBatch(firestore);
-        
+
         const instanceDate = new Date(pendingUpdateData.originalDateISO);
         const dayBefore = addDays(instanceDate, -1);
-        const originalStartDate = originalAppointmentData.startDate.toDate();
-
-        if (dayBefore >= originalStartDate) {
-            batch.update(originalAppointmentRef, {
-                recurrenceEndDate: Timestamp.fromDate(dayBefore),
-            });
+        if (dayBefore >= originalAppointmentData.startDate.toDate()) {
+            batch.update(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(dayBefore) });
         } else {
             batch.delete(originalAppointmentRef);
         }
 
         const newAppointmentRef = doc(collection(firestore, "appointments"));
-
         const newStartDate = new Date(pendingUpdateData.startDate!);
         const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
         
@@ -755,7 +756,7 @@ function AdminTerminePageContent() {
         const finalTitle = pendingUpdateData.title !== originalDisplayTitle 
             ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
             : originalAppointmentData.title;
-
+        
         const newAppointmentData: Omit<Appointment, 'id'> = {
             ...originalAppointmentData,
             title: finalTitle || 'Termin',
@@ -771,21 +772,14 @@ function AdminTerminePageContent() {
             lastUpdated: serverTimestamp(),
             createdBy: user.uid,
         };
-
         batch.set(newAppointmentRef, newAppointmentData);
 
-        const exceptionsQuery = query(
-            collection(firestore, 'appointmentExceptions'),
-            where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
-            where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)))
-        );
-            
+        const exceptionsQuery = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', selectedInstanceToEdit.originalId), where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate))));
         const exceptionsSnap = await getDocs(exceptionsQuery);
         exceptionsSnap.forEach(doc => batch.delete(doc.ref));
-        
+
         await batch.commit();
         toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
-
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         toast({
@@ -1140,7 +1134,7 @@ function AdminTerminePageContent() {
           if (!open) resetAppointmentForm();
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
+        <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarPlus className="h-5 w-5" />
@@ -1152,15 +1146,13 @@ function AdminTerminePageContent() {
                 : 'Neuen Termin oder Serie hinzufügen.'}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[70vh] p-1 pr-6">
             <Form {...appointmentForm}>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                className="space-y-4 px-1 py-4"
-              >
+                <form
+                    onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    className="space-y-4 flex-grow overflow-hidden flex flex-col"
+                >
+                <ScrollArea className="flex-grow pr-6 -mr-6">
+                <div className="space-y-4">
                 <FormField
                   control={appointmentForm.control}
                   name="appointmentTypeId"
@@ -1900,8 +1892,10 @@ function AdminTerminePageContent() {
                     </FormItem>
                   )}
                 />
+                </div>
+                </ScrollArea>
 
-                <DialogFooter className="pt-4">
+                <DialogFooter className="pt-4 border-t shrink-0">
                   <DialogClose asChild>
                     <Button
                       type="button"
@@ -1924,7 +1918,6 @@ function AdminTerminePageContent() {
                 </DialogFooter>
               </form>
             </Form>
-          </ScrollArea>
         </DialogContent>
       </Dialog>
 
@@ -2271,7 +2264,8 @@ function AdminTerminePageContent() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <ScrollArea className="h-[600px] pr-4">
+            <ScrollArea className="h-[600px] w-full">
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2500,6 +2494,7 @@ function AdminTerminePageContent() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </ScrollArea>
           )}
         </CardContent>

@@ -527,7 +527,7 @@ export default function VerwaltungTerminePage() {
                             {monthYear} ({appointmentsInMonth.length})
                         </AccordionTrigger>
                         <AccordionContent>
-                            <div className="rounded-md border">
+                            <div className="overflow-x-auto">
                                 <Table>
                                     <TableHeader>
                                     <TableRow>
