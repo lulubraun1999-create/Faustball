@@ -267,7 +267,7 @@ type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
 function AdminTerminePageContent() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user, isAdmin } = useUser();
 
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
@@ -719,7 +719,6 @@ function AdminTerminePageContent() {
   async function handleSaveForFuture() {
     if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
-    const { isAdmin } = useUser.getState(); // Assuming useUser has a Zustand-like getState
 
     if (!isAdmin) {
         toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
