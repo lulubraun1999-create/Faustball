@@ -694,12 +694,6 @@ export default function AdminTerminePage() {
   async function handleSaveSingleOnly() {
     if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
-
-    if (!isAdmin) {
-        toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
-        setIsSubmitting(false);
-        return;
-    }
     
     try {
         const { firebaseApp } = initializeFirebase();
@@ -729,12 +723,6 @@ export default function AdminTerminePage() {
   async function handleSaveForFuture() {
     if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
-    
-    if (!isAdmin) {
-        toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
-        setIsSubmitting(false);
-        return;
-    }
 
     try {
       const { firebaseApp } = initializeFirebase();
@@ -770,52 +758,49 @@ export default function AdminTerminePage() {
     if (!firestore || !user || !appointment.originalId) return;
     setIsSubmitting(true);
 
-    const exceptionsColRef = collection(firestore, 'appointmentExceptions');
     const originalDate = appointment.startDate.toDate();
     const originalDateStartOfDay = startOfDay(originalDate);
 
-    const existingException = exceptions?.find(
-      (ex) =>
-        ex.originalAppointmentId === appointment.originalId &&
-        isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
+    const exceptionsColRef = collection(firestore, 'appointmentExceptions');
+    const q = query(
+      exceptionsColRef,
+      where('originalAppointmentId', '==', appointment.originalId),
+      where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay))
     );
 
     try {
-      const exceptionRef = existingException
-        ? doc(firestore, 'appointmentExceptions', existingException.id)
-        : doc(collection(firestore, 'appointmentExceptions')); // Prepare new doc ref if needed
+      const snapshot = await getDocs(q);
+      const existingExceptionDoc = snapshot.docs[0];
 
       if (appointment.isCancelled) {
-        // Restore: If there was modified data, revert status to modified. Otherwise, delete.
-        if (existingException) {
-            if (existingException.modifiedData && Object.keys(existingException.modifiedData).length > 0) {
-                 await updateDoc(exceptionRef, { status: 'modified', userId: user.uid });
-                 toast({ title: 'Termin wiederhergestellt (bleibt geändert).' });
-            } else {
-                 await deleteDoc(exceptionRef);
-                 toast({ title: 'Termin wiederhergestellt.' });
-            }
+        if (existingExceptionDoc) {
+          if (existingExceptionDoc.data().modifiedData && Object.keys(existingExceptionDoc.data().modifiedData).length > 0) {
+            await updateDoc(existingExceptionDoc.ref, { status: 'modified', userId: user.uid });
+            toast({ title: 'Termin wiederhergestellt (bleibt geändert).' });
+          } else {
+            await deleteDoc(existingExceptionDoc.ref);
+            toast({ title: 'Termin wiederhergestellt.' });
+          }
         }
       } else {
-        // Cancel: Update existing exception or create a new one.
-        const dataToSet = {
-            ...existingException, // spread existing data if it's there
-            originalAppointmentId: appointment.originalId,
-            originalDate: Timestamp.fromDate(originalDateStartOfDay),
-            status: 'cancelled',
-            userId: user.uid,
-            createdAt: existingException?.createdAt || serverTimestamp(), // keep original creation date
+        const exceptionData = {
+          originalAppointmentId: appointment.originalId,
+          originalDate: Timestamp.fromDate(originalDateStartOfDay),
+          status: 'cancelled' as const,
+          userId: user.uid,
+          createdAt: existingExceptionDoc?.data().createdAt || serverTimestamp(),
+          modifiedData: existingExceptionDoc?.data().modifiedData || {},
         };
-        await setDoc(exceptionRef, dataToSet, { merge: true });
+        const docRef = existingExceptionDoc ? existingExceptionDoc.ref : doc(exceptionsColRef);
+        await setDoc(docRef, exceptionData, { merge: true });
         toast({ title: 'Termin abgesagt.' });
       }
-
     } catch (error: any) {
       errorEmitter.emit(
         'permission-error',
         new FirestorePermissionError({
           path: 'appointmentExceptions',
-          operation: existingException ? 'update' : 'create',
+          operation: 'write',
         })
       );
     } finally {
@@ -1500,138 +1485,41 @@ export default function AdminTerminePage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Mannschaften auswählen</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                role="combobox"
-                                className={cn(
-                                  'w-full justify-between h-auto min-h-10 py-2',
-                                  !field.value?.length &&
-                                    'text-muted-foreground'
-                                )}
-                              >
-                                <span className="flex flex-wrap gap-1">
-                                  {field.value?.length > 0
-                                    ? field.value.map((id) => (
-                                        <span
-                                          key={id}
-                                          className="bg-muted text-muted-foreground px-2 py-0.5 rounded-sm"
-                                        >
-                                          {teamsMap.get(id) || id}
-                                        </span>
-                                      ))
-                                    : 'Mannschaften auswählen'}
-                                </span>
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="w-[--radix-popover-trigger-width] p-0"
-                            onInteractOutside={(e) => e.preventDefault()}
-                          >
-                            <ScrollArea className="h-48">
-                              <div className="p-2 space-y-1">
-                                {isLoadingGroups ? (
-                                  <p className="text-sm text-muted-foreground p-2">
-                                    Lade...
-                                  </p>
-                                ) : sortedGroupedTeams.length > 0 ? (
-                                  sortedGroupedTeams.map(
-                                    (group: GroupWithTeams) => (
-                                      <div key={group.id} className="mb-2">
-                                        <h4 className="font-semibold text-sm mb-1.5 px-2">
-                                          {group.name}
-                                        </h4>
-                                        <div className="flex flex-col space-y-1 pl-4">
-                                          {group.teams.map((team: Group) => (
-                                            <FormField
-                                              key={team.id}
-                                              control={
-                                                appointmentForm.control
-                                              }
-                                              name="visibleTeamIds"
-                                              render={({
-                                                field: multiSelectField,
-                                              }) => (
-                                                <FormItem
-                                                  key={team.id}
-                                                  className="flex flex-row items-center space-x-2 space-y-0 px-2 py-1.5 rounded-sm hover:bg-accent"
-                                                >
-                                                  <FormControl>
-                                                    <Checkbox
-                                                      checked={multiSelectField.value?.includes(
-                                                        team.id
-                                                      )}
-                                                      onCheckedChange={(
-                                                        checked
-                                                      ) => {
-                                                        const newValue =
-                                                          checked
-                                                            ? [
-                                                                ...(multiSelectField.value ||
-                                                                  []),
-                                                                team.id,
-                                                              ]
-                                                            : (
-                                                                multiSelectField.value ||
-                                                                []
-                                                              ).filter(
-                                                                (id) =>
-                                                                  id !== team.id
-                                                              );
-                                                        multiSelectField.onChange(
-                                                          newValue
-                                                        );
-                                                      }}
-                                                    />
-                                                  </FormControl>
-                                                  <FormLabel
-                                                    className="text-sm font-normal cursor-pointer"
-                                                    onClick={(e) => {
-                                                      e.preventDefault();
-                                                      e.stopPropagation();
-                                                      const newValue =
-                                                        multiSelectField.value?.includes(
-                                                          team.id
-                                                        )
-                                                          ? (
-                                                              multiSelectField.value ||
-                                                              []
-                                                            ).filter(
-                                                              (id) =>
-                                                                id !== team.id
-                                                            )
-                                                          : [
-                                                              ...(multiSelectField.value ||
-                                                                []),
-                                                              team.id,
-                                                            ];
-                                                      multiSelectField.onChange(
-                                                        newValue
-                                                      );
-                                                    }}
-                                                  >
-                                                    {team.name}
-                                                  </FormLabel>
-                                                </FormItem>
-                                              )}
+                        <FormControl>
+                           <Select>
+                            <SelectTrigger>
+                               <SelectValue placeholder="Mannschaften auswählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <ScrollArea className="h-48">
+                                  {isLoadingGroups ? (
+                                    <div className="p-4 text-center text-sm">Lade...</div>
+                                  ) : (
+                                    sortedGroupedTeams.map((group) => (
+                                      <React.Fragment key={group.id}>
+                                        <h4 className="font-semibold text-sm my-2 px-4">{group.name}</h4>
+                                        {group.teams.map((team) => (
+                                          <div key={team.id} className="flex items-center space-x-2 px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                                            <Checkbox
+                                              id={`team-check-${team.id}`}
+                                              checked={field.value?.includes(team.id)}
+                                              onCheckedChange={(checked) => {
+                                                const newValue = checked
+                                                  ? [...(field.value || []), team.id]
+                                                  : (field.value || []).filter((id) => id !== team.id);
+                                                field.onChange(newValue);
+                                              }}
                                             />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )
-                                  )
-                                ) : (
-                                  <p className="text-sm text-muted-foreground p-2 text-center">
-                                    Keine Mannschaften erstellt.
-                                  </p>
-                                )}
-                              </div>
-                            </ScrollArea>
-                          </PopoverContent>
-                        </Popover>
+                                            <Label htmlFor={`team-check-${team.id}`} className="font-normal w-full cursor-pointer">{team.name}</Label>
+                                          </div>
+                                        ))}
+                                      </React.Fragment>
+                                    ))
+                                  )}
+                                </ScrollArea>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
