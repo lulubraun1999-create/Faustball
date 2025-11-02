@@ -123,7 +123,15 @@ service cloud.firestore {
 
     // --- /appointmentExceptions/{exceptionId} ---
     match /appointmentExceptions/{exceptionId} {
-        allow read, write: if isSignedIn() && isAdmin();
+        function isCreatingOwnException() {
+            return request.resource.data.userId == request.auth.uid;
+        }
+        function isExistingExceptionOwner() {
+            return resource.data.userId == request.auth.uid;
+        }
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && (isAdmin() || isCreatingOwnException());
+        allow update, delete: if isSignedIn() && (isAdmin() || isExistingExceptionOwner());
     }
 
     // --- /polls/{pollId} ---
