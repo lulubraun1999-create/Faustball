@@ -84,27 +84,122 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
  * Entzieht einem Benutzer die 'admin'-Rolle.
  */
 export const revokeAdminRole = onCall(async (request: CallableRequest) => {
-  // ... (Code für revokeAdminRole - stelle sicher, dass er hier ist, falls du ihn brauchst) ...
-  if (request.auth?.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Only an admin can revoke admin roles.');
-  }
-  // ... (restliche Logik für revokeAdminRole)
-  return { status: 'success', message: 'Rolle (Logik nicht vollständig implementiert) entfernt.' };
+    if (request.auth?.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only an admin can revoke admin roles.');
+    }
+
+    const targetUid = request.data.uid;
+    if (typeof targetUid !== 'string' || targetUid.length === 0) {
+        throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+    }
+
+    // Prevent last admin from revoking themselves
+    if (request.auth.uid === targetUid) {
+        const adminSnapshot = await db.collection('users').where('role', '==', 'admin').get();
+        if (adminSnapshot.size <= 1) {
+            throw new HttpsError('failed-precondition', 'Cannot revoke the last admin role.');
+        }
+    }
+
+    try {
+        await admin.auth().setCustomUserClaims(targetUid, { admin: null });
+        const batch = db.batch();
+        const userDocRef = db.collection('users').doc(targetUid);
+        const memberDocRef = db.collection('members').doc(targetUid);
+        batch.set(userDocRef, { role: 'user' }, { merge: true });
+        batch.set(memberDocRef, { role: 'user' }, { merge: true });
+        await batch.commit();
+
+        return { status: 'success', message: `Successfully revoked admin role for user ${targetUid}.` };
+    } catch (error: any) {
+        console.error(`Error revoking admin role for UID: ${targetUid}`, error);
+        throw new HttpsError('internal', 'An internal error occurred while trying to revoke the admin role.', error.message);
+    }
 });
 
 
-// --- TERMIN-FUNKTIONEN (HIER IST DIE KORREKTUR) ---
+/**
+ * Sendet eine Chat-Nachricht und prüft die Berechtigungen serverseitig.
+ */
+export const sendMessage = onCall(async (request: CallableRequest) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    
+    const { roomId, content } = request.data;
+    const userId = request.auth.uid;
+
+    if (!roomId || typeof roomId !== 'string' || !content || typeof content !== 'string') {
+        throw new HttpsError('invalid-argument', 'The function must be called with a "roomId" and "content".');
+    }
+
+    const isUserAdmin = request.auth.token.admin === true;
+
+    // Berechtigungsprüfung
+    let isAllowed = false;
+    if (roomId === 'all') {
+        isAllowed = true;
+    } else if (roomId === 'trainers' && isUserAdmin) {
+        isAllowed = true;
+    } else if (roomId.startsWith('team_')) {
+        try {
+            const teamId = roomId.split('team_')[1];
+            const memberDoc = await db.collection('members').doc(userId).get();
+            if (memberDoc.exists) {
+                const memberData = memberDoc.data();
+                if (memberData?.teams?.includes(teamId)) {
+                    isAllowed = true;
+                }
+            }
+        } catch (error) {
+            console.error('Error checking team membership:', error);
+            throw new HttpsError('internal', 'Could not verify team membership.');
+        }
+    }
+
+    if (!isAllowed) {
+        throw new HttpsError('permission-denied', 'You do not have permission to send messages to this room.');
+    }
+
+    // Benutzerprofildaten für den Anzeigenamen abrufen
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+        throw new HttpsError('not-found', 'User profile not found.');
+    }
+    const userData = userDoc.data();
+    const userName = `${userData?.firstName || ''} ${userData?.lastName || ''}`.trim() || 'Unbekannt';
+
+    // Nachrichtendaten erstellen und in die Datenbank schreiben
+    const messageData = {
+        userId: userId,
+        userName: userName,
+        content: content,
+        createdAt: serverTimestamp(),
+    };
+
+    try {
+        await addDoc(db.collection('chats').doc(roomId).collection('messages'), messageData);
+        return { status: 'success', message: 'Message sent successfully.' };
+    } catch (error) {
+        console.error('Error sending message:', error);
+        throw new HttpsError('internal', 'An error occurred while sending the message.');
+    }
+});
+
+
+// --- TERMIN-FUNKTIONEN ---
 
 /**
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
 export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
+    // KORREKTUR: Admin-Prüfung wieder hinzugefügt
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
     const { pendingUpdateData, selectedInstanceToEdit, exceptions } = request.data;
-    const userId = request.auth.uid; // ID des Admins, der die Änderung vornimmt
+    const userId = request.auth.uid;
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
@@ -116,7 +211,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    const existingException = exceptions?.find((ex: any) => // any verwenden, da Typen serverseitig anders sein können
+    const existingException = exceptions?.find((ex: any) =>
         ex.originalAppointmentId === selectedInstanceToEdit.originalId &&
         isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
     );
@@ -137,7 +232,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         originalDate: Timestamp.fromDate(originalDateStartOfDay),
         status: 'modified',
         modifiedData: modifiedData,
-        createdAt: serverTimestamp(), // serverTimestamp() in .set/add verwenden
+        createdAt: serverTimestamp(),
         userId: userId,
     };
 
@@ -190,12 +285,12 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         batch.delete(originalAppointmentRef);
       }
 
-      const newAppointmentRef = db.collection("appointments").doc(); // Neue ID generieren
+      const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
       const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
       
-      const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin'; // typesMap muss übergeben werden
+      const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin';
       const isSonstiges = typeName === 'Sonstiges';
       const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
       const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
@@ -216,7 +311,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
             
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Behält das *originale* Enddatum der Serie bei
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
         createdAt: serverTimestamp(),
         lastUpdated: serverTimestamp(),
@@ -225,7 +320,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       batch.set(newAppointmentRef, newAppointmentData);
 
-      // Alte Ausnahmen löschen
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));

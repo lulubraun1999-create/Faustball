@@ -691,8 +691,15 @@ export default function AdminTerminePage() {
   };
 
   async function handleSaveSingleOnly() {
-    if (!pendingUpdateData || !selectedInstanceToEdit) return;
+    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
+
+    if (!isAdmin) {
+        toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
+        setIsSubmitting(false);
+        return;
+    }
+    
     try {
         const { firebaseApp } = initializeFirebase();
         const functions = getFunctions(firebaseApp);
@@ -719,7 +726,7 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!pendingUpdateData || !selectedInstanceToEdit) return;
+    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
     
     if (!isAdmin) {
@@ -780,31 +787,31 @@ export default function AdminTerminePage() {
           existingException.id
         );
         if (appointment.isCancelled) {
+          // If there's modified data, revert to 'modified', otherwise delete
           if (
             existingException.modifiedData &&
             Object.keys(existingException.modifiedData).length > 0
           ) {
-            await updateDoc(docRef, { status: 'modified' });
-            toast({ title: 'Termin wiederhergestellt (geändert).' });
+            await updateDoc(docRef, { status: 'modified', userId: user.uid });
+            toast({ title: 'Termin wiederhergestellt (bleibt geändert).' });
           } else {
             await deleteDoc(docRef);
             toast({ title: 'Termin wiederhergestellt.' });
           }
         } else {
+          // Not cancelled, so cancel it now.
           await updateDoc(docRef, {
             status: 'cancelled',
-            modifiedData: {},
             userId: user.uid,
-            createdAt: serverTimestamp(),
           });
           toast({ title: 'Termin abgesagt.' });
         }
       } else {
+        // No existing exception, create a new 'cancelled' one.
         const exceptionData: Omit<AppointmentException, 'id'> = {
           originalAppointmentId: appointment.originalId,
           originalDate: Timestamp.fromDate(originalDateStartOfDay),
           status: 'cancelled',
-          modifiedData: {},
           createdAt: serverTimestamp(),
           userId: user.uid,
         };
