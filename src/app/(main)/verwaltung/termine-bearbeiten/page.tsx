@@ -29,6 +29,7 @@ import {
   writeBatch,
   getDocs,
   getDoc,
+  setDoc,
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import {
@@ -780,44 +781,35 @@ export default function AdminTerminePage() {
     );
 
     try {
-      if (existingException) {
-        const docRef = doc(
-          firestore,
-          'appointmentExceptions',
-          existingException.id
-        );
-        if (appointment.isCancelled) {
-          // If there's modified data, revert to 'modified', otherwise delete
-          if (
-            existingException.modifiedData &&
-            Object.keys(existingException.modifiedData).length > 0
-          ) {
-            await updateDoc(docRef, { status: 'modified', userId: user.uid });
-            toast({ title: 'Termin wiederhergestellt (bleibt geändert).' });
-          } else {
-            await deleteDoc(docRef);
-            toast({ title: 'Termin wiederhergestellt.' });
-          }
-        } else {
-          // Not cancelled, so cancel it now.
-          await updateDoc(docRef, {
-            status: 'cancelled',
-            userId: user.uid,
-          });
-          toast({ title: 'Termin abgesagt.' });
+      const exceptionRef = existingException
+        ? doc(firestore, 'appointmentExceptions', existingException.id)
+        : doc(collection(firestore, 'appointmentExceptions')); // Prepare new doc ref if needed
+
+      if (appointment.isCancelled) {
+        // Restore: If there was modified data, revert status to modified. Otherwise, delete.
+        if (existingException) {
+            if (existingException.modifiedData && Object.keys(existingException.modifiedData).length > 0) {
+                 await updateDoc(exceptionRef, { status: 'modified', userId: user.uid });
+                 toast({ title: 'Termin wiederhergestellt (bleibt geändert).' });
+            } else {
+                 await deleteDoc(exceptionRef);
+                 toast({ title: 'Termin wiederhergestellt.' });
+            }
         }
       } else {
-        // No existing exception, create a new 'cancelled' one.
-        const exceptionData: Omit<AppointmentException, 'id'> = {
-          originalAppointmentId: appointment.originalId,
-          originalDate: Timestamp.fromDate(originalDateStartOfDay),
-          status: 'cancelled',
-          createdAt: serverTimestamp(),
-          userId: user.uid,
+        // Cancel: Update existing exception or create a new one.
+        const dataToSet = {
+            ...existingException, // spread existing data if it's there
+            originalAppointmentId: appointment.originalId,
+            originalDate: Timestamp.fromDate(originalDateStartOfDay),
+            status: 'cancelled',
+            userId: user.uid,
+            createdAt: existingException?.createdAt || serverTimestamp(), // keep original creation date
         };
-        await addDoc(exceptionsColRef, exceptionData);
+        await setDoc(exceptionRef, dataToSet, { merge: true });
         toast({ title: 'Termin abgesagt.' });
       }
+
     } catch (error: any) {
       errorEmitter.emit(
         'permission-error',
@@ -2499,4 +2491,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
