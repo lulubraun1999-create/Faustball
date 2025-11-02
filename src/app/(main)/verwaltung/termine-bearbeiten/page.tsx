@@ -264,10 +264,13 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
 };
 type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
 
-function AdminTerminePageContent() {
+
+export default function AdminTerminePage() {
+  const { isAdmin, isUserLoading } = useUser();
+
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, isAdmin } = useUser();
+  const { user } = useUser();
 
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
@@ -557,7 +560,7 @@ function AdminTerminePageContent() {
 
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
-    if (!firestore || !appointmentsRef || !user) return;
+    if (!firestore || !user) return;
     setIsSubmitting(true);
 
     const selectedTypeName = typesMap.get(data.appointmentTypeId);
@@ -648,7 +651,8 @@ function AdminTerminePageContent() {
         await updateDoc(docRef, { ...appointmentData, lastUpdated: serverTimestamp() });
         toast({ title: 'Terminserie erfolgreich aktualisiert.' });
       } else {
-        await addDoc(appointmentsRef, {
+        const appointmentsColRef = collection(firestore, 'appointments');
+        await addDoc(appointmentsColRef, {
           ...appointmentData,
         });
         toast({ title: 'Neuer Termin erfolgreich erstellt.' });
@@ -727,58 +731,17 @@ function AdminTerminePageContent() {
     }
 
     try {
-        const batch = writeBatch(firestore);
+      const { firebaseApp } = initializeFirebase();
+      const functions = getFunctions(firebaseApp);
+      const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-        // Logic from your old client-side implementation
-        const originalAppointmentRef = doc(firestore, 'appointments', selectedInstanceToEdit.originalId);
-        const originalAppointmentSnap = await getDoc(originalAppointmentRef);
-        if (!originalAppointmentSnap.exists()) throw new Error('Original-Terminserie nicht gefunden');
-        const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-
-        const instanceDate = new Date(pendingUpdateData.originalDateISO);
-        const dayBefore = addDays(instanceDate, -1);
-        if (dayBefore >= originalAppointmentData.startDate.toDate()) {
-            batch.update(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(dayBefore) });
-        } else {
-            batch.delete(originalAppointmentRef);
-        }
-
-        const newAppointmentRef = doc(collection(firestore, "appointments"));
-        const newStartDate = new Date(pendingUpdateData.startDate!);
-        const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
-        
-        const typeName = typesMap.get(originalAppointmentData.appointmentTypeId) || 'Termin';
-        const isSonstiges = typeName === 'Sonstiges';
-        const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
-        const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
-
-        const finalTitle = pendingUpdateData.title !== originalDisplayTitle 
-            ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
-            : originalAppointmentData.title;
-        
-        const newAppointmentData: Omit<Appointment, 'id'> = {
-            ...originalAppointmentData,
-            title: finalTitle || 'Termin',
-            locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-            description: pendingUpdateData.description ?? originalAppointmentData.description,
-            meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-            meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-            isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-            startDate: Timestamp.fromDate(newStartDate),
-            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-            recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-            createdAt: serverTimestamp(),
-            lastUpdated: serverTimestamp(),
-            createdBy: user.uid,
-        };
-        batch.set(newAppointmentRef, newAppointmentData);
-
-        const exceptionsQuery = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', selectedInstanceToEdit.originalId), where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate))));
-        const exceptionsSnap = await getDocs(exceptionsQuery);
-        exceptionsSnap.forEach(doc => batch.delete(doc.ref));
-
-        await batch.commit();
-        toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+      await saveFutureInstancesFn({
+        pendingUpdateData,
+        selectedInstanceToEdit,
+        typesMap: Object.fromEntries(typesMap)
+      });
+      
+      toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         toast({
@@ -892,8 +855,6 @@ function AdminTerminePageContent() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    // This logic handles both single instances and full series
-    // If it's a non-recurring appointment, or the first instance of a series, open the main dialog
     if (!appointment.recurrence || appointment.recurrence === 'none' || (appointment.originalId === appointment.id)) {
       const originalAppointment = appointments?.find(
         (app) => app.id === appointment.originalId
@@ -952,7 +913,7 @@ function AdminTerminePageContent() {
         description: originalAppointment.description ?? '',
       });
       setIsAppointmentDialogOpen(true);
-    } else { // For a recurring instance that is not the first one
+    } else { 
       setSelectedInstanceToEdit(appointment);
 
       const formatTimestampForInput = (
@@ -1088,6 +1049,7 @@ function AdminTerminePageContent() {
   };
 
   const isLoading =
+    isUserLoading ||
     isLoadingAppointments ||
     isLoadingTypes ||
     isLoadingLocations ||
@@ -1123,6 +1085,35 @@ function AdminTerminePageContent() {
         teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
     })).filter(c => c.teams.length > 0);
 }, [groups]);
+
+  if (isUserLoading) {
+    return (
+      <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  if (!isAdmin) {
+    return (
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-destructive">
+              <ListTodo className="h-8 w-8" />
+              <span className="text-2xl font-headline">Zugriff verweigert</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+              diesen Bereich zuzugreifen.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -2502,33 +2493,4 @@ function AdminTerminePageContent() {
   );
 }
 
-export default function AdminTerminePage() {
-  const { isAdmin, isUserLoading } = useUser();
-  if (isUserLoading) {
-    return (
-      <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-  if (!isAdmin) {
-    return (
-      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-destructive">
-              <ListTodo className="h-8 w-8" />
-              <span className="text-2xl font-headline">Zugriff verweigert</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Sie verfügen nicht über die erforderlichen Berechtigungen...
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  return <AdminTerminePageContent />;
-}
+    
