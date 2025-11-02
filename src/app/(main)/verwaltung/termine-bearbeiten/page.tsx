@@ -266,11 +266,9 @@ type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
 
 
 export default function AdminTerminePage() {
-  const { isAdmin, isUserLoading } = useUser();
-
+  const { isAdmin, isUserLoading, user } = useUser();
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user } = useUser();
 
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
@@ -721,9 +719,9 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
+    if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
-
+    
     if (!isAdmin) {
         toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
         setIsSubmitting(false);
@@ -735,10 +733,12 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
+      const typesMapPlainObject = Object.fromEntries(typesMap);
+
       await saveFutureInstancesFn({
         pendingUpdateData,
         selectedInstanceToEdit,
-        typesMap: Object.fromEntries(typesMap)
+        typesMap: typesMapPlainObject,
       });
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
@@ -2493,4 +2493,3 @@ export default function AdminTerminePage() {
   );
 }
 
-    
