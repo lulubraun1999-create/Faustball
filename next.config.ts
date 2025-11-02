@@ -3,24 +3,6 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  experimental: {
-    // This is the fix for the Turbopack root issue.
-    turbopack: {
-      resolveExtensions: [
-        ".mdx",
-        ".tsx",
-        ".ts",
-        ".jsx",
-        ".js",
-        ".mjs",
-        ".json",
-      ],
-      // The root directory for Turbopack resolution.
-      // This is necessary to fix the "inferred your workspace root" error.
-      // `__dirname` ensures it's always the project root.
-      root: __dirname,
-    },
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
