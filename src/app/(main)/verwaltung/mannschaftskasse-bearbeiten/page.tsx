@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, FC } from 'react';
@@ -176,12 +177,12 @@ export default function AdminKassePage() {
     return members.filter(m => m.teams?.includes(selectedTeamId));
   }, [members, selectedTeamId]);
 
-  // Saldo-Berechnung (bleibt gleich)
+  // Saldo-Berechnung
   const totalBalance = useMemo(() => {
     return transactions?.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      else if (tx.type === 'expense') return acc + tx.amount;
-      else if (tx.type === 'penalty' && tx.status === 'paid') return acc + Math.abs(tx.amount);
+      if (tx.type === 'expense') return acc - tx.amount; 
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
       return acc;
     }, 0) || 0;
   }, [transactions]);
@@ -240,13 +241,13 @@ export default function AdminKassePage() {
          toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe oder Mitglied nicht gefunden.' });
          return;
       }
-      finalAmount = -penalty.amount;
+      finalAmount = penalty.amount; // KORREKTUR: Betrag ist positiv
       finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
       finalStatus = 'unpaid';
       finalMemberId = data.memberId;
 
     } else if (data.type === 'expense') {
-      finalAmount = -(data.amount ?? 0);
+      finalAmount = data.amount ?? 0; // Betrag bleibt positiv, wird bei Saldo-Berechnung subtrahiert
       finalMemberId = undefined;
     } else { // income
         finalAmount = data.amount ?? 0;
@@ -395,12 +396,16 @@ export default function AdminKassePage() {
                         {isLoadingTransactions ? ( <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow> ) : transactions && transactions.length > 0 ? (
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
+                            const isExpense = tx.type === 'expense';
                             return (
                             <TableRow key={tx.id}>
                                 <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
                                 <TableCell>{memberName}</TableCell>
                                 <TableCell className="font-medium">{tx.description}</TableCell>
-                                <TableCell className={cn(tx.amount >= 0 ? "text-green-600" : "text-red-600")}>{tx.amount.toFixed(2)} €</TableCell>
+                                <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
+                                  {isExpense ? '-' : '+'}
+                                  {tx.amount.toFixed(2)} €
+                                </TableCell>
                                 <TableCell>{(tx.type === 'penalty' || tx.status === 'unpaid') ? (<Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'} onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>{tx.status === 'paid' ? 'Bezahlt' : 'Offen'}</Button>) : '-'}</TableCell>
                                 <TableCell className="text-right"><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Transaktion löschen?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeleteTransaction(tx.id)}>Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></TableCell>
                             </TableRow>

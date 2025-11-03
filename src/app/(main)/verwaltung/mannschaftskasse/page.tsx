@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -101,8 +102,8 @@ export default function VerwaltungMannschaftskassePage() {
     const teamTransactions = allTransactions?.filter(t => t.teamId === selectedTeamId) || [];
     const balance = teamTransactions.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      if (tx.type === 'expense') return acc + tx.amount; 
-      if (tx.type === 'penalty' && tx.status === 'paid') return acc + Math.abs(tx.amount);
+      if (tx.type === 'expense') return acc - tx.amount;
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
       return acc;
     }, 0);
     return { penalties: teamPenalties, transactions: teamTransactions, totalBalance: balance };
@@ -194,14 +195,14 @@ export default function VerwaltungMannschaftskassePage() {
                         {transactions && transactions.length > 0 ? (
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
+                            const isExpense = tx.type === 'expense';
                             return (
                             <TableRow key={tx.id}>
                                 <TableCell className="font-medium max-w-[150px] truncate">{tx.description}</TableCell>
                                 <TableCell className="hidden sm:table-cell">{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
                                 <TableCell className="hidden md:table-cell">{memberName}</TableCell>
-                                <TableCell className={cn(
-                                    tx.amount >= 0 ? "text-green-600" : "text-red-600"
-                                    )}>
+                                <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
+                                  {isExpense ? '-' : '+'}
                                   {tx.amount.toFixed(2)} €
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
@@ -255,3 +256,4 @@ export default function VerwaltungMannschaftskassePage() {
     </div>
   );
 }
+
