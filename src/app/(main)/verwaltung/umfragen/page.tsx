@@ -183,7 +183,8 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
     const userVotedOptionIds = new Set(userVotes.map(v => v.optionId));
     
     const pollExpired = isPast(poll.endDate.toDate());
-    const totalVotes = poll.votes.length;
+    const totalVotes = new Set(poll.votes.map(v => v.userId)).size;
+
 
     const canVote = !pollExpired && userVotes.length === 0;
     const canRetract = !pollExpired && userVotes.length > 0;
@@ -191,12 +192,13 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
 
     useEffect(() => {
         // Pre-fill selection if user has already voted
-        if (userVotes.length > 0) {
-            setSelectedOptions(userVotes.map(v => v.optionId));
+        if (userVotedOptionIds.size > 0) {
+            setSelectedOptions(Array.from(userVotedOptionIds));
         } else {
             setSelectedOptions([]);
         }
-    }, [userVotes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [poll.id]);
 
     const handleSingleSelection = (optionId: string) => {
         setSelectedOptions([optionId]);
@@ -225,13 +227,14 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                     <div className="space-y-4">
                         {poll.options.map(option => {
                             const voteCount = poll.votes.filter(v => v.optionId === option.id).length;
-                            const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+                            const uniqueVotersForOption = new Set(poll.votes.filter(v => v.optionId === option.id).map(v => v.userId)).size;
+                            const percentage = totalVotes > 0 ? (uniqueVotersForOption / totalVotes) * 100 : 0;
                             const userVotedForThis = userVotedOptionIds.has(option.id);
                             return (
                                 <div key={option.id}>
                                     <div className="flex justify-between text-sm mb-1">
                                         <span className={cn("font-medium", userVotedForThis && "text-primary")}>{option.text}</span>
-                                        <span className="text-muted-foreground">{voteCount} Stimme(n) ({percentage.toFixed(0)}%)</span>
+                                        <span className="text-muted-foreground">{uniqueVotersForOption} Stimme(n) ({percentage.toFixed(0)}%)</span>
                                     </div>
                                     <Progress value={percentage} />
                                 </div>
