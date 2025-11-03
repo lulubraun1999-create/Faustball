@@ -704,7 +704,6 @@ export default function AdminTerminePage() {
         await saveSingleException({
             pendingUpdateData,
             selectedInstanceToEdit,
-            exceptions: exceptions || [],
         });
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });

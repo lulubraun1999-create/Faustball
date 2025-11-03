@@ -1,7 +1,7 @@
 
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch, query, where } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException } from './types';
 import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
 
@@ -197,7 +197,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit, exceptions } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
@@ -210,10 +210,14 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    const existingException = exceptions?.find((ex: any) =>
-        ex.originalAppointmentId === selectedInstanceToEdit.originalId &&
-        isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
+    
+    // Search for existing exception on the server
+    const q = query(exceptionsColRef, 
+        where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
+        where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay))
     );
+    const querySnapshot = await q.get();
+    const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
 
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
@@ -236,9 +240,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     };
 
     try {
-        if (existingException) {
-            const docRef = db.collection('appointmentExceptions').doc(existingException.id);
-            await updateDoc(docRef, { modifiedData: modifiedData, status: 'modified', userId: userId });
+        if (existingExceptionDoc) {
+            await updateDoc(existingExceptionDoc.ref, { modifiedData: modifiedData, status: 'modified', userId: userId });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
             await addDoc(exceptionsColRef, exceptionData);
