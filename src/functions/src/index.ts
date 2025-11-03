@@ -277,7 +277,12 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
-      const originalStartDate = originalAppointmentData.startDate.toDate();
+      
+      // Ensure originalStartDate is a valid Date object
+      const originalStartDate = originalAppointmentData.startDate?.toDate();
+      if (!originalStartDate) {
+          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
+      }
       
       if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
