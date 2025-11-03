@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -198,9 +199,9 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
         meetingTime: z.string().optional(),
         description: z.string().optional(),
       })
-      .refine((data) => !data.endDate || !data.startDate || data.endDate >= data.startDate, {
-        path: ['endDate'],
-        message: 'Enddatum muss nach dem Startdatum liegen.',
+      .refine((data) => data.isAllDay || !data.endDate || !data.startDate || data.endDate >= data.startDate, {
+          path: ['endDate'],
+          message: 'Enddatum muss nach dem Startdatum liegen.',
       })
       .refine(
         (data) =>
@@ -623,7 +624,7 @@ export default function AdminTerminePage() {
       title: finalTitle || '',
       appointmentTypeId: data.appointmentTypeId,
       startDate: startDateTimestamp,
-      ...(endDateTimestamp && { endDate: endDateTimestamp }),
+      ...(endDateTimestamp && !data.isAllDay && { endDate: endDateTimestamp }),
       isAllDay: data.isAllDay,
       recurrence: data.recurrence,
       ...(recurrenceEndDateTimestamp &&
