@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Menu, Volleyball } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,10 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="pr-0">
+        <SheetHeader>
+            <SheetTitle className="sr-only">Mobiles Navigationsmenü</SheetTitle>
+            <SheetDescription className="sr-only">Eine Liste von Links zur Navigation auf der Website.</SheetDescription>
+        </SheetHeader>
         <Link
             href="/dashboard"
             className="flex items-center"
