@@ -9,9 +9,10 @@ import {
   useUser,
   errorEmitter,
   FirestorePermissionError,
+  useDoc,
 } from '@/firebase';
 import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, where, Timestamp } from 'firebase/firestore';
-import type { Poll } from '@/lib/types';
+import type { Poll, MemberProfile } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -27,6 +28,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 export default function UmfragenPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
+
+  const memberProfileRef = useMemoFirebase(
+    () => (user ? doc(firestore, 'members', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: memberProfile, isLoading: isLoadingMemberProfile } = useDoc<MemberProfile>(memberProfileRef);
 
   const pollsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'polls') : null), [firestore]);
   const { data: visiblePolls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
@@ -109,12 +116,12 @@ export default function UmfragenPage() {
     });
 
     active.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-    expired.sort((a,b) => b.endDate.toMillis() - a.endDate.toMillis());
+    expired.sort((a,b) => b.endDate.toMillis() - b.endDate.toMillis());
 
     return { activePolls: active, expiredPolls: expired };
   }, [visiblePolls]);
 
-  const isLoading = isLoadingPolls || isUserLoading;
+  const isLoading = isLoadingPolls || isUserLoading || isLoadingMemberProfile;
 
   if (isLoading) {
     return (
@@ -137,7 +144,7 @@ export default function UmfragenPage() {
             {activePolls.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {activePolls.map(poll => (
-                        <PollCard key={poll.id} poll={poll} user={user} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
+                        <PollCard key={poll.id} poll={poll} user={user} memberProfile={memberProfile} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
                     ))}
                 </div>
             ) : (
@@ -153,7 +160,7 @@ export default function UmfragenPage() {
             {expiredPolls.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {expiredPolls.map(poll => (
-                        <PollCard key={poll.id} poll={poll} user={user} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
+                        <PollCard key={poll.id} poll={poll} user={user} memberProfile={memberProfile} onVote={handleVote} onRetract={handleRetractVote} votingStates={votingStates} />
                     ))}
                 </div>
             ) : (
@@ -172,12 +179,13 @@ export default function UmfragenPage() {
 interface PollCardProps {
     poll: Poll;
     user: User | null;
+    memberProfile: MemberProfile | null;
     onVote: (pollId: string, optionIds: string[]) => void;
     onRetract: (pollId: string) => void;
     votingStates: Record<string, boolean>;
 }
 
-function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps) {
+function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }: PollCardProps) {
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
     const userVotes = poll.votes.filter(v => v.userId === user?.uid);
     const userVotedOptionIds = new Set(userVotes.map(v => v.optionId));
@@ -185,10 +193,18 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
     const pollExpired = isPast(poll.endDate.toDate());
     const totalVotes = new Set(poll.votes.map(v => v.userId)).size;
 
+    const canUserVote = useMemo(() => {
+        if (!memberProfile) return false;
+        if (poll.visibility.type === 'all') return true;
+        
+        const userTeamIds = new Set(memberProfile.teams || []);
+        return poll.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+    }, [poll.visibility, memberProfile]);
 
-    const canVote = !pollExpired && userVotes.length === 0;
-    const canRetract = !pollExpired && userVotes.length > 0;
-    const showResults = pollExpired || userVotes.length > 0;
+    const canVoteNow = !pollExpired && userVotes.length === 0 && canUserVote;
+    const canRetractVote = !pollExpired && userVotes.length > 0 && canUserVote;
+    const showResults = pollExpired || userVotes.length > 0 || !canUserVote;
+
 
     useEffect(() => {
         // Pre-fill selection if user has already voted
@@ -197,8 +213,7 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
         } else {
             setSelectedOptions([]);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [poll.id]);
+    }, [poll.id, userVotedOptionIds]);
 
     const handleSingleSelection = (optionId: string) => {
         setSelectedOptions([optionId]);
@@ -215,7 +230,7 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
     };
 
     return (
-        <Card className={cn("flex flex-col", pollExpired && "opacity-70")}>
+        <Card className={cn("flex flex-col", (pollExpired || !canUserVote) && "opacity-70")}>
             <CardHeader>
                 <CardTitle>{poll.title}</CardTitle>
                 <CardDescription>
@@ -226,7 +241,6 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                 {showResults ? (
                     <div className="space-y-4">
                         {poll.options.map(option => {
-                            const voteCount = poll.votes.filter(v => v.optionId === option.id).length;
                             const uniqueVotersForOption = new Set(poll.votes.filter(v => v.optionId === option.id).map(v => v.userId)).size;
                             const percentage = totalVotes > 0 ? (uniqueVotersForOption / totalVotes) * 100 : 0;
                             const userVotedForThis = userVotedOptionIds.has(option.id);
@@ -249,13 +263,14 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                                     id={`${poll.id}-${option.id}`}
                                     checked={selectedOptions.includes(option.id)}
                                     onCheckedChange={(checked) => handleMultipleSelection(option.id, !!checked)}
+                                    disabled={!canVoteNow}
                                 />
                                 <Label htmlFor={`${poll.id}-${option.id}`}>{option.text}</Label>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <RadioGroup onValueChange={handleSingleSelection} disabled={!canVote}>
+                    <RadioGroup onValueChange={handleSingleSelection} disabled={!canVoteNow}>
                         <div className="space-y-2">
                             {poll.options.map(option => (
                                 <div key={option.id} className="flex items-center space-x-2">
@@ -268,20 +283,23 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                 )}
             </CardContent>
             <CardFooter className="flex justify-end">
-                {canVote && (
+                {canVoteNow && (
                     <Button onClick={() => onVote(poll.id!, selectedOptions)} disabled={selectedOptions.length === 0 || votingStates[poll.id!]}>
                          {votingStates[poll.id!] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Abstimmen
                     </Button>
                 )}
-                {canRetract && (
+                {canRetractVote && (
                     <Button variant="outline" onClick={() => onRetract(poll.id!)} disabled={votingStates[`retract-${poll.id!}`]}>
                         {votingStates[`retract-${poll.id!}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Stimme zurückziehen
                     </Button>
                 )}
-                 {pollExpired && userVotes.length === 0 && (
+                 {pollExpired && userVotes.length === 0 && canUserVote && (
                     <p className="text-sm text-muted-foreground">Sie haben nicht abgestimmt.</p>
+                )}
+                {!canUserVote && !pollExpired && (
+                    <p className="text-sm text-muted-foreground">Nicht für deine Mannschaft.</p>
                 )}
             </CardFooter>
         </Card>
