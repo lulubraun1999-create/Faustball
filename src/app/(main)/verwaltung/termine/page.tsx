@@ -75,6 +75,7 @@ import { Users, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
@@ -544,21 +545,27 @@ export default function VerwaltungTerminePage() {
                                                 : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                                             </TableCell>
                                             <TableCell>
-                                                {location ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <div className="flex items-center gap-2 cursor-help">
-                                                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                                                            <span className="underline decoration-dotted">{location.name}</span>
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{location.address || 'Keine Adresse hinterlegt'}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                                ) : (
+                                              {location ? (
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                    <Button
+                                                      variant="link"
+                                                      className="flex items-center gap-2 p-0 h-auto font-normal text-foreground"
+                                                    >
+                                                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                                                      <span>{location.name}</span>
+                                                    </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-64">
+                                                    <p className="font-semibold">{location.name}</p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                      {location.address || 'Keine Adresse hinterlegt'}
+                                                    </p>
+                                                  </PopoverContent>
+                                                </Popover>
+                                              ) : (
                                                 '-'
-                                                )}
+                                              )}
                                             </TableCell>
                                             <TableCell>{rsvpDeadlineString}</TableCell>
                                             <TableCell>
