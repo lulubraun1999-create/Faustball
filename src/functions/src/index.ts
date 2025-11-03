@@ -2,7 +2,7 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch, query, where } from 'firebase-admin/firestore';
-import type { Appointment, AppointmentException } from './types';
+import type { Appointment, AppointmentException, AppointmentType } from './types';
 import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
 
 
@@ -261,7 +261,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit, typesMap } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     try {
@@ -292,8 +292,17 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newStartDate = new Date(pendingUpdateData.startDate!);
       const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
       
-      const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin';
-      const isSonstiges = typeName === 'Sonstiges';
+      // Get the type name from the database
+      let typeName = 'Termin'; // Fallback
+      let isSonstiges = false;
+      if (originalAppointmentData.appointmentTypeId) { // Check if type ID exists
+          const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
+          if (typeDoc.exists) {
+              const typeData = typeDoc.data() as AppointmentType;
+              typeName = typeData.name;
+              isSonstiges = typeName === 'Sonstiges';
+          }
+      }
 
       // Robust title check
       const originalTitle = originalAppointmentData.title || '';
@@ -310,7 +319,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData, 
         
-        title: finalTitle || 'Termin',
+        title: finalTitle || 'Termin', // Ensure title is never undefined
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
@@ -341,6 +350,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden', error.message);
+        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
