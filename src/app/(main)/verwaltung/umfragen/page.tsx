@@ -181,17 +181,16 @@ interface PollCardProps {
     user: User | null;
     memberProfile: MemberProfile | null;
     onVote: (pollId: string, optionIds: string[]) => void;
-    onRetract: (pollId string) => void;
+    onRetract: (pollId: string) => void;
     votingStates: Record<string, boolean>;
 }
 
 function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }: PollCardProps) {
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-    const userVotes = poll.votes.filter(v => v.userId === user?.uid);
-
+    
     const userVotedOptionIds = useMemo(() => {
-        return new Set(userVotes.map(v => v.optionId));
-    }, [userVotes]);
+        return new Set(poll.votes.filter(v => v.userId === user?.uid).map(v => v.optionId));
+    }, [poll.votes, user]);
     
     const pollExpired = isPast(poll.endDate.toDate());
     const totalVotes = new Set(poll.votes.map(v => v.userId)).size;
@@ -204,9 +203,9 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
         return poll.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
     }, [poll.visibility, memberProfile]);
 
-    const canVoteNow = !pollExpired && userVotes.length === 0 && canUserVote;
-    const canRetractVote = !pollExpired && userVotes.length > 0 && canUserVote;
-    const showResults = pollExpired || userVotes.length > 0 || !canUserVote;
+    const canVoteNow = !pollExpired && userVotedOptionIds.size === 0 && canUserVote;
+    const canRetractVote = !pollExpired && userVotedOptionIds.size > 0 && canUserVote;
+    const showResults = pollExpired || userVotedOptionIds.size > 0 || !canUserVote;
 
 
     useEffect(() => {
@@ -298,7 +297,7 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
                         Stimme zurückziehen
                     </Button>
                 )}
-                 {pollExpired && userVotes.length === 0 && canUserVote && (
+                 {pollExpired && userVotedOptionIds.size === 0 && canUserVote && (
                     <p className="text-sm text-muted-foreground">Sie haben nicht abgestimmt.</p>
                 )}
                 {!canUserVote && !pollExpired && (
