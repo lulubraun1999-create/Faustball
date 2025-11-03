@@ -81,7 +81,7 @@ export default function KalenderPage() {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const { user, isUserLoading } = useUser();
+  const { user, isAdmin, isUserLoading } = useUser();
   const firestore = useFirestore();
 
   const memberProfileRef = useMemoFirebase(
@@ -99,10 +99,10 @@ export default function KalenderPage() {
     }
   }, [userTeamIds, selectedTeams.length]);
 
-  const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
-  const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
+  const allAppointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+  const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(allAppointmentsRef);
 
-  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  const exceptionsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null), [firestore, isAdmin]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
   const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
@@ -123,12 +123,12 @@ export default function KalenderPage() {
     isLoadingGroups ||
     isLoadingLocations;
 
-  const { userTeams, typesMap, locationsMap } = useMemo(() => {
-    const teams = allGroups?.filter((g) => g.type === 'team') || [];
+  const { teamsForFilter, typesMap, locationsMap } = useMemo(() => {
+    const userTeams = allGroups?.filter(g => g.type === 'team' && userTeamIds.includes(g.id)) || [];
     const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
-    return { userTeams: teams, typesMap, locationsMap: locs };
-  }, [allGroups, appointmentTypes, locations]);
+    return { teamsForFilter: userTeams, typesMap, locationsMap: locs };
+  }, [allGroups, appointmentTypes, locations, userTeamIds]);
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments) return [];
@@ -294,7 +294,7 @@ export default function KalenderPage() {
         <div>
         <h3 className="font-semibold mb-2">Mannschaften</h3>
         <div className="space-y-2">
-            {userTeams.map(team => (
+            {teamsForFilter.map(team => (
             <div key={team.id} className="flex items-center space-x-2">
                 <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
                 setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
