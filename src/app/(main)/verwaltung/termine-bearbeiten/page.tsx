@@ -734,12 +734,9 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      const typesMapPlainObject = Object.fromEntries(typesMap);
-
       await saveFutureInstancesFn({
         pendingUpdateData,
         selectedInstanceToEdit,
-        typesMap: typesMapPlainObject,
       });
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
@@ -747,7 +744,7 @@ export default function AdminTerminePage() {
         console.error('Error splitting and saving future instances: ', error);
         toast({
             variant: "destructive",
-            title: "Fehler",
+            title: "Fehler beim Speichern",
             description: error.message || "Die Terminserie konnte nicht aktualisiert werden.",
         });
     } finally {

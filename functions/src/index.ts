@@ -1,8 +1,8 @@
 
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch } from 'firebase-admin/firestore';
-import type { Appointment, AppointmentException } from './types';
+import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch, query, where } from 'firebase-admin/firestore';
+import type { Appointment, AppointmentException, AppointmentType } from './types';
 import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
 
 
@@ -193,12 +193,11 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
 export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
-    // KORREKTUR: Admin-Prüfung wieder hinzugefügt
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit, exceptions } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
@@ -211,10 +210,14 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    const existingException = exceptions?.find((ex: any) =>
-        ex.originalAppointmentId === selectedInstanceToEdit.originalId &&
-        isEqual(startOfDay(ex.originalDate.toDate()), originalDateStartOfDay)
+    
+    // Search for existing exception on the server
+    const q = query(exceptionsColRef, 
+        where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
+        where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay))
     );
+    const querySnapshot = await q.get();
+    const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
 
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
@@ -237,9 +240,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     };
 
     try {
-        if (existingException) {
-            const docRef = db.collection('appointmentExceptions').doc(existingException.id);
-            await updateDoc(docRef, { modifiedData: modifiedData, status: 'modified', userId: userId });
+        if (existingExceptionDoc) {
+            await updateDoc(existingExceptionDoc.ref, { modifiedData: modifiedData, status: 'modified', userId: userId });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
             await addDoc(exceptionsColRef, exceptionData);
@@ -259,7 +261,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit, typesMap } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     try {
@@ -290,14 +292,23 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newStartDate = new Date(pendingUpdateData.startDate!);
       const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
       
-      const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin';
+      // Get the type name from the database
+      const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
+      const typeName = typeDoc.exists ? (typeDoc.data() as AppointmentType).name : 'Termin';
       const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
-      const finalTitle = pendingUpdateData.title !== originalDisplayTitle 
-          ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
-          : originalAppointmentData.title;
 
+      // Robust title check
+      const originalTitle = originalAppointmentData.title || '';
+      const titleIsDefault = !isSonstiges && originalTitle === typeName;
+      const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
+
+      let finalTitle = originalTitle;
+      if (pendingUpdateData.title !== originalDisplayTitle) {
+          finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
+              ? pendingUpdateData.title.trim() 
+              : typeName;
+      }
+      
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData, 
         
@@ -332,6 +343,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden', error.message);
+        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
