@@ -178,8 +178,8 @@ export default function AdminKassePage() {
     // KORREKTE SALDO-BERECHNUNG
     return transactions?.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      if (tx.type === 'expense') return acc - tx.amount; // ABZIEHEN
-      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount; // NUR BEZAHLTE STRAFEN HINZUFÜGEN
+      if (tx.type === 'expense') return acc - tx.amount;
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
       return acc;
     }, 0) || 0;
   }, [transactions]);
@@ -235,13 +235,13 @@ export default function AdminKassePage() {
          toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe oder Mitglied nicht gefunden.' });
          return;
       }
-      finalAmount = penalty.amount; // KORREKTUR: Betrag ist positiv
-      finalDescription = `${member.firstName} ${member.lastName}: ${penalty.description}`;
+      finalAmount = penalty.amount;
+      finalDescription = penalty.description;
       finalStatus = 'unpaid';
       finalMemberId = data.memberId;
 
     } else if (data.type === 'expense') {
-      finalAmount = data.amount ?? 0; // Betrag bleibt positiv, wird bei Saldo-Berechnung subtrahiert
+      finalAmount = data.amount ?? 0;
       finalMemberId = undefined;
     } else { // income
         finalAmount = data.amount ?? 0;
@@ -386,6 +386,7 @@ export default function AdminKassePage() {
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             const isExpense = tx.type === 'expense';
+                            const isIncome = tx.type === 'income' || tx.type === 'penalty';
                             return (
                             <TableRow key={tx.id}>
                                 <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
@@ -434,3 +435,5 @@ export default function AdminKassePage() {
     </div>
   );
 }
+
+    
