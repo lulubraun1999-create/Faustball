@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -34,7 +35,8 @@ export default function VerwaltungMitgliederPage() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const usersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
+  // Admins fetch all users, non-admins don't need to (and can't)
+  const usersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'users') : null), [firestore, isAdmin]);
   const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
 
   const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
@@ -47,16 +49,24 @@ export default function VerwaltungMitgliederPage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isMemberProfileLoading;
+  const isLoading = isUserLoading || (isAdmin && isLoadingUsers) || isLoadingMembers || isMemberProfileLoading;
 
   const combinedData = useMemo(() => {
-      if (!users || !members) return [];
-      const memberMap = new Map(members.map(m => [m.userId, m]));
-      return users.map(userProfile => ({
-          ...userProfile,
-          ...(memberMap.get(userProfile.id) || {}),
-      })) as CombinedMemberProfile[];
-  }, [users, members]);
+      if (!members) return [];
+      
+      // For admins, combine users and members data for a complete picture
+      if (isAdmin && users) {
+          const memberMap = new Map(members.map(m => [m.userId, m]));
+          return users.map(userProfile => ({
+              ...userProfile,
+              ...(memberMap.get(userProfile.id) || {}),
+          })) as CombinedMemberProfile[];
+      }
+      
+      // For non-admins, the 'members' collection is the source of truth
+      return members as CombinedMemberProfile[];
+
+  }, [users, members, isAdmin]);
 
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
@@ -77,17 +87,17 @@ export default function VerwaltungMitgliederPage() {
     
     let displayableMembers = combinedData;
 
-    // Wenn der User kein Admin ist, die Liste auf Mannschaftskollegen einschränken
+    // If the user is not an admin, restrict the list to teammates
     if (!isAdmin && memberProfile) {
         const currentUserTeamIds = new Set(memberProfile.teams || []);
         if (currentUserTeamIds.size > 0) {
             displayableMembers = combinedData.filter(member => {
                 const memberTeamIds = member.teams || [];
-                // Das Mitglied selbst und alle, die mindestens ein Team teilen
+                // Include the member themselves and anyone who shares at least one team
                 return member.id === user?.uid || memberTeamIds.some(teamId => currentUserTeamIds.has(teamId));
             });
         } else {
-             // Wenn der Benutzer in keinem Team ist, sieht er nur sich selbst
+             // If the user is in no teams, they only see themselves
              displayableMembers = combinedData.filter(member => member.id === user?.uid);
         }
     }
@@ -241,3 +251,5 @@ export default function VerwaltungMitgliederPage() {
     </div>
   );
 }
+
+    
