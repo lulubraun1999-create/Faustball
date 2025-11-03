@@ -2102,10 +2102,10 @@ export default function AdminTerminePage() {
                   <TableRow>
                     <TableHead>Art (Titel)</TableHead>
                     <TableHead>Datum/Zeit</TableHead>
-                    <TableHead className="hidden md:table-cell">Sichtbarkeit</TableHead>
-                    <TableHead className="hidden lg:table-cell">Ort</TableHead>
-                    <TableHead className="hidden lg:table-cell">Wiederholung</TableHead>
-                    <TableHead className="hidden md:table-cell">Rückmeldung bis</TableHead>
+                    <TableHead>Sichtbarkeit</TableHead>
+                    <TableHead>Ort</TableHead>
+                    <TableHead>Wiederholung</TableHead>
+                    <TableHead>Rückmeldung bis</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2163,19 +2163,19 @@ export default function AdminTerminePage() {
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">
+                          <TableCell>
                             {app.visibility.type === 'all'
                               ? 'Alle'
                               : app.visibility.teamIds
                                   .map((id) => teamsMap.get(id) || id)
                                   .join(', ') || '-'}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">
+                          <TableCell>
                             {app.locationId
                               ? locationsMap.get(app.locationId)?.name || '-'
                               : '-'}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">
+                          <TableCell>
                             {app.recurrence && app.recurrence !== 'none'
                               ? `bis ${
                                   app.recurrenceEndDate
@@ -2188,7 +2188,7 @@ export default function AdminTerminePage() {
                                 }`
                               : '-'}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">{rsvpDeadlineString}</TableCell>
+                          <TableCell>{rsvpDeadlineString}</TableCell>
                           <TableCell className="text-right space-x-0">
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
