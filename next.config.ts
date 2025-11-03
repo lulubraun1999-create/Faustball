@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    turbopack: {
+      // This explicitly sets the project root for Turbopack, fixing the build error.
+      root: process.cwd(),
+    },
+  },
   images: {
     remotePatterns: [
       {
