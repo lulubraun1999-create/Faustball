@@ -193,7 +193,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
 export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
-    // KORREKTUR: Admin-Prüfung wieder hinzugefügt
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
@@ -292,12 +291,19 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       
       const typeName = typesMap[originalAppointmentData.appointmentTypeId] || 'Termin';
       const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault = !isSonstiges && originalAppointmentData.title === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalAppointmentData.title;
-      const finalTitle = pendingUpdateData.title !== originalDisplayTitle 
-          ? (pendingUpdateData.title && pendingUpdateData.title.trim() !== '' ? pendingUpdateData.title.trim() : typeName)
-          : originalAppointmentData.title;
 
+      // Robust title check
+      const originalTitle = originalAppointmentData.title || '';
+      const titleIsDefault = !isSonstiges && originalTitle === typeName;
+      const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
+
+      let finalTitle = originalTitle;
+      if (pendingUpdateData.title !== originalDisplayTitle) {
+          finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
+              ? pendingUpdateData.title.trim() 
+              : typeName;
+      }
+      
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData, 
         
