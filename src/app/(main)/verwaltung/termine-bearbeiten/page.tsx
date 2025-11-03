@@ -1733,6 +1733,7 @@ export default function AdminTerminePage() {
                   </DialogClose>
                   <Button
                     type="button"
+                    variant="default"
                     onClick={appointmentForm.handleSubmit(onSubmitAppointment)}
                     disabled={isSubmitting}
                   >
@@ -2029,11 +2030,10 @@ export default function AdminTerminePage() {
               {' '}
               <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>{' '}
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
                 <Select value={teamFilter} onValueChange={setTeamFilter}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]">
                     <SelectValue placeholder="Nach Mannschaft filtern..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -2054,7 +2054,7 @@ export default function AdminTerminePage() {
                   </SelectContent>
                 </Select>
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[150px]">
                     <SelectValue placeholder="Nach Typ filtern..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -2072,13 +2072,13 @@ export default function AdminTerminePage() {
                     )}
                   </SelectContent>
                 </Select>
-              </div>
               <Button
                 variant="default"
                 onClick={() => {
                   resetAppointmentForm();
                   setIsAppointmentDialogOpen(true);
                 }}
+                 className="mt-2 sm:mt-0"
               >
                 <Plus className="mr-2 h-4 w-4" /> Termin hinzufügen
               </Button>
@@ -2098,10 +2098,10 @@ export default function AdminTerminePage() {
                   <TableRow>
                     <TableHead>Art (Titel)</TableHead>
                     <TableHead>Datum/Zeit</TableHead>
-                    <TableHead>Sichtbarkeit</TableHead>
-                    <TableHead>Ort</TableHead>
-                    <TableHead>Wiederholung</TableHead>
-                    <TableHead>Rückmeldung bis</TableHead>
+                    <TableHead className="hidden md:table-cell">Sichtbarkeit</TableHead>
+                    <TableHead className="hidden lg:table-cell">Ort</TableHead>
+                    <TableHead className="hidden lg:table-cell">Wiederholung</TableHead>
+                    <TableHead className="hidden md:table-cell">Rückmeldung bis</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2142,7 +2142,7 @@ export default function AdminTerminePage() {
                               'text-muted-foreground line-through opacity-70'
                           )}
                         >
-                          <TableCell className="font-medium max-w-[200px] truncate">
+                          <TableCell className="font-medium max-w-[150px] sm:max-w-[200px] truncate">
                             {displayTitle}
                           </TableCell>
                           <TableCell>
@@ -2153,40 +2153,25 @@ export default function AdminTerminePage() {
                                   { locale: de }
                                 )
                               : 'N/A'}
-                            {app.endDate && !app.isAllDay && (
-                              <>
-                                {' '}
-                                -{' '}
-                                {format(app.endDate.toDate(), 'HH:mm', {
-                                  locale: de,
-                                })}
-                              </>
-                            )}
-                            {app.isAllDay && (
-                              <span className="text-xs text-muted-foreground">
-                                {' '}
-                                (Ganztags)
-                              </span>
-                            )}
                             {app.isException && !isCancelled && (
                               <span className="ml-1 text-xs text-blue-600">
-                                (Geändert)
+                                (G)
                               </span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {app.visibility.type === 'all'
                               ? 'Alle'
                               : app.visibility.teamIds
                                   .map((id) => teamsMap.get(id) || id)
                                   .join(', ') || '-'}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             {app.locationId
                               ? locationsMap.get(app.locationId)?.name || '-'
                               : '-'}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             {app.recurrence && app.recurrence !== 'none'
                               ? `bis ${
                                   app.recurrenceEndDate
@@ -2199,8 +2184,8 @@ export default function AdminTerminePage() {
                                 }`
                               : '-'}
                           </TableCell>
-                          <TableCell>{rsvpDeadlineString}</TableCell>
-                          <TableCell className="text-right space-x-1">
+                          <TableCell className="hidden md:table-cell">{rsvpDeadlineString}</TableCell>
+                          <TableCell className="text-right space-x-0">
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button

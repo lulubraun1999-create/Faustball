@@ -10,7 +10,9 @@ import type { NewsArticle } from '@/lib/types';
 import { doc, Timestamp } from 'firebase/firestore';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default function NewsArticlePage() {
   const { id } = useParams();
@@ -44,9 +46,17 @@ export default function NewsArticlePage() {
 
   return (
     <div className="container mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
+        <div className="mb-8">
+          <Button asChild variant="outline">
+            <Link href="/verwaltung/news">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Zurück zur Übersicht
+            </Link>
+          </Button>
+        </div>
         <article className="space-y-8">
             {article.imageUrls && article.imageUrls.length > 0 && (
-                <div className="relative h-96 w-full overflow-hidden rounded-lg">
+                <div className="relative aspect-video w-full overflow-hidden rounded-lg">
                 <Image
                     src={article.imageUrls[0]}
                     alt={article.title}
@@ -58,7 +68,7 @@ export default function NewsArticlePage() {
             )}
             
             <div className="space-y-2 text-center">
-                <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl font-headline">{article.title}</h1>
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight lg:text-5xl font-headline">{article.title}</h1>
                 <p className="text-muted-foreground">
                     Veröffentlicht am{' '}
                     {article.createdAt instanceof Timestamp
@@ -78,7 +88,7 @@ export default function NewsArticlePage() {
                     <h2 className="text-2xl font-bold mb-4">Weitere Bilder</h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {article.imageUrls.slice(1).map((url, index) => (
-                            <div key={index} className="relative h-48 w-full overflow-hidden rounded-lg">
+                            <div key={index} className="relative aspect-square w-full overflow-hidden rounded-lg">
                                 <Image
                                     src={url}
                                     alt={`${article.title} - Bild ${index + 2}`}

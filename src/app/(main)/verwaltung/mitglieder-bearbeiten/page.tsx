@@ -313,7 +313,7 @@ export default function AdminMitgliederPage() {
                  <Input type="search" placeholder="Suche Name/Email..." className="pl-8 w-full sm:w-[200px]" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                </div>
                <Select value={selectedTeamFilterOption} onValueChange={setSelectedTeamFilterOption}>
-                 <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger>
+                 <SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger>
                  <SelectContent>
                    <SelectItem value="all">Alle Mitglieder</SelectItem>
                    <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
@@ -321,7 +321,7 @@ export default function AdminMitgliederPage() {
                  </SelectContent>
                </Select>
                <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
-                 <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Nach Rolle filtern..." /></SelectTrigger>
+                 <SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Nach Rolle filtern..." /></SelectTrigger>
                  <SelectContent>
                    <SelectItem value="all">Alle Rollen</SelectItem>
                    <SelectItem value="admin">Trainer</SelectItem>
@@ -336,16 +336,11 @@ export default function AdminMitgliederPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mannschaft</TableHead>
                     <TableHead>Nachname</TableHead>
-                    <TableHead>Vorname</TableHead>
-                    <TableHead>Rolle</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Geschlecht</TableHead>
-                    <TableHead>Geburtstag</TableHead>
+                    <TableHead className="hidden sm:table-cell">Vorname</TableHead>
+                    <TableHead className="hidden md:table-cell">Rolle</TableHead>
+                    <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Telefon</TableHead>
-                    <TableHead>Wohnort</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -356,20 +351,15 @@ export default function AdminMitgliederPage() {
                        const currentMemberData = members?.find(m => m.userId === member.id);
                        return (
                       <TableRow key={member.id}>
-                        <TableCell>
+                        <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
+                        <TableCell className="hidden sm:table-cell">{member.firstName || '-'}</TableCell>
+                        <TableCell className="hidden md:table-cell capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {memberTeams.length > 0 ? ( <Popover><PopoverTrigger asChild><Button variant="link" className="p-0 h-auto font-normal text-foreground text-left">{memberTeams[0]}{memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}</Button></PopoverTrigger>{memberTeams.length > 1 && ( <PopoverContent className="w-auto p-2"><ul className="space-y-1 list-disc list-inside text-sm">{memberTeams.map(team => <li key={team}>{team}</li>)}</ul></PopoverContent> )}</Popover> ) : ('-')}
                         </TableCell>
-                        <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
-                        <TableCell>{member.firstName || '-'}</TableCell>
-                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
-                        <TableCell>{currentMemberData?.position?.join(', ') || '-'}</TableCell>
-                        <TableCell>{currentMemberData?.gender || '-'}</TableCell>
-                        <TableCell>{currentMemberData?.birthday ? new Date(currentMemberData.birthday).toLocaleDateString('de-DE') : '-'}</TableCell>
-                        <TableCell>{member.email || '-'}</TableCell>
-                        <TableCell>{currentMemberData?.phone || '-'}</TableCell>
-                        <TableCell>{currentMemberData?.location || '-'}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{member.email || '-'}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-0">
                             <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.id}`]}>{updatingStates[`teams-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Users className="h-4 w-4" />}<span className="sr-only">Mannschaften zuweisen</span></Button></PopoverTrigger><PopoverContent className="w-64 p-0"><ScrollArea className="h-72"><div className="p-4">{groupedTeams.length > 0 ? groupedTeams.map(group => (<div key={group.id} className="mb-4"><h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4><div className="flex flex-col space-y-2">{group.teams.map(team => (<div key={team.id} className="flex items-center space-x-2"><Checkbox id={`team-${member.id}-${team.id}`} checked={member.teams?.includes(team.id)} onCheckedChange={(checked) => { handleTeamsChange(member, team.id, !!checked); }} /><label htmlFor={`team-${member.id}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{team.name}</label></div>))}</div></div>)) : <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>}</div></ScrollArea></PopoverContent></Popover>
                             <Dialog open={memberToEdit?.id === member.id} onOpenChange={(isOpen) => { if (!isOpen) { setMemberToEdit(null); setNewRole(null); }}}><DialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => { setMemberToEdit(member); setNewRole(member.role as 'user' | 'admin'); }} disabled={updatingStates[`role-${member.id}`]}>{updatingStates[`role-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Shield className="h-4 w-4" />}<span className="sr-only">Rolle ändern</span></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Rolle ändern für {member.firstName} {member.lastName}</DialogTitle><DialogDescription>Ein "Trainer" hat Administratorrechte. Ein "Spieler" ist ein normaler Benutzer.</DialogDescription></DialogHeader><div className="py-4"><RadioGroup value={newRole ?? undefined} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}><div className="flex items-center space-x-2"><RadioGroupItem value="user" id={`role-${member.id}-user`} /><Label htmlFor={`role-${member.id}-user`}>Spieler</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="admin" id={`role-${member.id}-admin`} /><Label htmlFor={`role-${member.id}-admin`}>Trainer</Label></div></RadioGroup></div><DialogFooter><DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose><Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role || updatingStates[`role-${member.id}`]}>{updatingStates[`role-${member.id}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern</Button></DialogFooter></DialogContent></Dialog>
                             <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`delete-${member.id}`]}>{updatingStates[`delete-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4 text-destructive" />}<span className="sr-only">Mitglied löschen</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Firebase Auth Benutzerkonto muss separat gelöscht werden, falls gewünscht.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteMember(member)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
@@ -380,7 +370,7 @@ export default function AdminMitgliederPage() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={11} className="h-24 text-center"> {/* Colspan auf 11 erhöht */}
+                      <TableCell colSpan={6} className="h-24 text-center"> 
                         Keine Mitglieder entsprechen den aktuellen Filtern.
                       </TableCell>
                     </TableRow>

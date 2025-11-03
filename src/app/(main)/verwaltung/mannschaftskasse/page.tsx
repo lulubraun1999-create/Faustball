@@ -180,7 +180,7 @@ export default function VerwaltungMannschaftskassePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
+          <div className="space-y-6 lg:col-span-3 xl:col-span-2">
             <Card>
               <CardHeader>
                   <div>
@@ -197,11 +197,11 @@ export default function VerwaltungMannschaftskassePage() {
                   <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Datum</TableHead>
-                            <TableHead>Name</TableHead>
                             <TableHead>Beschreibung</TableHead>
+                            <TableHead className="hidden sm:table-cell">Datum</TableHead>
+                            <TableHead className="hidden md:table-cell">Name</TableHead>
                             <TableHead>Betrag</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead className="hidden sm:table-cell">Status</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -210,19 +210,19 @@ export default function VerwaltungMannschaftskassePage() {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             return (
                             <TableRow key={tx.id}>
-                                <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
-                                <TableCell>{memberName}</TableCell>
-                                <TableCell className="font-medium">{tx.description}</TableCell>
+                                <TableCell className="font-medium max-w-[150px] truncate">{tx.description}</TableCell>
+                                <TableCell className="hidden sm:table-cell">{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
+                                <TableCell className="hidden md:table-cell">{memberName}</TableCell>
                                 <TableCell className={cn(
                                     tx.amount >= 0 ? "text-green-600" : "text-red-600"
                                     )}>
                                   {tx.amount.toFixed(2)} €
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="hidden sm:table-cell">
                                     {(tx.type === 'penalty' || tx.status === 'unpaid') ? (
                                         <span className={cn(
                                             "px-2 py-1 rounded-full text-xs font-medium",
-                                            tx.status === 'paid' ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                            tx.status === 'paid' ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
                                         )}>
                                             {tx.status === 'paid' ? 'Bezahlt' : 'Offen'}
                                         </span>
@@ -239,7 +239,7 @@ export default function VerwaltungMannschaftskassePage() {
               </CardContent>
             </Card>
           </div>
-          <div className="space-y-6">
+          <div className="space-y-6 lg:col-span-3 xl:col-span-1">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><BookMarked className="h-6 w-6" /> Strafenkatalog</CardTitle>

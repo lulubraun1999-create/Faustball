@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
 import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
@@ -31,6 +33,8 @@ export default function VerwaltungMitgliederPage() {
 
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
 
   // Eigenes Member-Profil holen
   const currentUserMemberRef = useMemoFirebase(
@@ -93,15 +97,22 @@ export default function VerwaltungMitgliederPage() {
     if (!combinedData || !currentUserMemberProfile) return [];
 
     const currentUserTeamIds = new Set(currentUserMemberProfile?.teams || []);
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     // Vorfiltern nach gemeinsamen Teams
     let preFiltered = combinedData.filter(member => {
-        // *** BEGINN DER ÄNDERUNG: Eigenes Profil NICHT mehr ausschließen ***
-        // if (member.id === currentUserMemberProfile.userId) return false; // DIESE ZEILE ENTFERNT/AUSKOMMENTIERT
-        // *** ENDE DER ÄNDERUNG ***
         const memberTeams = member.teams || [];
         return memberTeams.some(teamId => currentUserTeamIds.has(teamId));
     });
+
+    // Suche
+    if (lowerCaseSearchTerm) {
+      preFiltered = preFiltered.filter(member => 
+        (member.firstName?.toLowerCase() || '').includes(lowerCaseSearchTerm) ||
+        (member.lastName?.toLowerCase() || '').includes(lowerCaseSearchTerm) ||
+        (member.email?.toLowerCase() || '').includes(lowerCaseSearchTerm)
+      );
+    }
 
     let filtered = [...preFiltered];
 
@@ -129,7 +140,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData, selectedRoleFilter, selectedTeamFilter, currentUserMemberProfile]);
+  }, [combinedData, selectedRoleFilter, selectedTeamFilter, currentUserMemberProfile, searchTerm]);
 
 
   const getTeamNames = (teamIds?: string[]): string[] => {
@@ -178,9 +189,18 @@ export default function VerwaltungMitgliederPage() {
               <span className="text-2xl font-headline">Verwaltung: Mitglieder</span>
             </CardTitle>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-               <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
+               <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    type="search" 
+                    placeholder="Suche..." 
+                    className="pl-8 w-full sm:w-[180px]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+               </div>
                <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter}>
-                 <SelectTrigger className="w-full sm:w-[180px]">
+                 <SelectTrigger className="w-full sm:w-auto">
                    <SelectValue placeholder="Nach Mannschaft filtern..." />
                  </SelectTrigger>
                  <SelectContent>
@@ -191,7 +211,7 @@ export default function VerwaltungMitgliederPage() {
                  </SelectContent>
                </Select>
                <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
-                 <SelectTrigger className="w-full sm:w-[150px]">
+                 <SelectTrigger className="w-full sm:w-auto">
                    <SelectValue placeholder="Nach Rolle filtern..." />
                  </SelectTrigger>
                  <SelectContent>
@@ -208,16 +228,12 @@ export default function VerwaltungMitgliederPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mannschaft</TableHead>
-                    <TableHead>Vorname</TableHead>
                     <TableHead>Nachname</TableHead>
-                    <TableHead>Rolle</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Geschlecht</TableHead>
-                    <TableHead>Geburtstag</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Telefon</TableHead>
-                    <TableHead>Wohnort</TableHead>
+                    <TableHead>Vorname</TableHead>
+                    <TableHead className="hidden sm:table-cell">Rolle</TableHead>
+                    <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
+                    <TableHead className="hidden md:table-cell">Email</TableHead>
+                    <TableHead className="hidden lg:table-cell">Telefon</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -226,7 +242,10 @@ export default function VerwaltungMitgliederPage() {
                       const memberTeams = getTeamNames(member.teams);
                       return (
                       <TableRow key={member.id}>
-                        <TableCell>
+                        <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
+                        <TableCell>{member.firstName || '-'}</TableCell>
+                        <TableCell className="hidden sm:table-cell capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {memberTeams.length > 0 ? (
                             <Popover>
                               <PopoverTrigger asChild>
@@ -247,15 +266,8 @@ export default function VerwaltungMitgliederPage() {
                             '-'
                           )}
                         </TableCell>
-                        <TableCell>{member.firstName || '-'}</TableCell>
-                        <TableCell>{member.lastName || '-'}</TableCell>
-                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
-                        <TableCell>{member.position?.join(', ') || '-'}</TableCell>
-                        <TableCell>{member.gender || '-'}</TableCell>
-                        <TableCell>{member.birthday ? new Date(member.birthday).toLocaleDateString('de-DE') : '-'}</TableCell>
-                        <TableCell>{member.email || '-'}</TableCell>
-                        <TableCell>{member.phone || '-'}</TableCell>
-                        <TableCell>{member.location || '-'}</TableCell>
+                        <TableCell className="hidden md:table-cell">{member.email || '-'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{member.phone || '-'}</TableCell>
                       </TableRow>
                       )
                     })

@@ -63,6 +63,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import Link from 'next/link';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -76,6 +77,7 @@ export default function KalenderPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
@@ -273,15 +275,19 @@ export default function KalenderPage() {
     <div className="flex items-center justify-between py-2 px-1">
       <Button
         variant="outline"
+        size="icon"
+        className="h-8 w-8"
         onClick={() => setCurrentDate(subMonths(currentDate, 1))}
       >
         {'<'}
       </Button>
-      <h2 className="text-xl font-bold">
+      <h2 className="text-lg sm:text-xl font-bold">
         {format(currentDate, 'MMMM yyyy', { locale: de })}
       </h2>
       <Button
         variant="outline"
+        size="icon"
+        className="h-8 w-8"
         onClick={() => setCurrentDate(addMonths(currentDate, 1))}
       >
         {'>'}
@@ -290,10 +296,41 @@ export default function KalenderPage() {
   );
 
   const DayLabels = () => (
-    <div className="grid grid-cols-7 text-center text-sm font-medium text-muted-foreground">
+    <div className="grid grid-cols-7 text-center text-xs sm:text-sm font-medium text-muted-foreground">
       {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
         <div key={day} className="py-2">{day}</div>
       ))}
+    </div>
+  );
+
+  const FilterControls = () => (
+    <div className="space-y-6">
+        <div>
+        <h3 className="font-semibold mb-2">Mannschaften</h3>
+        <div className="space-y-2">
+            {userTeams.map(team => (
+            <div key={team.id} className="flex items-center space-x-2">
+                <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
+                setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
+                }}/>
+                <Label htmlFor={`team-${team.id}`}>{team.name}</Label>
+            </div>
+            ))}
+        </div>
+        </div>
+        <div>
+        <h3 className="font-semibold mb-2">Terminarten</h3>
+        <div className="space-y-2">
+            {appointmentTypes?.map(type => (
+            <div key={type.id} className="flex items-center space-x-2">
+                <Checkbox id={`type-${type.id}`} checked={selectedTypes.includes(type.id)} onCheckedChange={checked => {
+                setSelectedTypes(prev => checked ? [...prev, type.id] : prev.filter(id => id !== type.id))
+                }}/>
+                <Label htmlFor={`type-${type.id}`}>{type.name}</Label>
+            </div>
+            ))}
+        </div>
+        </div>
     </div>
   );
 
@@ -302,55 +339,56 @@ export default function KalenderPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div className="md:col-span-1">
+    <div className="container mx-auto p-2 sm:p-4 lg:p-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Filter Sheet for mobile */}
+        <div className="md:hidden flex justify-between items-center col-span-1">
+            <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                <SheetTrigger asChild>
+                    <Button variant="outline"><Filter className="mr-2 h-4 w-4"/> Filter</Button>
+                </SheetTrigger>
+                <SheetContent side="left">
+                     <Card className="border-0 shadow-none">
+                        <CardHeader>
+                            <CardTitle>Filter</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                           <FilterControls />
+                        </CardContent>
+                    </Card>
+                </SheetContent>
+            </Sheet>
+            <Button onClick={handleDownloadIcs} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" /> Exportieren
+            </Button>
+        </div>
+        
+        {/* Filter Sidebar for desktop */}
+        <aside className="hidden md:block md:col-span-1">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filter</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h3 className="font-semibold mb-2">Mannschaften</h3>
-                <div className="space-y-2">
-                  {userTeams.map(team => (
-                    <div key={team.id} className="flex items-center space-x-2">
-                      <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
-                        setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
-                      }}/>
-                      <Label htmlFor={`team-${team.id}`}>{team.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Terminarten</h3>
-                <div className="space-y-2">
-                  {appointmentTypes?.map(type => (
-                    <div key={type.id} className="flex items-center space-x-2">
-                      <Checkbox id={`type-${type.id}`} checked={selectedTypes.includes(type.id)} onCheckedChange={checked => {
-                        setSelectedTypes(prev => checked ? [...prev, type.id] : prev.filter(id => id !== type.id))
-                      }}/>
-                      <Label htmlFor={`type-${type.id}`}>{type.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <CardContent>
+                <FilterControls />
             </CardContent>
           </Card>
-        </div>
-        <div className="md:col-span-3">
+        </aside>
+
+        <main className="md:col-span-3">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-3">
                       <CalendarIcon className="h-8 w-8 text-primary" />
                       <span className="text-2xl font-headline">Kalender</span>
                   </div>
-                  <Button onClick={handleDownloadIcs} variant="outline">
-                    <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
-                  </Button>
-              </CardTitle>
+                  <div className="hidden md:block">
+                    <Button onClick={handleDownloadIcs} variant="outline">
+                        <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
+                    </Button>
+                  </div>
+              </div>
                 <CardDescription>
                   Hier werden alle wichtigen Termine, Spiele und Trainingseinheiten angezeigt.
                 </CardDescription>
@@ -366,11 +404,11 @@ export default function KalenderPage() {
                     <div
                       key={day.toString()}
                       className={cn(
-                        "h-36 border-t border-r p-2 flex flex-col overflow-hidden",
+                        "h-24 sm:h-36 border-t border-r p-1 sm:p-2 flex flex-col overflow-hidden",
                         !isSameMonth(day, currentDate) && "bg-muted/50 text-muted-foreground"
                       )}
                     >
-                      <span className={cn("font-semibold", isSameDay(day, new Date()) && "text-primary font-bold")}>{format(day, 'd')}</span>
+                      <span className={cn("text-xs sm:text-base font-semibold", isSameDay(day, new Date()) && "text-primary font-bold")}>{format(day, 'd')}</span>
                       <div className="mt-1 flex-grow overflow-y-auto space-y-1">
                         {appointmentsOnDay.map(app => (
                           <Popover key={app.virtualId}>
@@ -399,7 +437,7 @@ export default function KalenderPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </main>
       </div>
     </div>
   );
