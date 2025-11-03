@@ -108,6 +108,13 @@ service cloud.firestore {
                       (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                       isMemberOfVisibleTeamForAppointment()
                     );
+        allow list: if isSignedIn() && (
+                      isAdmin() ||
+                      (request.query.keys().hasAny(['where']) && (
+                          (request.query.where[0].field == 'visibility.type' && request.query.where[0].op == '==' && request.query.where[0].value == 'all') ||
+                          (request.query.where[0].field == 'visibility.teamIds' && request.query.where[0].op == 'array-contains-any' && getUserTeams().hasAny(request.query.where[0].value))
+                      ))
+                    );
         allow write: if isSignedIn() && isAdmin();
     }
     

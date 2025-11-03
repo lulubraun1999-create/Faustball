@@ -1,253 +1,459 @@
+
 'use client';
 
-import React, { useMemo } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
-import type { Appointment, AppointmentException, Location, Group, MemberProfile } from '@/lib/types';
-import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Event } from 'react-big-calendar';
-import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
-import { de } from 'date-fns/locale';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-// date-fns Localizer
-const locales = {
-  'de-DE': de,
-};
-const localizer = dateFnsLocalizer({
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import {
+  useFirestore,
+  useCollection,
+  useMemoFirebase,
+  useUser,
+  useDoc,
+} from '@/firebase';
+import {
+  collection,
+  query,
+  where,
+  doc,
+} from 'firebase/firestore';
+import {
+  Appointment,
+  AppointmentException,
+  AppointmentType,
+  Group,
+  Location,
+  MemberProfile,
+} from '@/lib/types';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import {
+  Loader2,
+  Calendar as CalendarIcon,
+  Filter,
+  Download,
+} from 'lucide-react';
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
   format,
-  parse,
-  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }), // Woche startet am Montag
-  getDay,
-  locales,
-});
+  addMonths,
+  subMonths,
+  addDays,
+  addWeeks,
+  addHours
+} from 'date-fns';
+import { de } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import * as ics from 'ics';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import Link from 'next/link';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
-// Typ für die Kalender-Events
-interface CalendarEvent extends Event {
-  resource: UnrolledAppointment; // Das volle, entfaltete Terminobjekt
-}
-
-// Typ für entfaltete Termine
 type UnrolledAppointment = Appointment & {
   virtualId: string;
   originalId: string;
-  originalDateISO?: string;
+  instanceDate: Date;
   isException?: boolean;
   isCancelled?: boolean;
 };
 
-// Kalender-Nachrichten auf Deutsch
-const messages = {
-  allDay: 'Ganztägig',
-  previous: 'Zurück',
-  next: 'Weiter',
-  today: 'Heute',
-  month: 'Monat',
-  week: 'Woche',
-  day: 'Tag',
-  agenda: 'Agenda',
-  date: 'Datum',
-  time: 'Uhrzeit',
-  event: 'Termin',
-  noEventsInRange: 'Keine Termine in diesem Zeitraum.',
-  showMore: (total: number) => `+ ${total} weitere`,
-};
-
 export default function KalenderPage() {
-  const router = useRouter();
-  // *** 'isAdmin' und 'isUserLoading' von useUser holen ***
-  const { user, isUserLoading: isUserLoadingAuth, isAdmin } = useUser();
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
-  // Lade das Profil des aktuellen Benutzers, um seine Teams zu bekommen
-  const memberRef = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
+  const memberProfileRef = useMemoFirebase(
+    () => (user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
-  const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
+  const { data: memberProfile, isLoading: isLoadingMember } =
+    useDoc<MemberProfile>(memberProfileRef);
+
   const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
 
-  // --- Datenabfragen ---
-  // 1. Alle Termine
-  const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
-  const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
+  useEffect(() => {
+    if (userTeamIds.length > 0 && selectedTeams.length === 0) {
+      setSelectedTeams(userTeamIds);
+    }
+  }, [userTeamIds, selectedTeams.length]);
+
+  // Sichere Abfragen für Termine
+  const publicAppointmentsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all'));
+  }, [firestore]);
+
+  const teamAppointmentsQuery = useMemoFirebase(() => {
+      if (!firestore || userTeamIds.length === 0) return null;
+      return query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds));
+  }, [firestore, userTeamIds]);
   
-  // 2. Alle Ausnahmen (NUR FÜR ADMINS)
-  // *** KORREKTUR: Lade Ausnahmen NUR, wenn der Benutzer Admin ist ***
-  const exceptionsRef = useMemoFirebase(
-      () => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null),
-      [firestore, isAdmin]
+  const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
+  const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
+  
+  const appointments = useMemo(() => {
+      const all = [...(publicAppointments || []), ...(teamAppointments || [])];
+      return Array.from(new Map(all.map(app => [app.id, app])).values());
+  }, [publicAppointments, teamAppointments]);
+  const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
+
+
+  const appointmentIds = useMemo(
+    () => appointments?.map((app) => app.id) || [],
+    [appointments]
   );
-  const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  // 3. Orte (für Tooltips)
-  const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
-  const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
-  const locationsMap = useMemo(() => new Map(locations?.map(l => [l.id, l.name])), [locations]);
+  const exceptionsRef = useMemoFirebase(
+    () =>
+      firestore && appointmentIds.length > 0
+        ? query(
+            collection(firestore, 'appointmentExceptions'),
+            where('originalAppointmentId', 'in', appointmentIds)
+          )
+        : null,
+    [firestore, appointmentIds]
+  );
+  const { data: exceptions, isLoading: isLoadingExceptions } =
+    useCollection<AppointmentException>(exceptionsRef);
 
+  const appointmentTypesRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'appointmentTypes') : null),
+    [firestore]
+  );
+  const { data: appointmentTypes, isLoading: isLoadingTypes } =
+    useCollection<AppointmentType>(appointmentTypesRef);
 
-  // Logik zum Entfalten der Termine (Angepasst für Kalender, zeigt *alle* Termine, nicht nur zukünftige)
+  const groupsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'groups') : null),
+    [firestore]
+  );
+  const { data: allGroups, isLoading: isLoadingGroups } =
+    useCollection<Group>(groupsRef);
+
+  const locationsRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'locations') : null),
+    [firestore]
+  );
+  const { data: locations, isLoading: isLoadingLocations } =
+    useCollection<Location>(locationsRef);
+
+  const isLoading =
+    isUserLoading ||
+    isLoadingMember ||
+    isLoadingAppointments ||
+    isLoadingExceptions ||
+    isLoadingTypes ||
+    isLoadingGroups ||
+    isLoadingLocations;
+
+  const { userTeams, typesMap, locationsMap } = useMemo(() => {
+    const teams =
+      allGroups?.filter(
+        (g) => g.type === 'team' && userTeamIds.includes(g.id)
+      ) || [];
+    const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
+    const locs = new Map(locations?.map((l) => [l.id, l]));
+    return { userTeams: teams, typesMap, locationsMap: locs };
+  }, [allGroups, userTeamIds, appointmentTypes, locations]);
+
   const unrolledAppointments = useMemo(() => {
-    if (!appointments || (isAdmin && isLoadingExceptions)) return [];
-    
+    if (!appointments || !exceptions) return [];
+    const events: UnrolledAppointment[] = [];
     const exceptionsMap = new Map<string, AppointmentException>();
-    exceptions?.forEach(ex => {
-      if (ex.originalDate) {
-        const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
-        exceptionsMap.set(key, ex);
-      }
+    exceptions.forEach((ex) => {
+      const key = `${ex.originalAppointmentId}-${format(
+        ex.originalDate.toDate(),
+        'yyyy-MM-dd'
+      )}`;
+      exceptionsMap.set(key, ex);
     });
 
-    const allEvents: UnrolledAppointment[] = [];
-    const now = new Date();
+    appointments.forEach((app) => {
+      const isVisible =
+        app.visibility.type === 'all' ||
+        app.visibility.teamIds.some((teamId) => userTeamIds.includes(teamId));
 
-    appointments.forEach(app => {
-      if (!app.startDate) return;
+      if (!isVisible || !app.startDate) return;
 
-      // Filterung nach Sichtbarkeit
-      const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIds.includes(teamId)));
-      if (!isVisible) return;
+      const unroll = (currentDate: Date) => {
+        const dateStr = format(currentDate, 'yyyy-MM-dd');
+        const instanceId = `${app.id}_${dateStr}`;
+        const exception = exceptionsMap.get(`${app.id}_${format(currentDate, 'yyyy-MM-dd')}`);
 
-      const originalDateStartOfDay = startOfDay(app.startDate.toDate());
-      const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
-      const key = `${app.id}-${originalDateStartOfDayISO}`;
-      const exception = exceptionsMap.get(key);
-      const isCancelled = exception?.status === 'cancelled';
+        let instance: UnrolledAppointment = {
+          ...app,
+          instanceDate: currentDate,
+          originalId: app.id,
+          virtualId: instanceId,
+          isCancelled: exception?.status === 'cancelled',
+        };
 
-      if (app.recurrence === 'none') {
-        if (!isCancelled) { // Abgesagte Einmaltermine nicht anzeigen
-            const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
-            allEvents.push({ ...modifiedApp, originalId: app.id, virtualId: app.id, isCancelled: false, originalDateISO: originalDateStartOfDayISO });
+        if (exception?.status === 'modified' && exception.modifiedData) {
+          const modData = exception.modifiedData;
+          instance = {
+            ...instance,
+            ...modData,
+            startDate: modData.startDate || instance.startDate,
+            isException: true,
+          };
         }
-      } else {
-        let currentDate = app.startDate.toDate();
-        // Zeige Termine bis zu 1 Jahr in die Zukunft und 3 Monate in die Vergangenheit
-        const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
-        const recurrenceStartDate = addMonths(now, -3); // Startpunkt für die Anzeige
-        
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-        let iter = 0;
-        const MAX_ITERATIONS = 1000; // Mehr Iterationen für Kalender
-
-        while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          const currentDateStartOfDay = startOfDay(currentDate);
-          
-          // Nur anzeigen, wenn im relevanten Zeitfenster
-          if (currentDateStartOfDay >= recurrenceStartDate) {
-              const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
-              const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
-              const instanceException = exceptionsMap.get(instanceKey);
-              const instanceIsCancelled = instanceException?.status === 'cancelled';
-
-              if (!instanceIsCancelled) {
-                  const newStartDate = Timestamp.fromDate(currentDate);
-                  const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-                  
-                  let instanceData: UnrolledAppointment = {
-                    ...app,
-                    id: `${app.id}-${currentDate.toISOString()}`,
-                    virtualId: instanceKey,
-                    originalId: app.id,
-                    originalDateISO: currentDateStartOfDayISO,
-                    startDate: newStartDate,
-                    endDate: newEndDate,
-                    isCancelled: false,
-                  };
-
-                  if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                      instanceData = { ...instanceData, ...instanceException.modifiedData, isException: true };
-                  }
-                  allEvents.push(instanceData);
-              }
-          }
-
-          switch (app.recurrence) {
-            case 'daily': currentDate = addDays(currentDate, 1); break;
-            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-            case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = addMonths(currentDate, 1); break;
-            default: currentDate = addDays(recurrenceEndDate, 1); break;
-          }
-          iter++;
-        }
-      }
-    });
-    return allEvents;
-  }, [appointments, exceptions, isLoadingExceptions, userTeamIds, isAdmin]);
-  // *** ENDE ANGEPASSTE LOGIK ***
-
-
-  // Konvertiere zu Kalender-Events
-  const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return unrolledAppointments.map(app => {
-      const start = app.startDate.toDate();
-      // Wenn endDate fehlt oder 'isAllDay' wahr ist, setze Ende auf Start (wichtig für ganztägige Events)
-      const end = app.isAllDay ? start : (app.endDate ? app.endDate.toDate() : start);
-
-      return {
-        title: app.title,
-        start: start,
-        end: end,
-        allDay: app.isAllDay,
-        resource: app, // Originaldaten anhängen
+        events.push(instance);
       };
-    });
-  }, [unrolledAppointments]);
 
-  // Ladezustand
-  const isLoading = isUserLoadingAuth || isLoadingMember || isLoadingAppointments || (isAdmin && isLoadingExceptions) || isLoadingLocations;
+      if (!app.recurrence || app.recurrence === 'none') {
+        unroll(app.startDate.toDate());
+      } else {
+        let current = app.startDate.toDate();
+        const end = app.recurrenceEndDate
+          ? app.recurrenceEndDate.toDate()
+          : addMonths(new Date(), 12);
+        while (current <= end) {
+          unroll(current);
+          switch (app.recurrence) {
+            case 'daily': current = addDays(current, 1); break;
+            case 'weekly': current = addWeeks(current, 1); break;
+            case 'bi-weekly': current = addWeeks(current, 2); break;
+            case 'monthly': current = addMonths(current, 1); break;
+            default: current = addMonths(end, 1); break;
+          }
+        }
+      }
+    });
+    return events;
+  }, [appointments, exceptions, userTeamIds]);
+  
+  const filteredAppointments = useMemo(() => {
+      return unrolledAppointments.filter(app => {
+          const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(app.appointmentTypeId);
+          const teamMatch = selectedTeams.length === 0 || app.visibility.type === 'all' || app.visibility.teamIds.some(id => selectedTeams.includes(id));
+          return typeMatch && teamMatch && !app.isCancelled;
+      })
+  }, [unrolledAppointments, selectedTeams, selectedTypes]);
+
+  const handleDownloadIcs = useCallback(() => {
+    const events: ics.EventAttributes[] = filteredAppointments.map((app) => {
+      const startDateTime = app.instanceDate;
+      const endDateTime = app.endDate ? app.endDate.toDate() : addHours(startDateTime, 1);
+      const location = app.locationId ? locationsMap.get(app.locationId) : null;
+      
+      const event: ics.EventAttributes = {
+        title: app.title,
+        start: [startDateTime.getFullYear(), startDateTime.getMonth() + 1, startDateTime.getDate(), startDateTime.getHours(), startDateTime.getMinutes()],
+        end: [endDateTime.getFullYear(), endDateTime.getMonth() + 1, endDateTime.getDate(), endDateTime.getHours(), endDateTime.getMinutes()],
+        description: app.description || '',
+        location: location ? `${location.name}, ${location.address || ''}` : '',
+      };
+      return event;
+    });
+
+    ics.createEvents(events, (error, value) => {
+      if (error) {
+        console.error(error);
+        return;
+      }
+      const blob = new Blob([value], { type: 'text/calendar;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'faustball-kalender.ics';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }, [filteredAppointments, locationsMap]);
+  
+  const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
+  const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start, end });
+
+  const Header = () => (
+    <div className="flex items-center justify-between py-2 px-1">
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+      >
+        {'<'}
+      </Button>
+      <h2 className="text-lg sm:text-xl font-bold">
+        {format(currentDate, 'MMMM yyyy', { locale: de })}
+      </h2>
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+      >
+        {'>'}
+      </Button>
+    </div>
+  );
+
+  const DayLabels = () => (
+    <div className="grid grid-cols-7 text-center text-xs sm:text-sm font-medium text-muted-foreground">
+      {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
+        <div key={day} className="py-2">{day}</div>
+      ))}
+    </div>
+  );
+
+  const FilterControls = () => (
+    <div className="space-y-6">
+        <div>
+        <h3 className="font-semibold mb-2">Mannschaften</h3>
+        <div className="space-y-2">
+            {userTeams.map(team => (
+            <div key={team.id} className="flex items-center space-x-2">
+                <Checkbox id={`team-${team.id}`} checked={selectedTeams.includes(team.id)} onCheckedChange={checked => {
+                setSelectedTeams(prev => checked ? [...prev, team.id] : prev.filter(id => id !== team.id))
+                }}/>
+                <Label htmlFor={`team-${team.id}`}>{team.name}</Label>
+            </div>
+            ))}
+        </div>
+        </div>
+        <div>
+        <h3 className="font-semibold mb-2">Terminarten</h3>
+        <div className="space-y-2">
+            {appointmentTypes?.map(type => (
+            <div key={type.id} className="flex items-center space-x-2">
+                <Checkbox id={`type-${type.id}`} checked={selectedTypes.includes(type.id)} onCheckedChange={checked => {
+                setSelectedTypes(prev => checked ? [...prev, type.id] : prev.filter(id => id !== type.id))
+                }}/>
+                <Label htmlFor={`type-${type.id}`}>{type.name}</Label>
+            </div>
+            ))}
+        </div>
+        </div>
+    </div>
+  );
 
   if (isLoading) {
-    return (
-      <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="flex h-screen items-center justify-center"><Loader2 className="h-10 w-10 animate-spin" /></div>;
   }
 
-  // Event-Styling
-  const eventStyleGetter = (event: CalendarEvent) => {
-    const style = {
-      backgroundColor: 'var(--primary)',
-      borderRadius: '4px',
-      opacity: 1,
-      color: 'var(--primary-foreground)',
-      border: '0px',
-      display: 'block',
-    };
-    // Unterscheide geänderte Termine
-    if (event.resource.isException) {
-      style.backgroundColor = 'var(--secondary)'; // Andere Farbe für geänderte Termine
-      style.color = 'var(--secondary-foreground)';
-    }
-    return {
-      style: style,
-    };
-  };
-
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <Card>
-        <CardContent className="p-4 md:p-6">
-          <div className="h-[75vh]"> {/* Feste Höhe für den Kalender-Container */}
-            <Calendar
-              localizer={localizer}
-              events={calendarEvents}
-              startAccessor="start"
-              endAccessor="end"
-              messages={messages}
-              culture="de-DE"
-              style={{ height: '100%' }}
-              eventPropGetter={eventStyleGetter}
-              // Optional: Klick auf Event (z.B. um Details anzuzeigen)
-              // onSelectEvent={(event) => alert(event.title)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+    <div className="container mx-auto p-2 sm:p-4 lg:p-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Filter Sheet for mobile */}
+        <div className="md:hidden flex justify-between items-center col-span-1">
+            <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                <SheetTrigger asChild>
+                    <Button variant="outline"><Filter className="mr-2 h-4 w-4"/> Filter</Button>
+                </SheetTrigger>
+                <SheetContent side="left">
+                     <Card className="border-0 shadow-none">
+                        <CardHeader>
+                            <CardTitle>Filter</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                           <FilterControls />
+                        </CardContent>
+                    </Card>
+                </SheetContent>
+            </Sheet>
+            <Button onClick={handleDownloadIcs} variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" /> Exportieren
+            </Button>
+        </div>
+        
+        {/* Filter Sidebar for desktop */}
+        <aside className="hidden md:block md:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filter</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <FilterControls />
+            </CardContent>
+          </Card>
+        </aside>
+
+        <main className="md:col-span-3">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                      <CalendarIcon className="h-8 w-8 text-primary" />
+                      <span className="text-2xl font-headline">Kalender</span>
+                  </div>
+                  <div className="hidden md:block">
+                    <Button onClick={handleDownloadIcs} variant="outline">
+                        <Download className="mr-2 h-4 w-4" /> Kalender herunterladen
+                    </Button>
+                  </div>
+              </div>
+                <CardDescription>
+                  Hier werden alle wichtigen Termine, Spiele und Trainingseinheiten angezeigt.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-lg border">
+                <Header />
+                <DayLabels />
+                <div className="grid grid-cols-7">
+                  {days.map((day) => {
+                    const appointmentsOnDay = filteredAppointments.filter(app => isSameDay(app.instanceDate, day));
+                    return (
+                    <div
+                      key={day.toString()}
+                      className={cn(
+                        "h-24 sm:h-36 border-t border-r p-1 sm:p-2 flex flex-col overflow-hidden",
+                        !isSameMonth(day, currentDate) && "bg-muted/50 text-muted-foreground"
+                      )}
+                    >
+                      <span className={cn("text-xs sm:text-base font-semibold", isSameDay(day, new Date()) && "text-primary font-bold")}>{format(day, 'd')}</span>
+                      <div className="mt-1 flex-grow overflow-y-auto space-y-1">
+                        {appointmentsOnDay.map(app => (
+                          <Popover key={app.virtualId}>
+                            <PopoverTrigger asChild>
+                              <div className="p-1 rounded-md bg-primary/10 text-primary text-xs truncate cursor-pointer hover:bg-primary/20">
+                                <span>{app.isAllDay ? '' : format(app.instanceDate, 'HH:mm')}</span> {app.title}
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64">
+                              <p className="font-bold">{app.title}</p>
+                              <p className="text-sm text-muted-foreground">{typesMap.get(app.appointmentTypeId)}</p>
+                              <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
+                              {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
+                              <Button asChild size="sm" className="mt-3 w-full">
+                                <Link href={`/verwaltung/termine#${app.virtualId}`}>
+                                  Details & Rückmeldung
+                                </Link>
+                              </Button>
+                            </PopoverContent>
+                          </Popover>
+                        ))}
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
     </div>
   );
 }
+
