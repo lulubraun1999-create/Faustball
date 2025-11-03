@@ -13,6 +13,13 @@ import Image from 'next/image';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
 
 export default function NewsArticlePage() {
   const { id } = useParams();
@@ -44,6 +51,9 @@ export default function NewsArticlePage() {
     );
   }
 
+  const hasImages = article.imageUrls && article.imageUrls.length > 0;
+  const hasMultipleImages = hasImages && article.imageUrls.length > 1;
+
   return (
     <div className="container mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
         <div className="mb-8">
@@ -55,16 +65,40 @@ export default function NewsArticlePage() {
           </Button>
         </div>
         <article className="space-y-8">
-            {article.imageUrls && article.imageUrls.length > 0 && (
-                <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-                <Image
-                    src={article.imageUrls[0]}
-                    alt={article.title}
-                    fill
-                    style={{objectFit: "cover"}}
-                    className="bg-muted"
-                />
-                </div>
+            {hasImages && (
+              <div className="flex justify-center">
+                {hasMultipleImages ? (
+                  <Carousel className="w-full max-w-3xl">
+                    <CarouselContent>
+                      {article.imageUrls.map((url, index) => (
+                        <CarouselItem key={index}>
+                          <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+                            <Image
+                              src={url}
+                              alt={`${article.title} - Bild ${index + 1}`}
+                              fill
+                              style={{ objectFit: 'cover' }}
+                              className="bg-muted"
+                            />
+                          </div>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="left-2" />
+                    <CarouselNext className="right-2" />
+                  </Carousel>
+                ) : (
+                  <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+                    <Image
+                      src={article.imageUrls[0]}
+                      alt={article.title}
+                      fill
+                      style={{ objectFit: 'cover' }}
+                      className="bg-muted"
+                    />
+                  </div>
+                )}
+              </div>
             )}
             
             <div className="space-y-2 text-center">
@@ -82,26 +116,6 @@ export default function NewsArticlePage() {
             <div className="prose prose-lg dark:prose-invert max-w-none mx-auto break-words">
                 <p className="whitespace-pre-wrap">{article.content}</p>
             </div>
-
-             {article.imageUrls && article.imageUrls.length > 1 && (
-                <div>
-                    <h2 className="text-2xl font-bold mb-4">Weitere Bilder</h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {article.imageUrls.slice(1).map((url, index) => (
-                            <div key={index} className="relative aspect-square w-full overflow-hidden rounded-lg">
-                                <Image
-                                    src={url}
-                                    alt={`${article.title} - Bild ${index + 2}`}
-                                    fill
-                                    style={{objectFit: "cover"}}
-                                    className="bg-muted"
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-             )}
-
         </article>
     </div>
   );
