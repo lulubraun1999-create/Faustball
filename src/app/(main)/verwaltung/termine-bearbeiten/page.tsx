@@ -289,15 +289,15 @@ export default function AdminTerminePage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const appointmentsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'appointments') : null),
-    [firestore, isAdmin]
+    () => (firestore && !isUserLoading && isAdmin ? collection(firestore, 'appointments') : null),
+    [firestore, isAdmin, isUserLoading]
   );
   const { data: appointments, isLoading: isLoadingAppointments } =
     useCollection<Appointment>(appointmentsRef);
     
   const exceptionsRef = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null),
-    [firestore, isAdmin]
+    () => (firestore && !isUserLoading && isAdmin ? collection(firestore, 'appointmentExceptions') : null),
+    [firestore, isAdmin, isUserLoading]
   );
   const { data: exceptions, isLoading: isLoadingExceptions } =
     useCollection<AppointmentException>(exceptionsRef);
