@@ -2112,215 +2112,213 @@ export default function AdminTerminePage() {
             </div>
           ) : Object.keys(groupedAppointments).length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-                {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
-                    <AccordionItem value={monthYear} key={monthYear}>
-                        <AccordionTrigger className="text-lg font-semibold">
-                            {monthYear} ({appointmentsInMonth.length})
-                        </AccordionTrigger>
-                        <AccordionContent>
-                           <div className="overflow-x-auto">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Art (Titel)</TableHead>
-                                    <TableHead>Datum/Zeit</TableHead>
-                                    <TableHead>Sichtbarkeit</TableHead>
-                                    <TableHead>Ort</TableHead>
-                                    <TableHead>Wiederholung</TableHead>
-                                    <TableHead>Rückmeldung bis</TableHead>
-                                    <TableHead className="text-right">Aktionen</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {appointmentsInMonth.map((app) => {
-                                      const typeName =
-                                        typesMap.get(app.appointmentTypeId) ||
-                                        app.appointmentTypeId;
-                                      const isSonstiges = typeName === 'Sonstiges';
-                                      const titleIsDefault =
-                                        !isSonstiges && app.title === typeName;
-                                      const showTitle =
-                                        app.title && (!titleIsDefault || isSonstiges);
-                                      const displayTitle = showTitle
-                                        ? `${typeName} (${app.title})`
-                                        : typeName;
-                                      const isCancelled = app.isCancelled;
+              {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                <AccordionItem value={monthYear} key={monthYear}>
+                  <AccordionTrigger className="text-lg font-semibold">
+                    {monthYear} ({appointmentsInMonth.length})
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Art (Titel)</TableHead>
+                            <TableHead>Datum/Zeit</TableHead>
+                            <TableHead>Sichtbarkeit</TableHead>
+                            <TableHead>Ort</TableHead>
+                            <TableHead>Wiederholung</TableHead>
+                            <TableHead>Rückmeldung bis</TableHead>
+                            <TableHead className="text-right">Aktionen</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {appointmentsInMonth.map((app) => {
+                            const typeName =
+                              typesMap.get(app.appointmentTypeId) ||
+                              app.appointmentTypeId;
+                            const isSonstiges = typeName === 'Sonstiges';
+                            const titleIsDefault =
+                              !isSonstiges && app.title === typeName;
+                            const showTitle =
+                              app.title && (!titleIsDefault || isSonstiges);
+                            const displayTitle = showTitle
+                              ? `${typeName} (${app.title})`
+                              : typeName;
+                            const isCancelled = app.isCancelled;
 
-                                      const originalAppointment = appointments?.find(a => a.id === app.originalId);
-                                      let rsvpDeadlineString = '-';
-                                      if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
-                                          const startMillis = originalAppointment.startDate.toMillis();
-                                          const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
-                                          const offset = startMillis - rsvpMillis;
+                            const originalAppointment = appointments?.find(a => a.id === app.originalId);
+                            let rsvpDeadlineString = '-';
+                            if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                              const startMillis = originalAppointment.startDate.toMillis();
+                              const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                              const offset = startMillis - rsvpMillis;
 
-                                          const instanceStartMillis = app.startDate.toMillis();
-                                          const instanceRsvpMillis = instanceStartMillis - offset;
-                                          rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
-                                      }
+                              const instanceStartMillis = app.startDate.toMillis();
+                              const instanceRsvpMillis = instanceStartMillis - offset;
+                              rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                            }
 
 
-                                      return (
-                                        <TableRow
-                                          key={app.virtualId}
-                                          className={cn(
-                                            isCancelled &&
-                                              'text-muted-foreground line-through opacity-70'
-                                          )}
+                            return (
+                              <TableRow
+                                key={app.virtualId}
+                                className={cn(
+                                  isCancelled &&
+                                  'text-muted-foreground line-through opacity-70'
+                                )}
+                              >
+                                <TableCell className="font-medium max-w-[150px] sm:max-w-[200px] truncate">
+                                  <button onClick={() => handleEditAppointment(app)} className="text-left hover:underline disabled:no-underline disabled:cursor-not-allowed" disabled={isSubmitting}>
+                                    {displayTitle}
+                                  </button>
+                                </TableCell>
+                                <TableCell>
+                                  {app.startDate
+                                    ? format(
+                                      app.startDate.toDate(),
+                                      app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                      { locale: de }
+                                    )
+                                    : 'N/A'}
+                                  {app.isException && !isCancelled && (
+                                    <span className="ml-1 text-xs text-blue-600">
+                                      (G)
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {app.visibility.type === 'all'
+                                    ? 'Alle'
+                                    : app.visibility.teamIds
+                                      .map((id) => teamsMap.get(id) || id)
+                                      .join(', ') || '-'}
+                                </TableCell>
+                                <TableCell>
+                                  {app.locationId
+                                    ? locationsMap.get(app.locationId)?.name || '-'
+                                    : '-'}
+                                </TableCell>
+                                <TableCell>
+                                  {app.recurrence && app.recurrence !== 'none'
+                                    ? `bis ${app.recurrenceEndDate
+                                      ? format(
+                                        app.recurrenceEndDate.toDate(),
+                                        'dd.MM.yy',
+                                        { locale: de }
+                                      )
+                                      : '...'
+                                    }`
+                                    : '-'}
+                                </TableCell>
+                                <TableCell>{rsvpDeadlineString}</TableCell>
+                                <TableCell className="text-right space-x-0">
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        disabled={isSubmitting}
+                                      >
+                                        {' '}
+                                        {isCancelled ? (
+                                          <RefreshCw className="h-4 w-4 text-green-600" />
+                                        ) : (
+                                          <CalendarX className="h-4 w-4 text-orange-600" />
+                                        )}{' '}
+                                        <span className="sr-only">
+                                          {isCancelled
+                                            ? 'Absage rückgängig'
+                                            : 'Diesen Termin absagen'}
+                                        </span>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        {' '}
+                                        <AlertDialogTitle>
+                                          {isCancelled
+                                            ? 'Absage rückgängig machen?'
+                                            : 'Nur diesen Termin absagen?'}
+                                        </AlertDialogTitle>{' '}
+                                        <AlertDialogDescription>
+                                          {isCancelled
+                                            ? `Soll der abgesagte Termin am ${format(
+                                              app.startDate.toDate(),
+                                              'dd.MM.yyyy'
+                                            )} wiederhergestellt werden?`
+                                            : `Möchten Sie nur den Termin am ${format(
+                                              app.startDate.toDate(),
+                                              'dd.MM.yyyy'
+                                            )} absagen? Die Serie bleibt bestehen.`}
+                                        </AlertDialogDescription>{' '}
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        {' '}
+                                        <AlertDialogCancel>
+                                          Abbrechen
+                                        </AlertDialogCancel>{' '}
+                                        <AlertDialogAction
+                                          onClick={() =>
+                                            handleCancelSingleInstance(app)
+                                          }
                                         >
-                                          <TableCell className="font-medium max-w-[150px] sm:max-w-[200px] truncate">
-                                            <button onClick={() => handleEditAppointment(app)} className="text-left hover:underline disabled:no-underline disabled:cursor-not-allowed" disabled={isSubmitting}>
-                                                {displayTitle}
-                                            </button>
-                                          </TableCell>
-                                          <TableCell>
-                                            {app.startDate
-                                              ? format(
-                                                  app.startDate.toDate(),
-                                                  app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
-                                                  { locale: de }
-                                                )
-                                              : 'N/A'}
-                                            {app.isException && !isCancelled && (
-                                              <span className="ml-1 text-xs text-blue-600">
-                                                (G)
-                                              </span>
-                                            )}
-                                          </TableCell>
-                                          <TableCell>
-                                            {app.visibility.type === 'all'
-                                              ? 'Alle'
-                                              : app.visibility.teamIds
-                                                  .map((id) => teamsMap.get(id) || id)
-                                                  .join(', ') || '-'}
-                                          </TableCell>
-                                          <TableCell>
-                                            {app.locationId
-                                              ? locationsMap.get(app.locationId)?.name || '-'
-                                              : '-'}
-                                          </TableCell>
-                                          <TableCell>
-                                            {app.recurrence && app.recurrence !== 'none'
-                                              ? `bis ${
-                                                  app.recurrenceEndDate
-                                                    ? format(
-                                                        app.recurrenceEndDate.toDate(),
-                                                        'dd.MM.yy',
-                                                        { locale: de }
-                                                      )
-                                                    : '...'
-                                                }`
-                                              : '-'}
-                                          </TableCell>
-                                          <TableCell>{rsvpDeadlineString}</TableCell>
-                                          <TableCell className="text-right space-x-0">
-                                            <AlertDialog>
-                                              <AlertDialogTrigger asChild>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  disabled={isSubmitting}
-                                                >
-                                                  {' '}
-                                                  {isCancelled ? (
-                                                    <RefreshCw className="h-4 w-4 text-green-600" />
-                                                  ) : (
-                                                    <CalendarX className="h-4 w-4 text-orange-600" />
-                                                  )}{' '}
-                                                  <span className="sr-only">
-                                                    {isCancelled
-                                                      ? 'Absage rückgängig'
-                                                      : 'Diesen Termin absagen'}
-                                                  </span>
-                                                </Button>
-                                              </AlertDialogTrigger>
-                                              <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                  {' '}
-                                                  <AlertDialogTitle>
-                                                    {isCancelled
-                                                      ? 'Absage rückgängig machen?'
-                                                      : 'Nur diesen Termin absagen?'}
-                                                  </AlertDialogTitle>{' '}
-                                                  <AlertDialogDescription>
-                                                    {isCancelled
-                                                      ? `Soll der abgesagte Termin am ${format(
-                                                          app.startDate.toDate(),
-                                                          'dd.MM.yyyy'
-                                                        )} wiederhergestellt werden?`
-                                                      : `Möchten Sie nur den Termin am ${format(
-                                                          app.startDate.toDate(),
-                                                          'dd.MM.yyyy'
-                                                        )} absagen? Die Serie bleibt bestehen.`}
-                                                  </AlertDialogDescription>{' '}
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                  {' '}
-                                                  <AlertDialogCancel>
-                                                    Abbrechen
-                                                  </AlertDialogCancel>{' '}
-                                                  <AlertDialogAction
-                                                    onClick={() =>
-                                                      handleCancelSingleInstance(app)
-                                                    }
-                                                  >
-                                                    {isCancelled
-                                                      ? 'Wiederherstellen'
-                                                      : 'Absagen'}
-                                                  </AlertDialogAction>{' '}
-                                                </AlertDialogFooter>
-                                              </AlertDialogContent>
-                                            </AlertDialog>
+                                          {isCancelled
+                                            ? 'Wiederherstellen'
+                                            : 'Absagen'}
+                                        </AlertDialogAction>{' '}
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
 
-                                            <AlertDialog>
-                                              <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon">
-                                                  {' '}
-                                                  <Trash2 className="h-4 w-4 text-destructive" />{' '}
-                                                  <span className="sr-only">
-                                                    Serie löschen
-                                                  </span>
-                                                </Button>
-                                              </AlertDialogTrigger>
-                                              <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                  {' '}
-                                                  <AlertDialogTitle>
-                                                    Ganze Serie löschen?
-                                                  </AlertDialogTitle>{' '}
-                                                  <AlertDialogDescription>
-                                                    Diese Aktion kann nicht rückgängig gemacht
-                                                    werden und löscht die gesamte Terminserie "
-                                                    {displayTitle}". Alle zukünftigen Termine
-                                                    dieser Serie werden entfernt.
-                                                  </AlertDialogDescription>{' '}
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                  {' '}
-                                                  <AlertDialogCancel>
-                                                    Abbrechen
-                                                  </AlertDialogCancel>{' '}
-                                                  <AlertDialogAction
-                                                    onClick={() =>
-                                                      handleDeleteAppointment(app.originalId)
-                                                    }
-                                                    className="bg-destructive hover:bg-destructive/90"
-                                                  >
-                                                    Serie löschen
-                                                  </AlertDialogAction>{' '}
-                                                </AlertDialogFooter>
-                                              </AlertDialogContent>
-                                            </AlertDialog>
-                                          </TableCell>
-                                        </TableRow>
-                                      );
-                                    })
-                                }
-                                </TableBody>
-                              </Table>
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                ))
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        {' '}
+                                        <Trash2 className="h-4 w-4 text-destructive" />{' '}
+                                        <span className="sr-only">
+                                          Serie löschen
+                                        </span>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        {' '}
+                                        <AlertDialogTitle>
+                                          Ganze Serie löschen?
+                                        </AlertDialogTitle>{' '}
+                                        <AlertDialogDescription>
+                                          Diese Aktion kann nicht rückgängig gemacht
+                                          werden und löscht die gesamte Terminserie "
+                                          {displayTitle}". Alle zukünftigen Termine
+                                          dieser Serie werden entfernt.
+                                        </AlertDialogDescription>{' '}
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        {' '}
+                                        <AlertDialogCancel>
+                                          Abbrechen
+                                        </AlertDialogCancel>{' '}
+                                        <AlertDialogAction
+                                          onClick={() =>
+                                            handleDeleteAppointment(app.originalId)
+                                          }
+                                          className="bg-destructive hover:bg-destructive/90"
+                                        >
+                                          Serie löschen
+                                        </AlertDialogAction>{' '}
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
             </Accordion>
           ) : (
             <div className="text-center py-10">
