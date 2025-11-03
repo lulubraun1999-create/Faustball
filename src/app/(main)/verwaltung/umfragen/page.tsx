@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   useFirestore,
   useCollection,
@@ -8,10 +9,9 @@ import {
   useUser,
   errorEmitter,
   FirestorePermissionError,
-  useDoc,
 } from '@/firebase';
-import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, where, Timestamp, orderBy } from 'firebase/firestore';
-import type { Poll, MemberProfile } from '@/lib/types';
+import { collection, doc, updateDoc, arrayUnion, arrayRemove, query, where, Timestamp } from 'firebase/firestore';
+import type { Poll } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { format, isPast } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { User } from 'firebase/auth';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export default function UmfragenPage() {
   const firestore = useFirestore();
@@ -32,28 +33,26 @@ export default function UmfragenPage() {
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
-  const handleVote = async (pollId: string, optionId: string | null) => {
-    if (!firestore || !user || !optionId) return;
+  const handleVote = async (pollId: string, selectedOptionIds: string[]) => {
+    if (!firestore || !user || selectedOptionIds.length === 0) return;
 
     setVotingStates((prev) => ({ ...prev, [pollId]: true }));
     const pollDocRef = doc(firestore, 'polls', pollId);
 
     const currentPoll = visiblePolls?.find((p) => p.id === pollId);
     if (!currentPoll) return;
-    
-    const existingVote = currentPoll.votes.find(v => v.userId === user.uid);
-    
-    try {
-        const batch = [];
-        if (existingVote) {
-             batch.push(updateDoc(pollDocRef, { votes: arrayRemove(existingVote) }));
-        }
-        
-        await Promise.all(batch);
 
-        const newVote = { userId: user.uid, optionId: optionId };
-        await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
-        
+    try {
+      // First, remove any existing votes from this user for this poll
+      const existingVotes = currentPoll.votes.filter(v => v.userId === user.uid);
+      if (existingVotes.length > 0) {
+        await updateDoc(pollDocRef, { votes: arrayRemove(...existingVotes) });
+      }
+
+      // Then, add the new votes
+      const newVotes = selectedOptionIds.map(optionId => ({ userId: user.uid, optionId }));
+      await updateDoc(pollDocRef, { votes: arrayUnion(...newVotes) });
+      
     } catch (e) {
       errorEmitter.emit(
         'permission-error',
@@ -75,16 +74,16 @@ export default function UmfragenPage() {
       const pollDocRef = doc(firestore, 'polls', pollId);
 
       const currentPoll = visiblePolls?.find(p => p.id === pollId);
-      const userVote = currentPoll?.votes.find(v => v.userId === user.uid);
+      const userVotes = currentPoll?.votes.filter(v => v.userId === user.uid);
 
-      if (!userVote) {
+      if (!userVotes || userVotes.length === 0) {
           setVotingStates((prev) => ({ ...prev, [`retract-${pollId}`]: false }));
           return;
       }
       
       try {
           await updateDoc(pollDocRef, {
-              votes: arrayRemove(userVote)
+              votes: arrayRemove(...userVotes)
           });
       } catch (e) {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -173,20 +172,45 @@ export default function UmfragenPage() {
 interface PollCardProps {
     poll: Poll;
     user: User | null;
-    onVote: (pollId: string, optionId: string | null) => void;
+    onVote: (pollId: string, optionIds: string[]) => void;
     onRetract: (pollId: string) => void;
     votingStates: Record<string, boolean>;
 }
 
 function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps) {
-    const [selectedOption, setSelectedOption] = useState<string | null>(null);
-    const userVote = poll.votes.find(v => v.userId === user?.uid);
+    const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+    const userVotes = poll.votes.filter(v => v.userId === user?.uid);
+    const userVotedOptionIds = new Set(userVotes.map(v => v.optionId));
+    
     const pollExpired = isPast(poll.endDate.toDate());
     const totalVotes = poll.votes.length;
 
-    const canVote = !pollExpired && !userVote;
-    const canRetract = !pollExpired && userVote;
-    const showResults = pollExpired || !!userVote;
+    const canVote = !pollExpired && userVotes.length === 0;
+    const canRetract = !pollExpired && userVotes.length > 0;
+    const showResults = pollExpired || userVotes.length > 0;
+
+    useEffect(() => {
+        // Pre-fill selection if user has already voted
+        if (userVotes.length > 0) {
+            setSelectedOptions(userVotes.map(v => v.optionId));
+        } else {
+            setSelectedOptions([]);
+        }
+    }, [userVotes]);
+
+    const handleSingleSelection = (optionId: string) => {
+        setSelectedOptions([optionId]);
+    };
+
+    const handleMultipleSelection = (optionId: string, checked: boolean) => {
+        setSelectedOptions(prev => {
+            if (checked) {
+                return [...prev, optionId];
+            } else {
+                return prev.filter(id => id !== optionId);
+            }
+        });
+    };
 
     return (
         <Card className={cn("flex flex-col", pollExpired && "opacity-70")}>
@@ -202,27 +226,33 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                         {poll.options.map(option => {
                             const voteCount = poll.votes.filter(v => v.optionId === option.id).length;
                             const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+                            const userVotedForThis = userVotedOptionIds.has(option.id);
                             return (
                                 <div key={option.id}>
                                     <div className="flex justify-between text-sm mb-1">
-                                        <span className="font-medium">{option.text}</span>
+                                        <span className={cn("font-medium", userVotedForThis && "text-primary")}>{option.text}</span>
                                         <span className="text-muted-foreground">{voteCount} Stimme(n) ({percentage.toFixed(0)}%)</span>
                                     </div>
                                     <Progress value={percentage} />
                                 </div>
                             )
                         })}
-                         {poll.allowCustomAnswers && poll.votes.some(v => v.customAnswer) && (
-                            <div className="pt-2">
-                                <h4 className="text-sm font-semibold mb-2">Eigene Antworten:</h4>
-                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                                    {poll.votes.filter(v => v.customAnswer).map((v,i) => <li key={i}>{v.customAnswer}</li>)}
-                                </ul>
+                    </div>
+                ) : poll.allowMultipleAnswers ? (
+                     <div className="space-y-2">
+                        {poll.options.map(option => (
+                            <div key={option.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                    id={`${poll.id}-${option.id}`}
+                                    checked={selectedOptions.includes(option.id)}
+                                    onCheckedChange={(checked) => handleMultipleSelection(option.id, !!checked)}
+                                />
+                                <Label htmlFor={`${poll.id}-${option.id}`}>{option.text}</Label>
                             </div>
-                        )}
+                        ))}
                     </div>
                 ) : (
-                    <RadioGroup onValueChange={setSelectedOption} disabled={!canVote}>
+                    <RadioGroup onValueChange={handleSingleSelection} disabled={!canVote}>
                         <div className="space-y-2">
                             {poll.options.map(option => (
                                 <div key={option.id} className="flex items-center space-x-2">
@@ -236,7 +266,7 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
             </CardContent>
             <CardFooter className="flex justify-end">
                 {canVote && (
-                    <Button onClick={() => onVote(poll.id!, selectedOption)} disabled={!selectedOption || votingStates[poll.id!]}>
+                    <Button onClick={() => onVote(poll.id!, selectedOptions)} disabled={selectedOptions.length === 0 || votingStates[poll.id!]}>
                          {votingStates[poll.id!] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Abstimmen
                     </Button>
@@ -247,7 +277,7 @@ function PollCard({ poll, user, onVote, onRetract, votingStates }: PollCardProps
                         Stimme zurückziehen
                     </Button>
                 )}
-                 {pollExpired && !userVote && (
+                 {pollExpired && userVotes.length === 0 && (
                     <p className="text-sm text-muted-foreground">Sie haben nicht abgestimmt.</p>
                 )}
             </CardFooter>

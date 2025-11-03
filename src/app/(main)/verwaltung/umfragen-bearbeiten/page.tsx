@@ -82,7 +82,7 @@ const pollSchema = z.object({
     .array(z.object({ text: z.string().min(1, 'Option darf nicht leer sein.') }))
     .min(2, 'Es müssen mindestens 2 Optionen vorhanden sein.'),
   endDate: z.string().min(1, 'Ein Enddatum ist erforderlich.'),
-  allowCustomAnswers: z.boolean().default(false),
+  allowMultipleAnswers: z.boolean().default(false),
   visibilityType: z.enum(['all', 'specificTeams']).default('all'),
   visibleTeamIds: z.array(z.string()).default([]),
 });
@@ -117,7 +117,7 @@ export default function AdminUmfragenBearbeitenPage() {
       title: '',
       options: [{ text: '' }, { text: '' }],
       endDate: '',
-      allowCustomAnswers: false,
+      allowMultipleAnswers: false,
       visibilityType: 'all',
       visibleTeamIds: [],
     },
@@ -133,8 +133,6 @@ export default function AdminUmfragenBearbeitenPage() {
   const onSubmit = async (data: PollFormValues) => {
     if (!firestore) return;
     
-    // The input for date gives a string in 'YYYY-MM-DD' format.
-    // We parse it and create a Timestamp.
     const endDateTimestamp = Timestamp.fromDate(parseISO(data.endDate));
 
     const pollData = {
@@ -149,7 +147,6 @@ export default function AdminUmfragenBearbeitenPage() {
         options: data.options.map((opt, index) => ({ id: `${index}`, text: opt.text }))
     };
 
-    // Remove temporary form fields from final data
     delete (pollData as any).visibilityType;
     delete (pollData as any).visibleTeamIds;
 
@@ -182,7 +179,6 @@ export default function AdminUmfragenBearbeitenPage() {
   
   const sortedPolls = useMemo(() => {
     if (!polls) return [];
-    // Sort by end date, most recent first
     return [...polls].sort((a, b) => {
       const dateA = a.endDate as Timestamp;
       const dateB = b.endDate as Timestamp;
@@ -322,13 +318,13 @@ export default function AdminUmfragenBearbeitenPage() {
                 <div className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="allowCustomAnswers"
+                    name="allowMultipleAnswers"
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                         <div className="space-y-0.5">
-                          <FormLabel>Eigene Antworten erlauben</FormLabel>
+                          <FormLabel>Mehrfachantworten erlauben</FormLabel>
                           <FormDescription>
-                            Benutzer können eigene Antwortoptionen hinzufügen.
+                            Benutzer können mehrere Optionen auswählen.
                           </FormDescription>
                         </div>
                         <FormControl>

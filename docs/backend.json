@@ -188,9 +188,9 @@
             "required": ["id", "text"]
           }
         },
-        "allowCustomAnswers": {
+        "allowMultipleAnswers": {
           "type": "boolean",
-          "description": "Whether users can add their own answers."
+          "description": "Whether users can select multiple answers."
         },
         "endDate": {
           "type": "string",
@@ -219,8 +219,7 @@
             "type": "object",
             "properties": {
               "userId": {"type": "string"},
-              "optionId": {"type": "string"},
-              "customAnswer": {"type": "string"}
+              "optionId": {"type": "string"}
             },
             "required": ["userId", "optionId"]
           }

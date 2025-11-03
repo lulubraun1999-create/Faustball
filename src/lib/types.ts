@@ -1,3 +1,4 @@
+
 import { FieldValue, Timestamp } from 'firebase/firestore';
 
 /**
@@ -150,7 +151,7 @@ export interface Poll {
   id: string;
   title: string; 
   options: { id: string; text: string }[]; 
-  allowCustomAnswers: boolean;
+  allowMultipleAnswers: boolean;
   endDate: any; // Firestore Timestamp
   createdAt: any; // Firestore Timestamp
   visibility: { 
@@ -160,7 +161,6 @@ export interface Poll {
   votes: {
         userId: string;
         optionId: string;
-        customAnswer?: string;
     }[];
 }
 
