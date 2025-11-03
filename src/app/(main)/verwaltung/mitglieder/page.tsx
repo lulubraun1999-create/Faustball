@@ -27,34 +27,21 @@ import { Input } from '@/components/ui/input';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
-// NEU: Eigener Hook zum Abrufen von Mitgliedern aus mehreren Teams
+// KORRIGIERT: Eigener Hook zum Abrufen von Mitgliedern aus mehreren Teams
 function useTeamMembers(teamIds: string[]) {
   const firestore = useFirestore();
 
-  const queries = useMemo(() => {
-    if (!firestore || teamIds.length === 0) return [];
-    return teamIds.map(teamId => 
-      query(collection(firestore, 'members'), where('teams', 'array-contains', teamId))
-    );
+  // Erstelle EINE Abfrage mit 'array-contains-any', wenn teamIds vorhanden sind
+  const membersQuery = useMemoFirebase(() => {
+    if (!firestore || teamIds.length === 0) {
+      return null;
+    }
+    // Diese Abfrage ist effizienter und benötigt eine entsprechende Sicherheitsregel und einen Index.
+    return query(collection(firestore, 'members'), where('teams', 'array-contains-any', teamIds));
   }, [firestore, teamIds]);
 
-  // Wir können useCollection nicht direkt in einer Schleife aufrufen. 
-  // Diese Komponente hilft uns, die Daten für jede Query zu sammeln.
-  const collections = queries.map(q => useCollection<MemberProfile>(useMemoFirebase(() => q, [q])));
-
-  const isLoading = collections.some(c => c.isLoading);
-  
-  const members = useMemo(() => {
-    const membersMap = new Map<string, MemberProfile>();
-    collections.forEach(c => {
-      c.data?.forEach(member => {
-        if (!membersMap.has(member.id)) {
-          membersMap.set(member.id, member);
-        }
-      });
-    });
-    return Array.from(membersMap.values());
-  }, [collections]);
+  // Verwende den useCollection-Hook nur EINMAL mit der memoisierten Abfrage
+  const { data: members, isLoading } = useCollection<MemberProfile>(membersQuery);
 
   return { data: members, isLoading };
 }
@@ -105,9 +92,11 @@ export default function VerwaltungMitgliederPage() {
               ...(memberMap.get(userProfile.id) || {}),
           })) as CombinedMemberProfile[];
       } else {
+           // KORRIGIERT: Denormalisierte Daten aus `members` für normale Benutzer verwenden.
+           // Füge die `id` hinzu, damit sie mit der `CombinedMemberProfile`-Struktur übereinstimmt.
            return nonAdminFetchedMembers.map(member => ({
               ...member,
-              id: member.userId,
+              id: member.userId, 
            })) as CombinedMemberProfile[];
       }
   }, [isAdmin, adminFetchedUsers, adminFetchedMembers, nonAdminFetchedMembers]);

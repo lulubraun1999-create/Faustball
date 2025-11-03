@@ -57,9 +57,10 @@ service cloud.firestore {
         allow list: if isSignedIn() && (
                       isAdmin() || 
                       (request.query.keys().hasAny(['where']) && 
-                       request.query.where[0].field == 'teams' && 
-                       request.query.where[0].op == 'array-contains' && 
-                       getUserTeams().hasAny([request.query.where[0].value]))
+                       request.query.where.field == 'teams' && 
+                       request.query.where.op == 'array-contains-any' && 
+                       request.query.where.value.size() > 0 && // Stelle sicher, dass die Liste nicht leer ist
+                       getUserTeams().hasAny(request.query.where.value)) // Stelle sicher, dass der User nur seine eigenen Teams abfragt
                     );
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
