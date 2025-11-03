@@ -206,12 +206,12 @@ export default function VerwaltungMitgliederPage() {
                   <TableRow>
                     <TableHead>Nachname</TableHead>
                     <TableHead>Vorname</TableHead>
-                    <TableHead className="hidden sm:table-cell">Rolle</TableHead>
-                    <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
-                    <TableHead className="hidden md:table-cell">Email</TableHead>
-                    <TableHead className="hidden lg:table-cell">Telefon</TableHead>
-                    <TableHead className="hidden lg:table-cell">Geburtstag</TableHead>
-                    <TableHead className="hidden lg:table-cell">Wohnort</TableHead>
+                    <TableHead>Rolle</TableHead>
+                    <TableHead>Mannschaften</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Telefon</TableHead>
+                    <TableHead>Geburtstag</TableHead>
+                    <TableHead>Wohnort</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -222,8 +222,8 @@ export default function VerwaltungMitgliederPage() {
                       <TableRow key={member.id}>
                         <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
                         <TableCell>{member.firstName || '-'}</TableCell>
-                        <TableCell className="hidden sm:table-cell capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
+                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell>
                           {memberTeams.length > 0 ? (
                             <Popover>
                               <PopoverTrigger asChild>
@@ -244,12 +244,12 @@ export default function VerwaltungMitgliederPage() {
                             '-'
                           )}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{member.email || '-'}</TableCell>
-                        <TableCell className="hidden lg:table-cell">{member.phone || '-'}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
+                        <TableCell>{member.email || '-'}</TableCell>
+                        <TableCell>{member.phone || '-'}</TableCell>
+                        <TableCell>
                             {member.birthday ? format(new Date(member.birthday), 'dd.MM.yyyy', { locale: de }) : '-'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">{member.location || '-'}</TableCell>
+                        <TableCell>{member.location || '-'}</TableCell>
                       </TableRow>
                       )
                     })

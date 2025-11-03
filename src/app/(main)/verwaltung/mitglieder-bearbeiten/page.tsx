@@ -344,7 +344,7 @@ export default function AdminMitgliederPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nachname</TableHead>
-                    <TableHead className="hidden sm:table-cell">Vorname</TableHead>
+                    <TableHead>Vorname</TableHead>
                     <TableHead className="hidden md:table-cell">Rolle</TableHead>
                     <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
                     <TableHead>Email</TableHead>
@@ -359,7 +359,7 @@ export default function AdminMitgliederPage() {
                        return (
                       <TableRow key={member.id}>
                         <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
-                        <TableCell className="hidden sm:table-cell">{member.firstName || '-'}</TableCell>
+                        <TableCell>{member.firstName || '-'}</TableCell>
                         <TableCell className="hidden md:table-cell capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
                         <TableCell className="hidden lg:table-cell">
                           {memberTeams.length > 0 ? ( <Popover><PopoverTrigger asChild><Button variant="link" className="p-0 h-auto font-normal text-foreground text-left">{memberTeams[0]}{memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}</Button></PopoverTrigger>{memberTeams.length > 1 && ( <PopoverContent className="w-auto p-2"><ul className="space-y-1 list-disc list-inside text-sm">{memberTeams.map(team => <li key={team}>{team}</li>)}</ul></PopoverContent> )}</Popover> ) : ('-')}
