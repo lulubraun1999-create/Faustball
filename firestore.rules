@@ -52,7 +52,6 @@ service cloud.firestore {
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
         
-        // KORRIGIERT: list-Regel hinzugefügt/angepasst
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
         allow list: if isSignedIn() && (
                       isAdmin() || 
@@ -68,19 +67,19 @@ service cloud.firestore {
 
     // --- /groups/{groupId} ---
     match /groups/{groupId} {
-        allow get, list: if true;
+        allow read: if true;
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- /groups/{groupId}/members/{memberId} ---
     match /groups/{groupId}/members/{memberId} {
-        allow get, list: if true;
+        allow read: if true;
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- /appointmentTypes/{typeId} ---
     match /appointmentTypes/{typeId} {
-        allow read: if true;
+        allow read: if isSignedIn();
         allow write: if isSignedIn() && isAdmin();
     }
 
@@ -133,7 +132,6 @@ service cloud.firestore {
     match /appointmentExceptions/{exceptionId} {
         // --- Hilfsfunktionen ---
         function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
-        function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
         
         // KORRIGIERTE FUNKTION (ohne if/let)
         function isMemberOfOriginalAppointmentTeamFromResource() {
@@ -150,7 +148,6 @@ service cloud.firestore {
         // --- Ende Hilfsfunktionen ---
 
         allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
-        // KORREKTUR: Erlaube LIST nur, wenn nach einer originalAppointmentId gefiltert wird
         allow list: if isSignedIn() && (isAdmin() || (request.query.keys().hasAny(['where']) && request.query.where[0].field == 'originalAppointmentId'));
         allow create: if isSignedIn() && isAdmin() && exists(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
         allow update, delete: if isSignedIn() && isAdmin();
