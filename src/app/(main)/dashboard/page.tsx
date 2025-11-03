@@ -63,12 +63,11 @@ export default function DashboardPage() {
         return appointments.map(app => app.id);
     }, [appointments]);
 
-    // 2. Ausnahmen NUR für sichtbare Termine laden
+    // 2. Ausnahmen NUR für sichtbare Termine laden (NUR FÜR ADMINS)
     const exceptionsRef = useMemoFirebase(() => {
-        if (!firestore || visibleAppointmentIds.length === 0) return null;
-        // Lade nur Ausnahmen, deren originalAppointmentId in der Liste unserer sichtbaren Termine ist.
+        if (!firestore || !isAdmin || visibleAppointmentIds.length === 0) return null;
         return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', visibleAppointmentIds));
-    }, [firestore, visibleAppointmentIds]);
+    }, [firestore, visibleAppointmentIds, isAdmin]);
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
 
@@ -131,12 +130,14 @@ export default function DashboardPage() {
         const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
         
         const exceptionsMap = new Map<string, AppointmentException>();
-        exceptions?.forEach(ex => {
-            if (ex.originalDate) {
-                const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
-                exceptionsMap.set(key, ex);
-            }
-        });
+        if (isAdmin && exceptions) {
+            exceptions.forEach(ex => {
+                if (ex.originalDate) {
+                    const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+                    exceptionsMap.set(key, ex);
+                }
+            });
+        }
 
         const allEvents: UnrolledAppointment[] = [];
         const now = startOfDay(new Date());
@@ -152,7 +153,7 @@ export default function DashboardPage() {
                 if (originalDateStartOfDay < now) return;
 
                 const key = `${app.id}-${originalDateStartOfDay.toISOString()}`;
-                const exception = exceptionsMap.get(key);
+                const exception = isAdmin ? exceptionsMap.get(key) : undefined;
                 if (exception?.status === 'cancelled') return;
 
                 const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
@@ -168,7 +169,7 @@ export default function DashboardPage() {
                     const currentDateStartOfDay = startOfDay(currentDate);
                     if (currentDateStartOfDay >= now) {
                         const instanceKey = `${app.id}-${currentDateStartOfDay.toISOString()}`;
-                        const instanceException = exceptionsMap.get(instanceKey);
+                        const instanceException = isAdmin ? exceptionsMap.get(instanceKey) : undefined;
 
                         if (instanceException?.status !== 'cancelled') {
                             const newStartDate = Timestamp.fromDate(currentDate);

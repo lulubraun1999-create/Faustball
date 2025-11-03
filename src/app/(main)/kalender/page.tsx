@@ -14,6 +14,7 @@ import {
   query,
   where,
   doc,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   Appointment,
@@ -52,7 +53,9 @@ import {
   subMonths,
   addDays,
   addWeeks,
-  addHours
+  addHours,
+  startOfDay,
+  differenceInMilliseconds,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -79,7 +82,7 @@ export default function KalenderPage() {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, isAdmin } = useUser();
   const firestore = useFirestore();
 
   const memberProfileRef = useMemoFirebase(
@@ -125,13 +128,13 @@ export default function KalenderPage() {
 
   const exceptionsRef = useMemoFirebase(
     () =>
-      firestore && appointmentIds.length > 0
+      firestore && isAdmin && appointmentIds.length > 0
         ? query(
             collection(firestore, 'appointmentExceptions'),
             where('originalAppointmentId', 'in', appointmentIds)
           )
         : null,
-    [firestore, appointmentIds]
+    [firestore, appointmentIds, isAdmin]
   );
   const { data: exceptions, isLoading: isLoadingExceptions } =
     useCollection<AppointmentException>(exceptionsRef);
@@ -177,16 +180,19 @@ export default function KalenderPage() {
   }, [allGroups, userTeamIds, appointmentTypes, locations]);
 
   const unrolledAppointments = useMemo(() => {
-    if (!appointments || !exceptions) return [];
+    if (!appointments) return [];
     const events: UnrolledAppointment[] = [];
     const exceptionsMap = new Map<string, AppointmentException>();
-    exceptions.forEach((ex) => {
-      const key = `${ex.originalAppointmentId}-${format(
-        ex.originalDate.toDate(),
-        'yyyy-MM-dd'
-      )}`;
-      exceptionsMap.set(key, ex);
-    });
+    
+    if (isAdmin && exceptions) {
+        exceptions.forEach((ex) => {
+            const key = `${ex.originalAppointmentId}-${format(
+                ex.originalDate.toDate(),
+                'yyyy-MM-dd'
+            )}`;
+            exceptionsMap.set(key, ex);
+        });
+    }
 
     appointments.forEach((app) => {
       const isVisible =
@@ -195,16 +201,16 @@ export default function KalenderPage() {
 
       if (!isVisible || !app.startDate) return;
 
-      const unroll = (currentDate: Date) => {
-        const dateStr = format(currentDate, 'yyyy-MM-dd');
-        const instanceId = `${app.id}_${dateStr}`;
-        const exception = exceptionsMap.get(`${app.id}_${format(currentDate, 'yyyy-MM-dd')}`);
-
+      if (!app.recurrence || app.recurrence === 'none') {
+        const instanceDate = app.startDate.toDate();
+        const exceptionKey = `${app.id}-${format(instanceDate, 'yyyy-MM-dd')}`;
+        const exception = isAdmin ? exceptionsMap.get(exceptionKey) : undefined;
+        
         let instance: UnrolledAppointment = {
           ...app,
-          instanceDate: currentDate,
+          instanceDate,
           originalId: app.id,
-          virtualId: instanceId,
+          virtualId: app.id,
           isCancelled: exception?.status === 'cancelled',
         };
 
@@ -218,17 +224,43 @@ export default function KalenderPage() {
           };
         }
         events.push(instance);
-      };
-
-      if (!app.recurrence || app.recurrence === 'none') {
-        unroll(app.startDate.toDate());
       } else {
-        let current = app.startDate.toDate();
+        let current = startOfDay(app.startDate.toDate());
         const end = app.recurrenceEndDate
           ? app.recurrenceEndDate.toDate()
           : addMonths(new Date(), 12);
+        
+        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
+        
         while (current <= end) {
-          unroll(current);
+            const exceptionKey = `${app.id}-${format(current, 'yyyy-MM-dd')}`;
+            const exception = isAdmin ? exceptionsMap.get(exceptionKey) : undefined;
+
+            if (exception?.status !== 'cancelled') {
+                const instanceStartDate = new Date(current);
+                instanceStartDate.setHours(app.startDate.toDate().getHours(), app.startDate.toDate().getMinutes());
+
+                let instance: UnrolledAppointment = {
+                    ...app,
+                    instanceDate: instanceStartDate,
+                    originalId: app.id,
+                    virtualId: `${app.id}_${format(current, 'yyyy-MM-dd')}`,
+                    startDate: Timestamp.fromDate(instanceStartDate),
+                    endDate: app.endDate ? Timestamp.fromMillis(instanceStartDate.getTime() + duration) : undefined,
+                };
+    
+                if (exception?.status === 'modified' && exception.modifiedData) {
+                    const modData = exception.modifiedData;
+                    instance = {
+                        ...instance,
+                        ...modData,
+                        startDate: modData.startDate || instance.startDate,
+                        isException: true,
+                    };
+                }
+                events.push(instance);
+            }
+
           switch (app.recurrence) {
             case 'daily': current = addDays(current, 1); break;
             case 'weekly': current = addWeeks(current, 1); break;
@@ -240,7 +272,7 @@ export default function KalenderPage() {
       }
     });
     return events;
-  }, [appointments, exceptions, userTeamIds]);
+  }, [appointments, exceptions, userTeamIds, isAdmin]);
   
   const filteredAppointments = useMemo(() => {
       return unrolledAppointments.filter(app => {
@@ -456,4 +488,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
