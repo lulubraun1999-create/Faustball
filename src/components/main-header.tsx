@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -18,6 +19,8 @@ import { signOut } from "firebase/auth";
 import { usePathname, useRouter } from "next/navigation";
 import { VerwaltungDropdown } from './verwaltung-dropdown';
 import { cn } from "@/lib/utils";
+import { MainNav } from "./main-nav";
+import { MobileNav } from "./mobile-nav";
 
 
 export function MainHeader() {
@@ -39,38 +42,21 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto grid h-16 grid-cols-3 items-center">
+      <div className="container mx-auto flex h-16 items-center justify-between">
         {/* Left Section */}
-        <div className="flex justify-self-start">
-          <Link href="/dashboard" className="flex items-center space-x-2">
-            <span className="font-bold sm:inline-block font-headline">
+        <div className="flex items-center gap-6">
+          <MobileNav />
+          <Link href="/dashboard" className="hidden items-center space-x-2 md:flex">
+            <span className="hidden font-bold sm:inline-block font-headline">
               TSV Bayer Leverkusen
             </span>
           </Link>
         </div>
 
-        {/* Center Section */}
-        <nav className="flex justify-self-center">
-          <div className="flex items-center space-x-6 text-sm font-medium">
-            <Link
-              href="/kalender"
-              className={cn("transition-colors hover:text-foreground/80", 
-                pathname.startsWith('/kalender') ? "text-foreground" : "text-foreground/60"
-              )}
-            >
-              Kalender
-            </Link>
-            <Link
-              href="/verwaltung/termine"
-              className={cn("transition-colors hover:text-foreground/80", 
-                pathname.startsWith('/verwaltung/termine') ? "text-foreground" : "text-foreground/60"
-              )}
-            >
-              Termine
-            </Link>
-            <VerwaltungDropdown />
-          </div>
-        </nav>
+        {/* Center Section (Desktop) */}
+        <div className="hidden md:flex">
+           <MainNav />
+        </div>
         
         {/* Right Section */}
         <div className="flex items-center justify-self-end space-x-2">
