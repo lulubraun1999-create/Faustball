@@ -39,8 +39,15 @@ export default function VerwaltungMitgliederPage() {
 
   const membersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  
+  const memberProfileRef = useMemoFirebase(
+    () => (user ? doc(firestore, 'members', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: memberProfile, isLoading: isMemberProfileLoading } =
+    useDoc<MemberProfile>(memberProfileRef);
 
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers;
+  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isMemberProfileLoading;
 
   const combinedData = useMemo(() => {
       if (!users || !members) return [];
@@ -67,9 +74,26 @@ export default function VerwaltungMitgliederPage() {
 
   const filteredAndSortedMembers = useMemo(() => {
     if (!combinedData) return [];
+    
+    let displayableMembers = combinedData;
+
+    // Wenn der User kein Admin ist, die Liste auf Mannschaftskollegen einschränken
+    if (!isAdmin && memberProfile) {
+        const currentUserTeamIds = new Set(memberProfile.teams || []);
+        if (currentUserTeamIds.size > 0) {
+            displayableMembers = combinedData.filter(member => {
+                const memberTeamIds = member.teams || [];
+                // Das Mitglied selbst und alle, die mindestens ein Team teilen
+                return member.id === user?.uid || memberTeamIds.some(teamId => currentUserTeamIds.has(teamId));
+            });
+        } else {
+             // Wenn der Benutzer in keinem Team ist, sieht er nur sich selbst
+             displayableMembers = combinedData.filter(member => member.id === user?.uid);
+        }
+    }
 
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
-    let filtered = [...combinedData];
+    let filtered = [...displayableMembers];
 
     if (lowerCaseSearchTerm) {
       filtered = filtered.filter(member => 
@@ -95,7 +119,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData, selectedRoleFilter, selectedTeamFilter, searchTerm]);
+  }, [combinedData, selectedRoleFilter, selectedTeamFilter, searchTerm, isAdmin, memberProfile, user]);
 
   const getTeamNames = (teamIds?: string[]): string[] => {
     if (!teamIds || teamIds.length === 0) return [];
