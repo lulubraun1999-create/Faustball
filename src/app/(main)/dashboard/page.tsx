@@ -34,7 +34,10 @@ export default function DashboardPage() {
     const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
     const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
-    const exceptionsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointmentExceptions') : null, [firestore]);
+    const exceptionsRef = useMemoFirebase(
+      () => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null),
+      [firestore, isAdmin]
+    );
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
     const latestNewsQuery = useMemoFirebase(
@@ -68,9 +71,10 @@ export default function DashboardPage() {
     }, [allGroups, memberProfile]);
 
     const { nextMatchDay, nextAppointments } = useMemo(() => {
-        if (!appointments || !appointmentTypes) return { nextMatchDay: null, nextAppointments: [] };
+        if (!appointments || !appointmentTypes || !memberProfile) return { nextMatchDay: null, nextAppointments: [] };
         
         const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
+        const userTeamIds = new Set(memberProfile.teams || []);
         
         const exceptionsMap = new Map<string, AppointmentException>();
         exceptions?.forEach(ex => {
@@ -145,15 +149,22 @@ export default function DashboardPage() {
         
         const sortedEvents = allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
         
-        const matchDays = sortedEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
-        const otherAppointments = sortedEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
+        const isVisibleToUser = (event: UnrolledAppointment) => {
+            if (event.visibility.type === 'all') return true;
+            return event.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+        };
+
+        const relevantEvents = sortedEvents.filter(isVisibleToUser);
+        
+        const matchDays = relevantEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
+        const otherAppointments = relevantEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
 
         return {
             nextMatchDay: matchDays[0] || null,
             nextAppointments: otherAppointments.slice(0, 3),
         };
         
-    }, [appointments, exceptions, appointmentTypes]);
+    }, [appointments, exceptions, appointmentTypes, memberProfile]);
 
     const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups || isLoadingTypes;
 
@@ -190,7 +201,7 @@ export default function DashboardPage() {
                             </Button>
                         </div>
                     ) : (
-                        <p className="text-center text-sm text-muted-foreground py-4">Kein bevorstehender Spieltag.</p>
+                        <p className="text-center text-sm text-muted-foreground py-4">Kein bevorstehender Spieltag für deine Teams.</p>
                     )}
                 </CardContent>
             </Card>
