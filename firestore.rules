@@ -103,7 +103,7 @@ service cloud.firestore {
                  resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
-        allow read: if isSignedIn() && (
+        allow get: if isSignedIn() && (
                       isAdmin() ||
                       (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                       isMemberOfVisibleTeamForAppointment()
@@ -155,28 +155,37 @@ service cloud.firestore {
 
     // --- /polls/{pollId} ---
     match /polls/{pollId} {
-        // *** KORRIGIERTE Hilfsfunktion (ohne let/if) ***
         function isMemberOfVisibleTeamForPollResource() {
           let memberTeams = getUserTeams();
-          // Prüfe Existenz aller Daten und dann die Mitgliedschaft
-          return memberTeams != null && // User muss Teams haben
+          return memberTeams != null &&
                  resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
-                 resource.data.visibility.type == 'specificTeams' && // Nur relevant für specificTeams
+                 resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
                  resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow get: if isSignedIn() && (
                      isAdmin() ||
-                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') || // Prüfe Existenz von visibility
+                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                      isMemberOfVisibleTeamForPollResource()
                    );
-        allow list: if isSignedIn(); // Erlaube LIST für angemeldete Benutzer
+        
+        allow list: if isSignedIn() && 
+                      (isAdmin() || 
+                       (request.query.keys().hasAny(['where']) && 
+                        (
+                          (request.query.where.field == 'visibility.type' && request.query.where.op == '==' && request.query.where.value == 'all') ||
+                          (request.query.where.field == 'visibility.teamIds' && request.query.where.op == 'array-contains-any' && getUserTeams().hasAny(request.query.where.value))
+                        )
+                       )
+                      );
+        
         allow create, delete: if isSignedIn() && isAdmin();
+        
         allow update: if isSignedIn() && (
                       isAdmin() ||
-                      ( (resource.data != null && // Prüfe resource.data Existenz für Update
+                      ( (resource.data != null &&
                          (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource())) &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']) )
                     );
