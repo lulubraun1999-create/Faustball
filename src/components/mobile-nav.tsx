@@ -1,16 +1,21 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Menu, Volleyball } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { VerwaltungDropdown } from './verwaltung-dropdown';
+import { Loader2, Menu, Volleyball } from 'lucide-react';
+import { useUser } from '@/firebase';
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
+  const { isAdmin, isUserLoading } = useUser();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -61,6 +66,22 @@ export function MobileNav() {
                      <Link href="/verwaltung/news" className="text-muted-foreground/70" onClick={() => setOpen(false)}>News</Link>
                      <Link href="/verwaltung/mannschaftskasse" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaftskasse</Link>
                 </div>
+                
+                {isClient && (isUserLoading ? (
+                    <div className="pt-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                ) : isAdmin ? (
+                     <div className="flex flex-col space-y-3 pt-6">
+                        <h4 className="font-medium">Admin</h4>
+                        <Link href="/verwaltung/termine-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Termine bearbeiten</Link>
+                        <Link href="/verwaltung/gruppen-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaften bearbeiten</Link>
+                        <Link href="/verwaltung/mitglieder-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mitglieder bearbeiten</Link>
+                        <Link href="/verwaltung/umfragen-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Umfragen bearbeiten</Link>
+                        <Link href="/verwaltung/news-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>News bearbeiten</Link>
+                        <Link href="/verwaltung/mannschaftskasse-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaftskasse bearbeiten</Link>
+                    </div>
+                ) : null)}
             </div>
         </div>
       </SheetContent>
