@@ -100,12 +100,15 @@ export default function VerwaltungMannschaftskassePage() {
     if (!selectedTeamId) return { penalties: [], transactions: [], totalBalance: 0 };
     const teamPenalties = allPenalties?.filter(p => p.teamId === selectedTeamId) || [];
     const teamTransactions = allTransactions?.filter(t => t.teamId === selectedTeamId) || [];
+    
+    // KORREKTE SALDO-BERECHNUNG
     const balance = teamTransactions.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      if (tx.type === 'expense') return acc - tx.amount;
-      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
+      if (tx.type === 'expense') return acc - tx.amount; // ABZIEHEN
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount; // NUR BEZAHLTE STRAFEN HINZUFÜGEN
       return acc;
     }, 0);
+
     return { penalties: teamPenalties, transactions: teamTransactions, totalBalance: balance };
   }, [selectedTeamId, allPenalties, allTransactions]);
 
@@ -256,4 +259,3 @@ export default function VerwaltungMannschaftskassePage() {
     </div>
   );
 }
-

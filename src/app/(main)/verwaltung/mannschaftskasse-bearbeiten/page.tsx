@@ -66,7 +66,7 @@ import {
   errorEmitter,
   FirestorePermissionError,
   useUser,
-  useDoc // useDoc importieren
+  useDoc 
 } from '@/firebase';
 import {
   collection,
@@ -87,13 +87,13 @@ import {
   PiggyBank,
   BookMarked,
   Coins,
-  Info // Info importieren
+  Info 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Penalty, TreasuryTransaction, MemberProfile, Group } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useEffect } from 'react'; // useEffect importieren
+import { useEffect } from 'react'; 
 
 // Zod Schemas (bleiben unverändert)
 const penaltySchema = z.object({
@@ -132,15 +132,13 @@ type TransactionFormValues = z.infer<typeof transactionSchema>;
 export default function AdminKassePage() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, isAdmin, isUserLoading } = useUser(); // user holen
+  const { user, isAdmin, isUserLoading } = useUser(); 
 
-  // *** BEGINN DER ÄNDERUNG: Eigenes Member-Profil holen ***
   const currentUserMemberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
   const { data: currentUserMemberProfile, isLoading: isLoadingCurrentUserMember } = useDoc<MemberProfile>(currentUserMemberRef);
-  // *** ENDE DER ÄNDERUNG ***
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isTxDialogOpen, setIsTxDialogOpen] = useState(false);
@@ -156,14 +154,12 @@ export default function AdminKassePage() {
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]); // Alle Gruppen holen für Namen
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  // *** BEGINN DER ÄNDERUNG: Teams für Dropdown basierend auf eigenem Profil filtern ***
   const teamsForDropdown = useMemo(() => {
     if (!groups || !currentUserMemberProfile?.teams) return [];
     const userTeamIds = currentUserMemberProfile.teams;
     return groups.filter(g => g.type === 'team' && userTeamIds.includes(g.id))
                       .sort((a, b) => a.name.localeCompare(b.name));
   }, [groups, currentUserMemberProfile]);
-  // *** ENDE DER ÄNDERUNG ***
 
   // Firestore Abfragen basierend auf selectedTeamId
   const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
@@ -179,34 +175,32 @@ export default function AdminKassePage() {
 
   // Saldo-Berechnung
   const totalBalance = useMemo(() => {
+    // KORREKTE SALDO-BERECHNUNG
     return transactions?.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      if (tx.type === 'expense') return acc - tx.amount; 
-      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
+      if (tx.type === 'expense') return acc - tx.amount; // ABZIEHEN
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount; // NUR BEZAHLTE STRAFEN HINZUFÜGEN
       return acc;
     }, 0) || 0;
   }, [transactions]);
+
 
   // Forms (bleiben gleich)
   const penaltyForm = useForm<PenaltyFormValues>({ resolver: zodResolver(penaltySchema), defaultValues: { description: '', amount: 0 } });
   const transactionForm = useForm<TransactionFormValues>({ resolver: zodResolver(transactionSchema), defaultValues: { type: 'income', description: '', amount: 0 } });
   const watchTxType = transactionForm.watch('type');
 
-  // *** BEGINN DER ÄNDERUNG: Automatische Auswahl des ersten eigenen Teams ***
   useEffect(() => {
       if (!selectedTeamId && teamsForDropdown.length > 0) {
           setSelectedTeamId(teamsForDropdown[0].id);
       }
-      // Wenn das aktuell ausgewählte Team nicht mehr zu den userTeams gehört (sollte nicht passieren, aber sicher ist sicher)
       if (selectedTeamId && teamsForDropdown.length > 0 && !teamsForDropdown.some(t => t.id === selectedTeamId)) {
           setSelectedTeamId(teamsForDropdown[0].id);
       } else if (selectedTeamId && teamsForDropdown.length === 0) {
-           setSelectedTeamId(null); // Falls Admin aus allen Teams entfernt wird
+           setSelectedTeamId(null); 
       }
   }, [teamsForDropdown, selectedTeamId]);
-  // *** ENDE DER ÄNDERUNG ***
 
-  // Handler-Funktionen (onAddPenalty, onDeletePenalty, onAddTransaction, etc. bleiben unverändert)
     // Penalty Catalog Logic
   const onAddPenalty = async (data: PenaltyFormValues) => {
     if (!firestore || !selectedTeamId) return;
@@ -305,7 +299,6 @@ export default function AdminKassePage() {
        return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><PiggyBank className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen...</p></CardContent></Card></div> );
     }
 
-    // *** BEGINN DER ÄNDERUNG: Meldung, wenn Admin in keinem Team ist ***
     if (!isLoadingInitial && teamsForDropdown.length === 0) {
          return (
              <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -324,7 +317,6 @@ export default function AdminKassePage() {
              </div>
          );
     }
-    // *** ENDE DER ÄNDERUNG ***
 
   return (
     <div className="container mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
@@ -333,7 +325,6 @@ export default function AdminKassePage() {
           <Edit className="h-8 w-8 text-primary" />
           <span className="font-headline">Admin: Kasse bearbeiten</span>
         </h1>
-        {/* *** BEGINN DER ÄNDERUNG: Dropdown verwendet gefilterte Liste *** */}
         <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId} disabled={teamsForDropdown.length === 0}>
           <SelectTrigger className="w-full sm:w-[280px]">
             <SelectValue placeholder="Mannschaft auswählen..." />
@@ -342,10 +333,8 @@ export default function AdminKassePage() {
             {teamsForDropdown.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        {/* *** ENDE DER ÄNDERUNG *** */}
       </div>
 
-      {/* Restlicher Code bleibt größtenteils gleich, zeigt aber nur Daten für selectedTeamId an */}
       {!selectedTeamId ? (
         <Card className="flex flex-col items-center justify-center p-12 text-center">
             <PiggyBank className="h-12 w-12 text-muted-foreground" />
@@ -406,7 +395,7 @@ export default function AdminKassePage() {
                                   {isExpense ? '-' : '+'}
                                   {tx.amount.toFixed(2)} €
                                 </TableCell>
-                                <TableCell>{(tx.type === 'penalty' || tx.status === 'unpaid') ? (<Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'} onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>{tx.status === 'paid' ? 'Bezahlt' : 'Offen'}</Button>) : '-'}</TableCell>
+                                <TableCell>{(tx.type === 'penalty') ? (<Button size="sm" variant={tx.status === 'paid' ? 'secondary' : 'destructive'} onClick={() => onUpdateTransactionStatus(tx.id, tx.status === 'unpaid' ? 'paid' : 'unpaid')}>{tx.status === 'paid' ? 'Bezahlt' : 'Offen'}</Button>) : '-'}</TableCell>
                                 <TableCell className="text-right"><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Transaktion löschen?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeleteTransaction(tx.id)}>Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></TableCell>
                             </TableRow>
                            )})
