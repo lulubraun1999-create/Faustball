@@ -58,7 +58,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import {
   Popover,
   PopoverContent,
@@ -131,6 +130,7 @@ import {
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -2128,6 +2128,7 @@ export default function AdminTerminePage() {
                 </Select>
               </div>
               <Button
+                variant="destructive"
                 onClick={() => {
                   resetAppointmentForm();
                   setIsAppointmentDialogOpen(true);
