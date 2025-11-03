@@ -130,7 +130,6 @@ import {
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import { Label } from '@/components/ui/label';
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -842,7 +841,6 @@ export default function AdminTerminePage() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    if (!appointment.recurrence || appointment.recurrence === 'none' || (appointment.originalId === appointment.id)) {
       const originalAppointment = appointments?.find(
         (app) => app.id === appointment.originalId
       );
@@ -900,51 +898,6 @@ export default function AdminTerminePage() {
         description: originalAppointment.description ?? '',
       });
       setIsAppointmentDialogOpen(true);
-    } else { 
-      setSelectedInstanceToEdit(appointment);
-
-      const formatTimestampForInput = (
-        ts: Timestamp | undefined,
-        type: 'datetime' | 'date' = 'datetime'
-      ) => {
-        if (!ts) return '';
-        try {
-          const date = ts.toDate();
-          if (type === 'date') return formatISO(date, { representation: 'date' });
-          return formatISO(date).slice(0, 16);
-        } catch (e) {
-          return '';
-        }
-      };
-      const startDateString = formatTimestampForInput(
-        appointment.startDate,
-        appointment.isAllDay ? 'date' : 'datetime'
-      );
-      const endDateString = formatTimestampForInput(
-        appointment.endDate,
-        appointment.isAllDay ? 'date' : 'datetime'
-      );
-      const originalDateISOString =
-        appointment.originalDateISO ||
-        startOfDay(appointment.startDate.toDate()).toISOString();
-
-      const typeName = typesMap.get(appointment.appointmentTypeId);
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault = !isSonstiges && appointment.title === typeName;
-
-      instanceForm.reset({
-        originalDateISO: originalDateISOString,
-        startDate: startDateString,
-        endDate: endDateString,
-        isAllDay: appointment.isAllDay ?? false,
-        title: titleIsDefault ? '' : appointment.title,
-        locationId: appointment.locationId ?? '',
-        description: appointment.description ?? '',
-        meetingPoint: appointment.meetingPoint ?? '',
-        meetingTime: appointment.meetingTime ?? '',
-      });
-      setIsInstanceDialogOpen(true);
-    }
   };
 
   const resetAppointmentForm = () => {
@@ -1513,7 +1466,7 @@ export default function AdminTerminePage() {
                                                 field.onChange(newValue);
                                               }}
                                             />
-                                            <Label htmlFor={`team-check-${team.id}`} className="font-normal w-full cursor-pointer">{team.name}</Label>
+                                            <label htmlFor={`team-check-${team.id}`} className="font-normal w-full cursor-pointer">{team.name}</label>
                                           </div>
                                         ))}
                                       </React.Fragment>
@@ -2128,7 +2081,7 @@ export default function AdminTerminePage() {
                 </Select>
               </div>
               <Button
-                variant="destructive"
+                variant="default"
                 onClick={() => {
                   resetAppointmentForm();
                   setIsAppointmentDialogOpen(true);
@@ -2250,6 +2203,15 @@ export default function AdminTerminePage() {
                               : '-'}
                           </TableCell>
                           <TableCell className="text-right space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditAppointment(app)}
+                              disabled={isSubmitting}
+                            >
+                              <Edit className="h-4 w-4" />
+                              <span className="sr-only">Termin bearbeiten</span>
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
