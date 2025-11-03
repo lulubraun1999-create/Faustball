@@ -24,6 +24,8 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@
 import { collection, doc, query, where } from 'firebase/firestore';
 import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import { Input } from '@/components/ui/input';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
@@ -199,6 +201,8 @@ export default function VerwaltungMitgliederPage() {
                     <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
                     <TableHead className="hidden md:table-cell">Email</TableHead>
                     <TableHead className="hidden lg:table-cell">Telefon</TableHead>
+                    <TableHead className="hidden lg:table-cell">Geburtstag</TableHead>
+                    <TableHead className="hidden lg:table-cell">Wohnort</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -233,12 +237,16 @@ export default function VerwaltungMitgliederPage() {
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{member.email || '-'}</TableCell>
                         <TableCell className="hidden lg:table-cell">{member.phone || '-'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                            {member.birthday ? format(new Date(member.birthday), 'dd.MM.yyyy', { locale: de }) : '-'}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">{member.location || '-'}</TableCell>
                       </TableRow>
                       )
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                         Keine Mitglieder entsprechen den aktuellen Filtern gefunden.
                       </TableCell>
                     </TableRow>
