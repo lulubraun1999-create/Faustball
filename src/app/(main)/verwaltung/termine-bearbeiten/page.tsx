@@ -2250,18 +2250,6 @@ export default function AdminTerminePage() {
                               : '-'}
                           </TableCell>
                           <TableCell className="text-right space-x-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditAppointment(app)}
-                              disabled={isCancelled}
-                            >
-                              <Edit className="h-4 w-4" />
-                              <span className="sr-only">
-                                Termin bearbeiten
-                              </span>
-                            </Button>
-
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
