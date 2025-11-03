@@ -1,9 +1,9 @@
 
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, serverTimestamp, getDocs, updateDoc, addDoc, type WriteBatch, query, where } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types';
-import { addDays, isEqual, isValid as isDateValid, startOfDay } from 'date-fns';
+import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -60,7 +60,7 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
     // 2. Firestore Dokumente (users und members) aktualisieren
-    const batch: WriteBatch = db.batch();
+    const batch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
     
@@ -174,11 +174,11 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
         userId: userId,
         userName: userName,
         content: content,
-        createdAt: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
     };
 
     try {
-        await addDoc(db.collection('chats').doc(roomId).collection('messages'), messageData);
+        await db.collection('chats').doc(roomId).collection('messages').add(messageData);
         return { status: 'success', message: 'Message sent successfully.' };
     } catch (error) {
         console.error('Error sending message:', error);
@@ -212,10 +212,9 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const exceptionsColRef = db.collection('appointmentExceptions');
     
     // Search for existing exception on the server
-    const q = query(exceptionsColRef, 
-        where('originalAppointmentId', '==', selectedInstanceToEdit.originalId),
-        where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay))
-    );
+    const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+                              .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
+
     const querySnapshot = await q.get();
     const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
 
@@ -235,16 +234,16 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         originalDate: Timestamp.fromDate(originalDateStartOfDay),
         status: 'modified',
         modifiedData: modifiedData,
-        createdAt: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         userId: userId,
     };
 
     try {
         if (existingExceptionDoc) {
-            await updateDoc(existingExceptionDoc.ref, { modifiedData: modifiedData, status: 'modified', userId: userId });
+            await existingExceptionDoc.ref.update({ modifiedData: modifiedData, status: 'modified', userId: userId });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
-            await addDoc(exceptionsColRef, exceptionData);
+            await exceptionsColRef.add(exceptionData);
             return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
         }
     } catch (error: any) {
@@ -273,7 +272,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       }
 
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const batch: WriteBatch = db.batch();
+      const batch = db.batch();
 
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
@@ -333,8 +332,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        lastUpdated: FieldValue.serverTimestamp(),
         createdBy: userId,
       };
 
@@ -344,8 +343,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
         
-      const exceptionsSnap = await getDocs(exceptionsQuery);
-      exceptionsSnap.forEach((doc: { ref: admin.firestore.DocumentReference<admin.firestore.DocumentData>; }) => batch.delete(doc.ref));
+      const exceptionsSnap = await exceptionsQuery.get();
+      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
       
       await batch.commit();
       return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
