@@ -76,22 +76,21 @@ export default function VerwaltungMitgliederPage() {
   const { teamsMap, teamsForFilterDropdown } = useMemo(() => {
     const map = new Map<string, string>();
     if (!groups) return { teamsMap: map, teamsForFilterDropdown: [] };
-
+  
     const allTeams = groups.filter(g => g.type === 'team');
     allTeams.forEach(team => map.set(team.id, team.name));
-
-    // For non-admins, filter dropdown to only their teams
-    if (!isAdmin && memberProfile?.teams) {
+  
+    // For ALL users (including admins), filter dropdown to only their teams on this page.
+    if (memberProfile?.teams) {
         const userTeamIds = new Set(memberProfile.teams);
         const userTeams = allTeams.filter(team => userTeamIds.has(team.id));
         userTeams.sort((a,b) => a.name.localeCompare(b.name));
         return { teamsMap: map, teamsForFilterDropdown: userTeams }
     }
     
-    // For admins, show all teams
-    allTeams.sort((a, b) => a.name.localeCompare(b.name));
-    return { teamsMap: map, teamsForFilterDropdown: allTeams };
-  }, [groups, memberProfile, isAdmin]);
+    // Fallback for users with no teams
+    return { teamsMap: map, teamsForFilterDropdown: [] };
+  }, [groups, memberProfile]);
 
   const filteredAndSortedMembers = useMemo(() => {
     if (!combinedData) return [];
@@ -268,6 +267,3 @@ export default function VerwaltungMitgliederPage() {
     </div>
   );
 }
-
-    
-    
