@@ -21,11 +21,44 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, doc, query, where, getDocs, Query } from 'firebase/firestore';
+import { collection, doc, query, where } from 'firebase/firestore';
 import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
+
+// NEU: Eigener Hook zum Abrufen von Mitgliedern aus mehreren Teams
+function useTeamMembers(teamIds: string[]) {
+  const firestore = useFirestore();
+
+  const queries = useMemo(() => {
+    if (!firestore || teamIds.length === 0) return [];
+    return teamIds.map(teamId => 
+      query(collection(firestore, 'members'), where('teams', 'array-contains', teamId))
+    );
+  }, [firestore, teamIds]);
+
+  // Wir können useCollection nicht direkt in einer Schleife aufrufen. 
+  // Diese Komponente hilft uns, die Daten für jede Query zu sammeln.
+  const collections = queries.map(q => useCollection<MemberProfile>(useMemoFirebase(() => q, [q])));
+
+  const isLoading = collections.some(c => c.isLoading);
+  
+  const members = useMemo(() => {
+    const membersMap = new Map<string, MemberProfile>();
+    collections.forEach(c => {
+      c.data?.forEach(member => {
+        if (!membersMap.has(member.id)) {
+          membersMap.set(member.id, member);
+        }
+      });
+    });
+    return Array.from(membersMap.values());
+  }, [collections]);
+
+  return { data: members, isLoading };
+}
+
 
 export default function VerwaltungMitgliederPage() {
   const { user, isAdmin, isUserLoading } = useUser();
@@ -57,44 +90,8 @@ export default function VerwaltungMitgliederPage() {
   );
   const { data: adminFetchedMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  // 3. Datenabruf für normale Benutzer (gefiltert nach Teams)
-  const [nonAdminFetchedMembers, setNonAdminFetchedMembers] = useState<MemberProfile[]>([]);
-  const [isLoadingNonAdminMembers, setIsLoadingNonAdminMembers] = useState(false);
-
-  useEffect(() => {
-    if (isAdmin || !firestore || userTeamIds.length === 0) {
-        setNonAdminFetchedMembers([]);
-        return;
-    };
-
-    const fetchTeamMembers = async () => {
-        setIsLoadingNonAdminMembers(true);
-        const memberPromises = userTeamIds.map(teamId => 
-            getDocs(query(collection(firestore, 'members'), where('teams', 'array-contains', teamId)))
-        );
-        
-        try {
-            const teamSnapshots = await Promise.all(memberPromises);
-            const membersMap = new Map<string, MemberProfile>();
-            teamSnapshots.forEach(snapshot => {
-                snapshot.forEach(doc => {
-                    if (!membersMap.has(doc.id)) {
-                        membersMap.set(doc.id, { ...(doc.data() as MemberProfile), userId: doc.id });
-                    }
-                });
-            });
-            setNonAdminFetchedMembers(Array.from(membersMap.values()));
-        } catch (error) {
-            console.error("Error fetching team members:", error);
-            setNonAdminFetchedMembers([]);
-        } finally {
-            setIsLoadingNonAdminMembers(false);
-        }
-    };
-    
-    fetchTeamMembers();
-  }, [isAdmin, firestore, userTeamIds]);
-
+  // 3. Datenabruf für normale Benutzer (gefiltert nach Teams) - JETZT mit dem neuen Hook
+  const { data: nonAdminFetchedMembers, isLoading: isLoadingNonAdminMembers } = useTeamMembers(userTeamIds);
 
   // 4. Ladezustand und Kombinieren der Daten
   const isLoading = isUserLoading || isLoadingCurrentUserMember || (isAdmin && (isLoadingUsers || isLoadingMembers)) || (!isAdmin && isLoadingNonAdminMembers);
@@ -103,12 +100,11 @@ export default function VerwaltungMitgliederPage() {
       if (isAdmin) {
           if (!adminFetchedUsers || !adminFetchedMembers) return [];
           const memberMap = new Map(adminFetchedMembers.map(m => [m.userId, m]));
-          return adminFetchedUsers.map(user => ({
-              ...user,
-              ...(memberMap.get(user.id) || {}),
+          return adminFetchedUsers.map(userProfile => ({
+              ...userProfile,
+              ...(memberMap.get(userProfile.id) || {}),
           })) as CombinedMemberProfile[];
       } else {
-          // Für normale User: Kombiniere die gefilterten Member-Daten mit User-Daten (hier nur self)
            return nonAdminFetchedMembers.map(member => ({
               ...member,
               id: member.userId,
