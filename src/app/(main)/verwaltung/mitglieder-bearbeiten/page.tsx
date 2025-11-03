@@ -65,6 +65,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 // Typ für kombinierte Daten
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
@@ -345,9 +347,12 @@ export default function AdminMitgliederPage() {
                   <TableRow>
                     <TableHead>Nachname</TableHead>
                     <TableHead>Vorname</TableHead>
-                    <TableHead className="hidden md:table-cell">Rolle</TableHead>
-                    <TableHead className="hidden lg:table-cell">Mannschaften</TableHead>
+                    <TableHead>Rolle</TableHead>
+                    <TableHead>Mannschaften</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Telefon</TableHead>
+                    <TableHead>Geburtstag</TableHead>
+                    <TableHead>Wohnort</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -355,16 +360,38 @@ export default function AdminMitgliederPage() {
                   {filteredAndSortedMembers && filteredAndSortedMembers.length > 0 ? (
                     filteredAndSortedMembers.map((member) => {
                        const memberTeams = getTeamNames(member.teams);
-                       const currentMemberData = members?.find(m => m.userId === member.id);
                        return (
                       <TableRow key={member.id}>
                         <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
                         <TableCell>{member.firstName || '-'}</TableCell>
-                        <TableCell className="hidden md:table-cell capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          {memberTeams.length > 0 ? ( <Popover><PopoverTrigger asChild><Button variant="link" className="p-0 h-auto font-normal text-foreground text-left">{memberTeams[0]}{memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}</Button></PopoverTrigger>{memberTeams.length > 1 && ( <PopoverContent className="w-auto p-2"><ul className="space-y-1 list-disc list-inside text-sm">{memberTeams.map(team => <li key={team}>{team}</li>)}</ul></PopoverContent> )}</Popover> ) : ('-')}
+                        <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
+                        <TableCell>
+                          {memberTeams.length > 0 ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="link" className="p-0 h-auto font-normal text-foreground text-left">
+                                   {memberTeams[0]}
+                                   {memberTeams.length > 1 && `... (+${memberTeams.length - 1})`}
+                                </Button>
+                              </PopoverTrigger>
+                               {memberTeams.length > 1 && (
+                                <PopoverContent className="w-auto p-2">
+                                  <ul className="space-y-1 list-disc list-inside text-sm">
+                                    {memberTeams.map(team => <li key={team}>{team}</li>)}
+                                  </ul>
+                                </PopoverContent>
+                               )}
+                            </Popover>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">{member.email || '-'}</TableCell>
+                        <TableCell>{member.phone || '-'}</TableCell>
+                        <TableCell>
+                            {member.birthday ? format(new Date(member.birthday), 'dd.MM.yyyy', { locale: de }) : '-'}
+                        </TableCell>
+                        <TableCell>{member.location || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0">
                             <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.id}`]}>{updatingStates[`teams-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Users className="h-4 w-4" />}<span className="sr-only">Mannschaften zuweisen</span></Button></PopoverTrigger><PopoverContent className="w-64 p-0"><ScrollArea className="h-72"><div className="p-4">{groupedTeams.length > 0 ? groupedTeams.map(group => (<div key={group.id} className="mb-4"><h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4><div className="flex flex-col space-y-2">{group.teams.map(team => (<div key={team.id} className="flex items-center space-x-2"><Checkbox id={`team-${member.id}-${team.id}`} checked={member.teams?.includes(team.id)} onCheckedChange={(checked) => { handleTeamsChange(member, team.id, !!checked); }} /><label htmlFor={`team-${member.id}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{team.name}</label></div>))}</div></div>)) : <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>}</div></ScrollArea></PopoverContent></Popover>
@@ -377,7 +404,7 @@ export default function AdminMitgliederPage() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center"> 
+                      <TableCell colSpan={9} className="h-24 text-center"> 
                         Keine Mitglieder entsprechen den aktuellen Filtern.
                       </TableCell>
                     </TableRow>
