@@ -63,6 +63,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 
 // Typ für kombinierte Daten
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
@@ -73,7 +74,7 @@ export default function AdminMitgliederPage() {
   const { user, forceRefresh, isAdmin, isUserLoading } = useUser();
 
   // Filter States
-  const [selectedTeamFilterOption, setSelectedTeamFilterOption] = useState<string>('all'); // 'all', 'myTeams', 'noTeam'
+  const [selectedTeamFilterOption, setSelectedTeamFilterOption] = useState<string>('all'); // 'all', 'myTeams', 'noTeam' or a teamId
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all'); // 'all', 'admin', 'user'
   const [searchTerm, setSearchTerm] = useState<string>(''); // Zustand für Suchbegriff
 
@@ -116,14 +117,10 @@ export default function AdminMitgliederPage() {
       const classes = allGroups.filter(g => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name));
       const teams = allGroups.filter(g => g.type === 'team');
       const teamsForFilter: Group[] = [];
-      const userTeamIds = currentUserMemberProfile?.teams || [];
 
       teams.forEach(team => {
           map.set(team.id, team.name);
-          // Nur eigene Teams zum Filter hinzufügen (für Dropdown)
-          if (userTeamIds.includes(team.id)) {
-              teamsForFilter.push(team);
-          }
+          teamsForFilter.push(team);
       });
 
       teamsForFilter.sort((a, b) => a.name.localeCompare(b.name));
@@ -134,7 +131,7 @@ export default function AdminMitgliederPage() {
       })).filter(c => c.teams.length > 0);
 
       return { teamsMap: map, groupedTeams: grouped, teamsForFilterDropdown: teamsForFilter };
-  }, [groups, currentUserMemberProfile]);
+  }, [groups]);
 
 
   // Gefilterte und sortierte Mitgliederliste
@@ -164,11 +161,16 @@ export default function AdminMitgliederPage() {
     if (selectedTeamFilterOption === 'myTeams') {
       filtered = filtered.filter(member => {
         const memberTeams = member.teams || [];
+        // Schließt das eigene Profil immer ein, auch wenn es in keinem Team ist
         return member.id === currentUserMemberProfile.userId || memberTeams.some(teamId => currentUserTeamIds.has(teamId));
       });
     } else if (selectedTeamFilterOption === 'noTeam') {
       filtered = filtered.filter(member => !member.teams || member.teams.length === 0);
+    } else if (selectedTeamFilterOption !== 'all') {
+      // Filter für eine spezifische Mannschaft
+      filtered = filtered.filter(member => member.teams?.includes(selectedTeamFilterOption));
     }
+
 
     // 4. Sortieren
     return filtered.sort((a, b) => {
@@ -318,6 +320,10 @@ export default function AdminMitgliederPage() {
                    <SelectItem value="all">Alle Mitglieder</SelectItem>
                    <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
                    <SelectItem value="noTeam">Ohne Mannschaft</SelectItem>
+                   <Separator className="my-1"/>
+                   {teamsForFilterDropdown.map(team => (
+                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                   ))}
                  </SelectContent>
                </Select>
                <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
