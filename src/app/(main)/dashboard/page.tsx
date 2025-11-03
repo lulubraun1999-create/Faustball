@@ -23,7 +23,7 @@ type UnrolledAppointment = Appointment & {
 };
 
 export default function DashboardPage() {
-    const { user, isUserLoading } = useUser();
+    const { user, isUserLoading, isAdmin } = useUser();
     const firestore = useFirestore();
 
     // Lade das Profil des aktuellen Benutzers, um seine Teams zu bekommen
@@ -36,9 +36,27 @@ export default function DashboardPage() {
 
     // --- Angepasste Datenabfragen ---
 
-    // 1. Alle Termine (für Entfaltung)
-    const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
-    const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
+    // 1. Termine (aufgeteilt in öffentliche und Team-Termine zur Einhaltung der Sicherheitsregeln)
+    const publicAppointmentsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all'));
+    }, [firestore]);
+
+    const teamAppointmentsQuery = useMemoFirebase(() => {
+        if (!firestore || userTeamIds.length === 0) return null;
+        return query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds));
+    }, [firestore, userTeamIds]);
+    
+    const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
+    const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
+    
+    // Kombinieren der beiden Terminlisten
+    const appointments = useMemo(() => {
+        const all = [...(publicAppointments || []), ...(teamAppointments || [])];
+        return Array.from(new Map(all.map(app => [app.id, app])).values());
+    }, [publicAppointments, teamAppointments]);
+    const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
+
 
     // 2. Alle Ausnahmen (für Entfaltung)
     const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
@@ -117,7 +135,7 @@ export default function DashboardPage() {
             if (!app.startDate) return;
 
             const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIds.includes(teamId)));
-            if (!isVisible) return;
+            if (!isVisible && !isAdmin) return;
 
             if (app.recurrence === 'none') {
                 const originalDateStartOfDay = startOfDay(app.startDate.toDate());
@@ -186,7 +204,7 @@ export default function DashboardPage() {
             nextAppointments: otherAppointments.slice(0, 3),
         };
         
-    }, [appointments, exceptions, isLoadingExceptions, userTeamIds, appointmentTypes]);
+    }, [appointments, exceptions, isLoadingExceptions, userTeamIds, appointmentTypes, isAdmin]);
 
 
     const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups || isLoadingTypes;

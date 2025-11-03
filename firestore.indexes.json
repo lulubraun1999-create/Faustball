@@ -34,6 +34,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "visibility.type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "appointments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "visibility.teamIds",
           "arrayConfig": "CONTAINS"
         },
