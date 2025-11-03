@@ -2095,8 +2095,7 @@ export default function AdminTerminePage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <ScrollArea className="h-[600px] w-full">
-              <div className="overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2304,7 +2303,6 @@ export default function AdminTerminePage() {
                 </TableBody>
               </Table>
               </div>
-            </ScrollArea>
           )}
         </CardContent>
       </Card>
