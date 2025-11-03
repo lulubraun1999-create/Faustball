@@ -60,6 +60,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   useCollection,
   useFirestore,
   useMemoFirebase,
@@ -224,7 +230,7 @@ export default function AdminKassePage() {
     if (!firestore || !selectedTeamId) return;
 
     let finalAmount = 0;
-    let finalDescription = data.description ?? '';
+    let finalDescription = '';
     let finalStatus: 'paid' | 'unpaid' = 'paid';
     let finalMemberId = data.memberId;
 
@@ -242,10 +248,12 @@ export default function AdminKassePage() {
 
     } else if (data.type === 'expense') {
       finalAmount = data.amount ?? 0;
-      finalMemberId = undefined;
+      finalMemberId = data.memberId;
+      finalDescription = data.description || '';
     } else { // income
         finalAmount = data.amount ?? 0;
-        finalMemberId = undefined;
+        finalMemberId = data.memberId;
+        finalDescription = data.description || '';
     }
 
      if (isNaN(finalAmount)) {
@@ -379,6 +387,7 @@ export default function AdminKassePage() {
               </CardHeader>
               <CardContent>
                  <div className="overflow-x-auto">
+                 <TooltipProvider>
                   <Table>
                     <TableHeader><TableRow><TableHead>Datum</TableHead><TableHead>Name</TableHead><TableHead>Beschreibung</TableHead><TableHead>Betrag</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aktion</TableHead></TableRow></TableHeader>
                     <TableBody>
@@ -391,7 +400,16 @@ export default function AdminKassePage() {
                             <TableRow key={tx.id}>
                                 <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
                                 <TableCell>{memberName}</TableCell>
-                                <TableCell className="font-medium">{tx.description}</TableCell>
+                                <TableCell className="font-medium max-w-[150px] truncate">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="cursor-default">{tx.description}</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{tx.description}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableCell>
                                 <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
                                   {isExpense ? '-' : '+'}
                                   {tx.amount.toFixed(2)} €
@@ -403,6 +421,7 @@ export default function AdminKassePage() {
                         ) : ( <TableRow><TableCell colSpan={6} className="text-center h-24">Keine Transaktionen gefunden.</TableCell></TableRow> )}
                     </TableBody>
                   </Table>
+                  </TooltipProvider>
                   </div>
               </CardContent>
             </Card>
@@ -435,5 +454,3 @@ export default function AdminKassePage() {
     </div>
   );
 }
-
-    

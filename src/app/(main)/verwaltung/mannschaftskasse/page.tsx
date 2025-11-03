@@ -25,6 +25,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   useCollection,
   useFirestore,
   useMemoFirebase,
@@ -184,6 +190,7 @@ export default function VerwaltungMannschaftskassePage() {
               </CardHeader>
               <CardContent>
                  <div className="overflow-x-auto">
+                 <TooltipProvider>
                   <Table>
                     <TableHeader>
                         <TableRow>
@@ -199,9 +206,19 @@ export default function VerwaltungMannschaftskassePage() {
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             const isExpense = tx.type === 'expense';
+                            const isIncome = tx.type === 'income' || tx.type === 'penalty';
                             return (
                             <TableRow key={tx.id}>
-                                <TableCell className="font-medium max-w-[150px] truncate">{tx.description}</TableCell>
+                                <TableCell className="font-medium max-w-[150px] truncate">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="cursor-default">{tx.description}</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{tx.description}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TableCell>
                                 <TableCell className="hidden sm:table-cell">{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
                                 <TableCell className="hidden md:table-cell">{memberName}</TableCell>
                                 <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
@@ -209,7 +226,7 @@ export default function VerwaltungMannschaftskassePage() {
                                   {tx.amount.toFixed(2)} €
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
-                                    {(tx.type === 'penalty' || tx.status === 'unpaid') ? (
+                                    {(tx.type === 'penalty') ? (
                                         <span className={cn(
                                             "px-2 py-1 rounded-full text-xs font-medium",
                                             tx.status === 'paid' ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
@@ -225,6 +242,7 @@ export default function VerwaltungMannschaftskassePage() {
                         )}
                     </TableBody>
                   </Table>
+                  </TooltipProvider>
                   </div>
               </CardContent>
             </Card>
