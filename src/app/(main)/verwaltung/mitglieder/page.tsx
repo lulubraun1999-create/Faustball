@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Users2, Search } from 'lucide-react';
+import { Loader2, Users2, Search, MapPin } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Tooltip, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 

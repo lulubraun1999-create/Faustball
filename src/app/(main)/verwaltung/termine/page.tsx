@@ -71,7 +71,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Users } from "lucide-react";
+import { Users, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
@@ -546,11 +546,14 @@ export default function VerwaltungTerminePage() {
                                             <TableCell>
                                                 {location ? (
                                                 <Tooltip>
-                                                    <TooltipTrigger>
-                                                    <span className="underline decoration-dotted cursor-help">{location.name}</span>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="flex items-center gap-2 cursor-help">
+                                                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                                                            <span className="underline decoration-dotted">{location.name}</span>
+                                                        </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
-                                                    <p>{location.address || 'Keine Adresse hinterlegt'}</p>
+                                                        <p>{location.address || 'Keine Adresse hinterlegt'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                                 ) : (
