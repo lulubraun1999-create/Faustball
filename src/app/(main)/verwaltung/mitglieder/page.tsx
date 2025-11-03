@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -14,16 +15,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Users2, Filter } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Loader2, Users2, Search } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, query, where, getDocs, Query } from 'firebase/firestore';
 import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
 
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
@@ -35,104 +35,135 @@ export default function VerwaltungMitgliederPage() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-
-  // Eigenes Member-Profil holen
+  // 1. Eigenes Member-Profil holen (für alle User wichtig)
   const currentUserMemberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
   const { data: currentUserMemberProfile, isLoading: isLoadingCurrentUserMember } = useDoc<MemberProfile>(currentUserMemberRef);
+  const userTeamIds = useMemo(() => currentUserMemberProfile?.teams || [], [currentUserMemberProfile]);
 
 
+  // 2. Datenabruf für Admins (alle User und Members)
   const usersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'users') : null),
     [firestore, isAdmin]
   );
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
+  const { data: adminFetchedUsers, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
 
   const membersRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'members') : null),
     [firestore, isAdmin]
   );
-  const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+  const { data: adminFetchedMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
 
-  const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
-  );
-  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  // 3. Datenabruf für normale Benutzer (gefiltert nach Teams)
+  const [nonAdminFetchedMembers, setNonAdminFetchedMembers] = useState<MemberProfile[]>([]);
+  const [isLoadingNonAdminMembers, setIsLoadingNonAdminMembers] = useState(false);
 
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups || isLoadingCurrentUserMember;
+  useEffect(() => {
+    if (isAdmin || !firestore || userTeamIds.length === 0) {
+        setNonAdminFetchedMembers([]);
+        return;
+    };
+
+    const fetchTeamMembers = async () => {
+        setIsLoadingNonAdminMembers(true);
+        const memberPromises = userTeamIds.map(teamId => 
+            getDocs(query(collection(firestore, 'members'), where('teams', 'array-contains', teamId)))
+        );
+        
+        try {
+            const teamSnapshots = await Promise.all(memberPromises);
+            const membersMap = new Map<string, MemberProfile>();
+            teamSnapshots.forEach(snapshot => {
+                snapshot.forEach(doc => {
+                    if (!membersMap.has(doc.id)) {
+                        membersMap.set(doc.id, { ...(doc.data() as MemberProfile), userId: doc.id });
+                    }
+                });
+            });
+            setNonAdminFetchedMembers(Array.from(membersMap.values()));
+        } catch (error) {
+            console.error("Error fetching team members:", error);
+            setNonAdminFetchedMembers([]);
+        } finally {
+            setIsLoadingNonAdminMembers(false);
+        }
+    };
+    
+    fetchTeamMembers();
+  }, [isAdmin, firestore, userTeamIds]);
+
+
+  // 4. Ladezustand und Kombinieren der Daten
+  const isLoading = isUserLoading || isLoadingCurrentUserMember || (isAdmin && (isLoadingUsers || isLoadingMembers)) || (!isAdmin && isLoadingNonAdminMembers);
 
   const combinedData = useMemo(() => {
-    if (!users || !members) return [];
-    const memberMap = new Map(members.map(m => [m.userId, m]));
-    return users.map(user => ({
-      ...user,
-      ...(memberMap.get(user.id) || {}),
-    })) as CombinedMemberProfile[];
-  }, [users, members]);
+      if (isAdmin) {
+          if (!adminFetchedUsers || !adminFetchedMembers) return [];
+          const memberMap = new Map(adminFetchedMembers.map(m => [m.userId, m]));
+          return adminFetchedUsers.map(user => ({
+              ...user,
+              ...(memberMap.get(user.id) || {}),
+          })) as CombinedMemberProfile[];
+      } else {
+          // Für normale User: Kombiniere die gefilterten Member-Daten mit User-Daten (hier nur self)
+           return nonAdminFetchedMembers.map(member => ({
+              ...member,
+              id: member.userId,
+           })) as CombinedMemberProfile[];
+      }
+  }, [isAdmin, adminFetchedUsers, adminFetchedMembers, nonAdminFetchedMembers]);
 
-  // Teams für Filter-Dropdown und Anzeige
+
+  // 5. Gruppen & Teams für die Filter-Dropdowns
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+
   const { teamsMap, teamsForFilterDropdown } = useMemo(() => {
     const map = new Map<string, string>();
     const teamsForFilter: Group[] = [];
-    const userTeamIds = currentUserMemberProfile?.teams || [];
-
+    
     if (groups) {
-      groups.filter(g => g.type === 'team').forEach(team => {
-          map.set(team.id, team.name);
-          if (userTeamIds.includes(team.id)) {
-              teamsForFilter.push(team);
-          }
-      });
+      const allTeams = groups.filter(g => g.type === 'team');
+      allTeams.forEach(team => map.set(team.id, team.name));
+
+      const teamIdsForFilter = isAdmin ? allTeams.map(t => t.id) : (currentUserMemberProfile?.teams || []);
+      const teamIdsSet = new Set(teamIdsForFilter);
+      
+      teamsForFilter.push(...allTeams.filter(t => teamIdsSet.has(t.id)));
     }
     teamsForFilter.sort((a, b) => a.name.localeCompare(b.name));
     return { teamsMap: map, teamsForFilterDropdown: teamsForFilter };
-  }, [groups, currentUserMemberProfile]);
+  }, [groups, isAdmin, currentUserMemberProfile]);
 
 
-  // Gefilterte und sortierte Mitgliederliste
+  // 6. Finale Filterung der kombinierten Daten für die Anzeige
   const filteredAndSortedMembers = useMemo(() => {
-    if (!combinedData || !currentUserMemberProfile) return [];
+    if (!combinedData) return [];
 
-    const currentUserTeamIds = new Set(currentUserMemberProfile?.teams || []);
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
-    // Vorfiltern nach gemeinsamen Teams
-    let preFiltered = combinedData.filter(member => {
-        const memberTeams = member.teams || [];
-        return memberTeams.some(teamId => currentUserTeamIds.has(teamId));
-    });
+    let filtered = [...combinedData];
 
-    // Suche
     if (lowerCaseSearchTerm) {
-      preFiltered = preFiltered.filter(member => 
+      filtered = filtered.filter(member => 
         (member.firstName?.toLowerCase() || '').includes(lowerCaseSearchTerm) ||
         (member.lastName?.toLowerCase() || '').includes(lowerCaseSearchTerm) ||
         (member.email?.toLowerCase() || '').includes(lowerCaseSearchTerm)
       );
     }
 
-    let filtered = [...preFiltered];
-
-    // Filtern nach Rolle
     if (selectedRoleFilter !== 'all') {
       filtered = filtered.filter(member => member.role === selectedRoleFilter);
     }
 
-    // Filtern nach Mannschaft
     if (selectedTeamFilter !== 'all') {
       filtered = filtered.filter(member => member.teams?.includes(selectedTeamFilter));
     }
 
-    // Sortieren
     return filtered.sort((a, b) => {
-      // Dich selbst immer zuerst anzeigen (optional)
-      if (a.id === currentUserMemberProfile.userId) return -1;
-      if (b.id === currentUserMemberProfile.userId) return 1;
-
-      // Dann nach Nachname, dann Vorname sortieren
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) {
@@ -140,7 +171,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData, selectedRoleFilter, selectedTeamFilter, currentUserMemberProfile, searchTerm]);
+  }, [combinedData, selectedRoleFilter, selectedTeamFilter, searchTerm]);
 
 
   const getTeamNames = (teamIds?: string[]): string[] => {
@@ -148,9 +179,7 @@ export default function VerwaltungMitgliederPage() {
     return teamIds.map(id => teamsMap.get(id) || id).sort();
   };
 
-  // --- Render Logic ---
-
-  if (isLoading) {
+  if (isLoading || isLoadingGroups) {
     return (
       <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -158,26 +187,27 @@ export default function VerwaltungMitgliederPage() {
     );
   }
 
-  if (!isAdmin) {
-     return (
+  // Fallback, wenn ein normaler User keiner Mannschaft angehört
+  if (!isAdmin && userTeamIds.length === 0) {
+       return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-          <Card className="border-destructive/50">
+          <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-3 text-destructive">
-                <Users2 className="h-8 w-8" />
-                <span className="text-2xl font-headline">Zugriff verweigert</span>
+              <CardTitle className="flex items-center gap-3">
+                <Users2 className="h-8 w-8 text-primary" />
+                <span className="text-2xl font-headline">Mitglieder</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
-                diesen Bereich zuzugreifen.
+                Sie müssen Mitglied einer Mannschaft sein, um andere Mitglieder sehen zu können.
               </p>
             </CardContent>
           </Card>
         </div>
       );
   }
+
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -186,7 +216,7 @@ export default function VerwaltungMitgliederPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-3">
               <Users2 className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-headline">Verwaltung: Mitglieder</span>
+              <span className="text-2xl font-headline">Mitglieder</span>
             </CardTitle>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                <div className="relative w-full sm:w-auto">
@@ -204,7 +234,7 @@ export default function VerwaltungMitgliederPage() {
                    <SelectValue placeholder="Nach Mannschaft filtern..." />
                  </SelectTrigger>
                  <SelectContent>
-                   <SelectItem value="all">Alle meine Mannschaften</SelectItem>
+                   <SelectItem value="all">Alle {isAdmin ? 'Mannschaften' : 'meine Mannschaften'}</SelectItem>
                    {teamsForFilterDropdown.map(team => (
                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                    ))}
@@ -273,8 +303,8 @@ export default function VerwaltungMitgliederPage() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                        Keine Mannschaftskollegen entsprechen den aktuellen Filtern gefunden.
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        Keine Mitglieder entsprechen den aktuellen Filtern gefunden.
                       </TableCell>
                     </TableRow>
                   )}

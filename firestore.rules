@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -50,9 +51,16 @@ service cloud.firestore {
           return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid;
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
-
+        
+        // KORRIGIERT: list-Regel hinzugefügt/angepasst
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        allow list: if isSignedIn() && isAdmin();
+        allow list: if isSignedIn() && (
+                      isAdmin() || 
+                      (request.query.keys().hasAny(['where']) && 
+                       request.query.where[0].field == 'teams' && 
+                       request.query.where[0].op == 'array-contains' && 
+                       getUserTeams().hasAny([request.query.where[0].value]))
+                    );
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
     }
