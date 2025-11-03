@@ -141,7 +141,8 @@ service cloud.firestore {
         // --- Ende Hilfsfunktionen ---
 
         allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
-        allow list: if isSignedIn() && isAdmin(); // KORREKTE LIST-REGEL
+        // KORREKTUR: Erlaube LIST nur, wenn nach einer originalAppointmentId gefiltert wird
+        allow list: if isSignedIn() && (isAdmin() || (request.query.keys().hasAny(['where']) && request.query.where[0].field == 'originalAppointmentId'));
         allow create: if isSignedIn() && isAdmin() && exists(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
         allow update, delete: if isSignedIn() && isAdmin();
     }

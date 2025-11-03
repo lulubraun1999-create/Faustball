@@ -57,10 +57,20 @@ export default function DashboardPage() {
     }, [publicAppointments, teamAppointments]);
     const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
 
+    // KORREKTUR: ID-Liste der sichtbaren Termine für die Ausnahmen-Query erstellen
+    const visibleAppointmentIds = useMemo(() => {
+        if (!appointments || appointments.length === 0) return [];
+        return appointments.map(app => app.id);
+    }, [appointments]);
 
-    // 2. Alle Ausnahmen (für Entfaltung)
-    const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+    // 2. Ausnahmen NUR für sichtbare Termine laden
+    const exceptionsRef = useMemoFirebase(() => {
+        if (!firestore || visibleAppointmentIds.length === 0) return null;
+        // Lade nur Ausnahmen, deren originalAppointmentId in der Liste unserer sichtbaren Termine ist.
+        return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', visibleAppointmentIds));
+    }, [firestore, visibleAppointmentIds]);
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
+
 
     // 3. Neueste Nachrichten (öffentlich)
     const latestNewsQuery = useMemoFirebase(
