@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -55,14 +54,23 @@ export default function VerwaltungMannschaftskassePage() {
   const { user, isUserLoading } = useUser();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
+  const allGroupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
+
+  const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
+
+  const penaltiesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'penalties') : null), [firestore]);
+  const { data: allPenalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
+
+  const transactionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'treasury') : null), [firestore]);
+  const { data: allTransactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
+
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
   const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-
-  const allGroupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
-  const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
 
   const userTeams = useMemo(() => {
     if (!memberProfile || !allGroups) return [];
@@ -71,41 +79,12 @@ export default function VerwaltungMannschaftskassePage() {
                       .sort((a, b) => a.name.localeCompare(b.name));
   }, [memberProfile, allGroups]);
 
-   const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
-   const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
    const membersMap = useMemo(() => {
        if (!allMembers) return new Map<string, MemberProfile>();
        return new Map(allMembers.map(m => [m.userId, m]));
    }, [allMembers]);
 
-
-  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
-  const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
-
-  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
-  const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
-
-
-  const totalBalance = useMemo(() => {
-    return transactions?.reduce((acc, tx) => {
-      if (tx.type === 'income') {
-        return acc + tx.amount;
-      } else if (tx.type === 'expense') {
-        return acc + tx.amount;
-      } else if (tx.type === 'penalty' && tx.status === 'paid') {
-        return acc + Math.abs(tx.amount);
-      }
-      return acc;
-    }, 0) || 0;
-  }, [transactions]);
-
-   useEffect(() => {
-       if (!selectedTeamId && userTeams.length > 0) {
-           setSelectedTeamId(userTeams[0].id);
-       }
-   }, [userTeams, selectedTeamId]);
-
-   useEffect(() => {
+  useEffect(() => {
        if (!selectedTeamId && userTeams.length > 0) {
            setSelectedTeamId(userTeams[0].id);
        }
@@ -115,10 +94,21 @@ export default function VerwaltungMannschaftskassePage() {
            setSelectedTeamId(null);
        }
    }, [userTeams, selectedTeamId]);
+   
+  const { penalties, transactions, totalBalance } = useMemo(() => {
+    if (!selectedTeamId) return { penalties: [], transactions: [], totalBalance: 0 };
+    const teamPenalties = allPenalties?.filter(p => p.teamId === selectedTeamId) || [];
+    const teamTransactions = allTransactions?.filter(t => t.teamId === selectedTeamId) || [];
+    const balance = teamTransactions.reduce((acc, tx) => {
+      if (tx.type === 'income') return acc + tx.amount;
+      if (tx.type === 'expense') return acc + tx.amount; 
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + Math.abs(tx.amount);
+      return acc;
+    }, 0);
+    return { penalties: teamPenalties, transactions: teamTransactions, totalBalance: balance };
+  }, [selectedTeamId, allPenalties, allTransactions]);
 
-
-  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || isLoadingAllMembers;
-  const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
+  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || isLoadingAllMembers || isLoadingPenalties || isLoadingTransactions;
 
     if (isLoadingInitial) {
         return (
@@ -174,10 +164,6 @@ export default function VerwaltungMannschaftskassePage() {
             <h2 className="mt-4 text-xl font-semibold">Keine Mannschaft ausgewählt</h2>
             <p className="mt-2 text-muted-foreground">Bitte wähle eine deiner Mannschaften aus.</p>
         </Card>
-      ) : isLoadingTeamData ? (
-         <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-3 xl:col-span-2">
@@ -269,5 +255,3 @@ export default function VerwaltungMannschaftskassePage() {
     </div>
   );
 }
-
-    

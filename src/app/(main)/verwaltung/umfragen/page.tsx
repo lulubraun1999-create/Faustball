@@ -27,44 +27,8 @@ export default function UmfragenPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
 
-  const memberRef = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: member, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-  const userTeamIds = useMemo(() => member?.teams || [], [member]);
-  
-  // Sicherere Abfragen
-  const nowTimestamp = useMemo(() => Timestamp.now(), []);
-
-  // 1. Öffentliche Umfragen
-  const pollsPublicQuery = useMemoFirebase(
-    () => (firestore ? query(
-        collection(firestore, 'polls'), 
-        where('visibility.type', '==', 'all')
-    ) : null),
-    [firestore]
-  );
-  const { data: publicPolls, isLoading: isLoadingPublicPolls } = useCollection<Poll>(pollsPublicQuery);
-
-  // 2. Team-spezifische Umfragen
-  const pollsTeamsQuery = useMemoFirebase(
-    () => (firestore && userTeamIds.length > 0 ? query(
-        collection(firestore, 'polls'), 
-        where('visibility.teamIds', 'array-contains-any', userTeamIds)
-    ) : null),
-    [firestore, userTeamIds]
-  );
-  const { data: teamPolls, isLoading: isLoadingTeamPolls } = useCollection<Poll>(pollsTeamsQuery);
-  
-  // 3. Client-seitiges Zusammenführen
-  const visiblePolls = useMemo(() => {
-    if (!publicPolls && !teamPolls) return [];
-    const all = [...(publicPolls || []), ...(teamPolls || [])];
-    // Eindeutige Umfragen sicherstellen, falls eine Umfrage sowohl öffentlich als auch für ein Team ist
-    return Array.from(new Map(all.map(poll => [poll.id, poll])).values());
-  }, [publicPolls, teamPolls]);
-
+  const pollsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'polls') : null), [firestore]);
+  const { data: visiblePolls, isLoading: isLoadingPolls } = useCollection<Poll>(pollsRef);
 
   const [votingStates, setVotingStates] = useState<Record<string, boolean>>({});
 
@@ -81,14 +45,12 @@ export default function UmfragenPage() {
     
     try {
         const batch = [];
-        // First, remove the existing vote if there is one
         if (existingVote) {
              batch.push(updateDoc(pollDocRef, { votes: arrayRemove(existingVote) }));
         }
         
         await Promise.all(batch);
 
-        // Then, add the new vote
         const newVote = { userId: user.uid, optionId: optionId };
         await updateDoc(pollDocRef, { votes: arrayUnion(newVote) });
         
@@ -139,7 +101,7 @@ export default function UmfragenPage() {
     const active: Poll[] = [];
     const expired: Poll[] = [];
     
-    visiblePolls.forEach(poll => {
+    (visiblePolls || []).forEach(poll => {
         if (isPast(poll.endDate.toDate())) {
             expired.push(poll);
         } else {
@@ -153,7 +115,7 @@ export default function UmfragenPage() {
     return { activePolls: active, expiredPolls: expired };
   }, [visiblePolls]);
 
-  const isLoading = isLoadingPublicPolls || isLoadingTeamPolls || isUserLoading || isLoadingMember;
+  const isLoading = isLoadingPolls || isUserLoading;
 
   if (isLoading) {
     return (

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo } from 'react';
@@ -13,131 +12,73 @@ import Link from 'next/link';
 import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-// *** NEU: Typ für entfaltete Termine ***
 type UnrolledAppointment = Appointment & {
-  virtualId: string; // Eindeutige ID für React Key (originalId + ISO-Datum)
-  originalId: string; // Die ID der ursprünglichen Terminserie
-  originalDateISO?: string; // Das Datum dieser Instanz als ISO String
-  isException?: boolean; // Ist dieser angezeigte Termin eine Ausnahme?
-  isCancelled?: boolean; // Ist dieser Termin abgesagt?
+  virtualId: string;
+  originalId: string;
+  originalDateISO?: string;
+  isException?: boolean;
+  isCancelled?: boolean;
 };
 
 export default function DashboardPage() {
     const { user, isUserLoading, isAdmin } = useUser();
     const firestore = useFirestore();
 
-    // Lade das Profil des aktuellen Benutzers, um seine Teams zu bekommen
     const memberRef = useMemoFirebase(
         () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
         [firestore, user]
     );
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-    const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
 
-    // --- Angepasste Datenabfragen ---
+    // --- Vereinfachte Datenabfragen ---
+    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+    const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
-    // 1. Termine (aufgeteilt in öffentliche und Team-Termine zur Einhaltung der Sicherheitsregeln)
-    const publicAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all'));
-    }, [firestore]);
-
-    const teamAppointmentsQuery = useMemoFirebase(() => {
-        if (!firestore || userTeamIds.length === 0) return null;
-        return query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds));
-    }, [firestore, userTeamIds]);
-    
-    const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
-    const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
-    
-    // Kombinieren der beiden Terminlisten
-    const appointments = useMemo(() => {
-        const all = [...(publicAppointments || []), ...(teamAppointments || [])];
-        return Array.from(new Map(all.map(app => [app.id, app])).values());
-    }, [publicAppointments, teamAppointments]);
-    const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
-
-    // KORREKTUR: ID-Liste der sichtbaren Termine für die Ausnahmen-Query erstellen
-    const visibleAppointmentIds = useMemo(() => {
-        if (!appointments || appointments.length === 0) return [];
-        return appointments.map(app => app.id);
-    }, [appointments]);
-
-    // 2. Ausnahmen NUR für sichtbare Termine laden (NUR FÜR ADMINS)
-    const exceptionsRef = useMemoFirebase(() => {
-        if (!firestore || !isAdmin || visibleAppointmentIds.length === 0) return null;
-        return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', visibleAppointmentIds));
-    }, [firestore, visibleAppointmentIds, isAdmin]);
+    const exceptionsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointmentExceptions') : null, [firestore]);
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-
-    // 3. Neueste Nachrichten (öffentlich)
     const latestNewsQuery = useMemoFirebase(
-        () => (firestore && user ? query(
-            collection(firestore, 'news'),
-            orderBy('createdAt', 'desc'),
-            limit(3)
-        ) : null),
-        [firestore, user]
+        () => firestore ? query(collection(firestore, 'news'), orderBy('createdAt', 'desc'), limit(3)) : null,
+        [firestore]
     );
     const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
 
-    // 4. Aktuelle Umfragen - Alle Umfragen laden und client-seitig filtern
-    const allPollsRef = useMemoFirebase(
-        () => (firestore ? collection(firestore, 'polls') : null),
-        [firestore]
-    );
+    const allPollsRef = useMemoFirebase(() => firestore ? collection(firestore, 'polls') : null, [firestore]);
     const { data: allPolls, isLoading: isLoadingPolls } = useCollection<Poll>(allPollsRef);
 
-
-    // 5. Eigene Teams (basierend auf dem Member-Profil)
-    const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
-    const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+    const allGroupsRef = useMemoFirebase(() => firestore ? collection(firestore, 'groups') : null, [firestore]);
+    const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
     
-    // 6. AppointmentTypes laden, um 'Spieltag' zu identifizieren (NEU)
-    const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
+    const appointmentTypesRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointmentTypes') : null, [firestore]);
     const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
     
     // --- Datenverarbeitung ---
     
-    // Kombiniere und sortiere Umfragen - client-seitiges Filtern
     const currentPolls = useMemo(() => {
         if (!allPolls) return [];
         const now = new Date();
-        const visiblePolls = allPolls.filter(poll => {
-            const isPublic = poll.visibility.type === 'all';
-            const isTeamMember = poll.visibility.teamIds?.some(teamId => userTeamIds.includes(teamId));
-            return isPublic || isTeamMember;
-        });
-
-        const activePolls = visiblePolls.filter(poll => poll.endDate.toDate() >= now);
-        
+        const activePolls = allPolls.filter(poll => poll.endDate.toDate() >= now);
         return activePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
-    }, [allPolls, userTeamIds]);
+    }, [allPolls]);
 
-
-    // Finde die Namen der eigenen Teams
     const myTeams = useMemo(() => {
         if (!allGroups || !memberProfile?.teams) return [];
         const userTeamIdsSet = new Set(memberProfile.teams);
         return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
     }, [allGroups, memberProfile]);
 
-    // Logik zum Entfalten der Termine (NEU: Aufgeteilt in Spieltage und andere Termine)
     const { nextMatchDay, nextAppointments } = useMemo(() => {
-        if (!appointments || !appointmentTypes || isLoadingExceptions) return { nextMatchDay: null, nextAppointments: [] };
+        if (!appointments || !appointmentTypes) return { nextMatchDay: null, nextAppointments: [] };
         
         const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
         
         const exceptionsMap = new Map<string, AppointmentException>();
-        if (isAdmin && exceptions) {
-            exceptions.forEach(ex => {
-                if (ex.originalDate) {
-                    const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
-                    exceptionsMap.set(key, ex);
-                }
-            });
-        }
+        exceptions?.forEach(ex => {
+            if (ex.originalDate) {
+                const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+                exceptionsMap.set(key, ex);
+            }
+        });
 
         const allEvents: UnrolledAppointment[] = [];
         const now = startOfDay(new Date());
@@ -145,15 +86,12 @@ export default function DashboardPage() {
         appointments.forEach(app => {
             if (!app.startDate) return;
 
-            const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIds.includes(teamId)));
-            if (!isVisible && !isAdmin) return;
-
             if (app.recurrence === 'none') {
                 const originalDateStartOfDay = startOfDay(app.startDate.toDate());
                 if (originalDateStartOfDay < now) return;
 
                 const key = `${app.id}-${originalDateStartOfDay.toISOString()}`;
-                const exception = isAdmin ? exceptionsMap.get(key) : undefined;
+                const exception = exceptionsMap.get(key);
                 if (exception?.status === 'cancelled') return;
 
                 const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
@@ -169,7 +107,7 @@ export default function DashboardPage() {
                     const currentDateStartOfDay = startOfDay(currentDate);
                     if (currentDateStartOfDay >= now) {
                         const instanceKey = `${app.id}-${currentDateStartOfDay.toISOString()}`;
-                        const instanceException = isAdmin ? exceptionsMap.get(instanceKey) : undefined;
+                        const instanceException = exceptionsMap.get(instanceKey);
 
                         if (instanceException?.status !== 'cancelled') {
                             const newStartDate = Timestamp.fromDate(currentDate);
@@ -215,8 +153,7 @@ export default function DashboardPage() {
             nextAppointments: otherAppointments.slice(0, 3),
         };
         
-    }, [appointments, exceptions, isLoadingExceptions, userTeamIds, appointmentTypes, isAdmin]);
-
+    }, [appointments, exceptions, appointmentTypes]);
 
     const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups || isLoadingTypes;
 
@@ -230,8 +167,6 @@ export default function DashboardPage() {
 
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:p-8">
-
-            {/* Nächster Spieltag */}
             <Card className="col-span-1 border-primary/50 shadow-lg">
                 <CardHeader>
                     <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -261,7 +196,6 @@ export default function DashboardPage() {
             </Card>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Nächste Termine */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -301,7 +235,6 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Neueste Nachrichten */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -331,7 +264,6 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Aktuelle Umfragen */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">
@@ -346,7 +278,7 @@ export default function DashboardPage() {
                              <ul className="space-y-3">
                                 {currentPolls.map((poll) => (
                                     <li key={poll.id} className="text-sm font-medium hover:underline">
-                                        <Link href={`/verwaltung/umfragen`}> {/* Link zur Übersichtsseite */}
+                                        <Link href={`/verwaltung/umfragen`}>
                                             {poll.title}
                                         </Link>
                                          <p className="text-xs text-muted-foreground">
@@ -361,7 +293,6 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Meine Teams */}
                 <Card>
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-lg font-medium flex items-center gap-2">

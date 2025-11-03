@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -82,7 +81,7 @@ export default function KalenderPage() {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const { user, isUserLoading, isAdmin } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
   const memberProfileRef = useMemoFirebase(
@@ -100,65 +99,20 @@ export default function KalenderPage() {
     }
   }, [userTeamIds, selectedTeams.length]);
 
-  // Sichere Abfragen für Termine
-  const publicAppointmentsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all'));
-  }, [firestore]);
+  const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+  const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
-  const teamAppointmentsQuery = useMemoFirebase(() => {
-      if (!firestore || userTeamIds.length === 0) return null;
-      return query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds));
-  }, [firestore, userTeamIds]);
-  
-  const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
-  const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
-  
-  const appointments = useMemo(() => {
-      const all = [...(publicAppointments || []), ...(teamAppointments || [])];
-      return Array.from(new Map(all.map(app => [app.id, app])).values());
-  }, [publicAppointments, teamAppointments]);
-  const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
+  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
+  const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
+  const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
 
-  const appointmentIds = useMemo(
-    () => appointments?.map((app) => app.id) || [],
-    [appointments]
-  );
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const exceptionsRef = useMemoFirebase(
-    () =>
-      firestore && isAdmin && appointmentIds.length > 0
-        ? query(
-            collection(firestore, 'appointmentExceptions'),
-            where('originalAppointmentId', 'in', appointmentIds)
-          )
-        : null,
-    [firestore, appointmentIds, isAdmin]
-  );
-  const { data: exceptions, isLoading: isLoadingExceptions } =
-    useCollection<AppointmentException>(exceptionsRef);
-
-  const appointmentTypesRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'appointmentTypes') : null),
-    [firestore]
-  );
-  const { data: appointmentTypes, isLoading: isLoadingTypes } =
-    useCollection<AppointmentType>(appointmentTypesRef);
-
-  const groupsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'groups') : null),
-    [firestore]
-  );
-  const { data: allGroups, isLoading: isLoadingGroups } =
-    useCollection<Group>(groupsRef);
-
-  const locationsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'locations') : null),
-    [firestore]
-  );
-  const { data: locations, isLoading: isLoadingLocations } =
-    useCollection<Location>(locationsRef);
+  const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
+  const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
 
   const isLoading =
     isUserLoading ||
@@ -170,41 +124,29 @@ export default function KalenderPage() {
     isLoadingLocations;
 
   const { userTeams, typesMap, locationsMap } = useMemo(() => {
-    const teams =
-      allGroups?.filter(
-        (g) => g.type === 'team' && userTeamIds.includes(g.id)
-      ) || [];
+    const teams = allGroups?.filter((g) => g.type === 'team') || [];
     const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
     return { userTeams: teams, typesMap, locationsMap: locs };
-  }, [allGroups, userTeamIds, appointmentTypes, locations]);
+  }, [allGroups, appointmentTypes, locations]);
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments) return [];
     const events: UnrolledAppointment[] = [];
     const exceptionsMap = new Map<string, AppointmentException>();
     
-    if (isAdmin && exceptions) {
-        exceptions.forEach((ex) => {
-            const key = `${ex.originalAppointmentId}-${format(
-                ex.originalDate.toDate(),
-                'yyyy-MM-dd'
-            )}`;
-            exceptionsMap.set(key, ex);
-        });
-    }
+    exceptions?.forEach((ex) => {
+        const key = `${ex.originalAppointmentId}-${format(ex.originalDate.toDate(), 'yyyy-MM-dd')}`;
+        exceptionsMap.set(key, ex);
+    });
 
     appointments.forEach((app) => {
-      const isVisible =
-        app.visibility.type === 'all' ||
-        app.visibility.teamIds.some((teamId) => userTeamIds.includes(teamId));
-
-      if (!isVisible || !app.startDate) return;
+      if (!app.startDate) return;
 
       if (!app.recurrence || app.recurrence === 'none') {
         const instanceDate = app.startDate.toDate();
         const exceptionKey = `${app.id}-${format(instanceDate, 'yyyy-MM-dd')}`;
-        const exception = isAdmin ? exceptionsMap.get(exceptionKey) : undefined;
+        const exception = exceptionsMap.get(exceptionKey);
         
         let instance: UnrolledAppointment = {
           ...app,
@@ -226,15 +168,13 @@ export default function KalenderPage() {
         events.push(instance);
       } else {
         let current = startOfDay(app.startDate.toDate());
-        const end = app.recurrenceEndDate
-          ? app.recurrenceEndDate.toDate()
-          : addMonths(new Date(), 12);
+        const end = app.recurrenceEndDate ? app.recurrenceEndDate.toDate() : addMonths(new Date(), 12);
         
         const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
         
         while (current <= end) {
             const exceptionKey = `${app.id}-${format(current, 'yyyy-MM-dd')}`;
-            const exception = isAdmin ? exceptionsMap.get(exceptionKey) : undefined;
+            const exception = exceptionsMap.get(exceptionKey);
 
             if (exception?.status !== 'cancelled') {
                 const instanceStartDate = new Date(current);
@@ -272,7 +212,7 @@ export default function KalenderPage() {
       }
     });
     return events;
-  }, [appointments, exceptions, userTeamIds, isAdmin]);
+  }, [appointments, exceptions]);
   
   const filteredAppointments = useMemo(() => {
       return unrolledAppointments.filter(app => {
@@ -387,7 +327,6 @@ export default function KalenderPage() {
   return (
     <div className="container mx-auto p-2 sm:p-4 lg:p-8">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Filter Sheet for mobile */}
         <div className="md:hidden flex justify-between items-center col-span-1">
             <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                 <SheetTrigger asChild>
@@ -409,7 +348,6 @@ export default function KalenderPage() {
             </Button>
         </div>
         
-        {/* Filter Sidebar for desktop */}
         <aside className="hidden md:block md:col-span-1">
           <Card>
             <CardHeader>

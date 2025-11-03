@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -102,60 +101,26 @@ export default function VerwaltungTerminePage() {
       [firestore, auth.user]
   );
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
-  const userTeamIds = useMemo(() => profile?.teams || [], [profile]);
 
-  const publicAppointmentsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all')) : null),
-    [firestore]
-  );
-  const teamAppointmentsQuery = useMemoFirebase(
-    () => (firestore && userTeamIds.length > 0 ? query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds)) : null),
-    [firestore, userTeamIds]
-  );
-
-  const { data: publicAppointments, isLoading: publicAppointmentsLoading } = useCollection<Appointment>(publicAppointmentsQuery);
-  const { data: teamAppointments, isLoading: teamAppointmentsLoading } = useCollection<Appointment>(teamAppointmentsQuery);
-
-  const appointments = useMemo(() => {
-    const all = [...(publicAppointments || []), ...(teamAppointments || [])];
-    return Array.from(new Map(all.map(app => [app.id, app])).values());
-  }, [publicAppointments, teamAppointments]);
+  const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+  const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
-  const appointmentIds = useMemo(() => appointments?.map(app => app.id) || [], [appointments]);
-  const exceptionsRef = useMemoFirebase(() => {
-    if (!firestore || !appointmentIds || appointmentIds.length === 0) return null;
-    return query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', 'in', appointmentIds));
-  }, [firestore, appointmentIds]);
+  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  const allMembersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
-  );
+  const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
-  const allResponsesRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'appointmentResponses') : null),
-      [firestore]
-  );
+  const allResponsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
 
-  const appointmentTypesRef = useMemoFirebase(
-      () => collection(firestore, 'appointmentTypes'),
-      [firestore]
-  );
+  const appointmentTypesRef = useMemoFirebase(() => collection(firestore, 'appointmentTypes'), [firestore]);
   const { data: appointmentTypes, isLoading: typesLoading } = useCollection<AppointmentType>(appointmentTypesRef);
 
-  const groupsRef = useMemoFirebase(
-      () => collection(firestore, 'groups'),
-      [firestore]
-  );
+  const groupsRef = useMemoFirebase(() => collection(firestore, 'groups'), [firestore]);
   const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsRef);
   
-  const locationsRef = useMemoFirebase(
-      () => collection(firestore, 'locations'),
-      [firestore]
-  );
+  const locationsRef = useMemoFirebase(() => collection(firestore, 'locations'), [firestore]);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsRef);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -163,8 +128,7 @@ export default function VerwaltungTerminePage() {
   const isLoading =
     auth.isUserLoading ||
     profileLoading ||
-    publicAppointmentsLoading ||
-    teamAppointmentsLoading ||
+    appointmentsLoading ||
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
@@ -302,9 +266,9 @@ export default function VerwaltungTerminePage() {
             setTimeout(() => {
                 rowRefs.current[hash]?.classList.remove('bg-accent/50');
             }, 3000)
-          }, 500); // Small delay to ensure everything is rendered
+          }, 500);
       }
-  }, [filteredAppointments]); // Re-run when appointments are loaded/filtered
+  }, [filteredAppointments]);
 
   const groupedAppointments = useMemo(() => {
     const groups: Record<string, UnrolledAppointment[]> = {};
@@ -379,7 +343,6 @@ export default function VerwaltungTerminePage() {
       }
   };
 
-
   const handleSimpleResponse = async (
     appointment: UnrolledAppointment,
     newStatus: "zugesagt" | "unsicher",
@@ -421,7 +384,7 @@ export default function VerwaltungTerminePage() {
   const getTypeName = (typeId: string) =>
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
-    const formatDateTime = (app: UnrolledAppointment) => {
+  const formatDateTime = (app: UnrolledAppointment) => {
     if (!app.startDate) return "Kein Datum";
     const start = app.instanceDate;
     const originalStart = app.startDate.toDate();
@@ -435,7 +398,6 @@ export default function VerwaltungTerminePage() {
         const duration = end.getTime() - originalStart.getTime();
         end.setTime(start.getTime() + duration);
     }
-
 
     const dateFormat = "dd.MM.yyyy";
     const timeFormat = "HH:mm";
@@ -458,7 +420,7 @@ export default function VerwaltungTerminePage() {
     }
     
     return `${datePart} ${timePart} Uhr`;
-};
+  };
 
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
 
@@ -810,5 +772,3 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
-
-    
