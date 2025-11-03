@@ -278,7 +278,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
-      // Ensure originalStartDate is a valid Date object
       const originalStartDate = originalAppointmentData.startDate?.toDate();
       if (!originalStartDate) {
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
@@ -297,10 +296,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newStartDate = new Date(pendingUpdateData.startDate!);
       const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
       
-      // Get the type name from the database
-      let typeName = 'Termin'; // Fallback
+      let typeName = 'Termin'; 
       let isSonstiges = false;
-      if (originalAppointmentData.appointmentTypeId) { // Check if type ID exists
+      if (originalAppointmentData.appointmentTypeId) { 
           const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
           if (typeDoc.exists) {
               const typeData = typeDoc.data() as AppointmentType;
@@ -309,7 +307,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           }
       }
 
-      // Robust title check
       const originalTitle = originalAppointmentData.title || '';
       const titleIsDefault = !isSonstiges && originalTitle === typeName;
       const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
@@ -324,7 +321,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentData: Omit<Appointment, 'id'> = {
         ...originalAppointmentData, 
         
-        title: finalTitle || 'Termin', // Ensure title is never undefined
+        title: finalTitle || 'Termin',
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
@@ -358,3 +355,5 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
+
+    
