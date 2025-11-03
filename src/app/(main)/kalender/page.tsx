@@ -97,12 +97,26 @@ export default function KalenderPage() {
     }
   }, [userTeamIds, selectedTeams.length]);
 
-  const appointmentsRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'appointments') : null),
-    [firestore]
-  );
-  const { data: appointments, isLoading: isLoadingAppointments } =
-    useCollection<Appointment>(appointmentsRef);
+  // Sichere Abfragen für Termine
+  const publicAppointmentsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appointments'), where('visibility.type', '==', 'all'));
+  }, [firestore]);
+
+  const teamAppointmentsQuery = useMemoFirebase(() => {
+      if (!firestore || userTeamIds.length === 0) return null;
+      return query(collection(firestore, 'appointments'), where('visibility.teamIds', 'array-contains-any', userTeamIds));
+  }, [firestore, userTeamIds]);
+  
+  const { data: publicAppointments, isLoading: isLoadingPublicAppointments } = useCollection<Appointment>(publicAppointmentsQuery);
+  const { data: teamAppointments, isLoading: isLoadingTeamAppointments } = useCollection<Appointment>(teamAppointmentsQuery);
+  
+  const appointments = useMemo(() => {
+      const all = [...(publicAppointments || []), ...(teamAppointments || [])];
+      return Array.from(new Map(all.map(app => [app.id, app])).values());
+  }, [publicAppointments, teamAppointments]);
+  const isLoadingAppointments = isLoadingPublicAppointments || isLoadingTeamAppointments;
+
 
   const appointmentIds = useMemo(
     () => appointments?.map((app) => app.id) || [],
@@ -442,3 +456,4 @@ export default function KalenderPage() {
     </div>
   );
 }
+
