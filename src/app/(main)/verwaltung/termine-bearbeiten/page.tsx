@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -845,8 +846,9 @@ export default function AdminTerminePage() {
         (app) => app.id === appointment.originalId
       );
       if (!originalAppointment) return;
-      setSelectedAppointment(originalAppointment);
-
+      
+      setSelectedInstanceToEdit(appointment);
+      
       const formatTimestampForInput = (
         ts: Timestamp | undefined,
         type: 'datetime' | 'date' = 'datetime'
@@ -860,44 +862,35 @@ export default function AdminTerminePage() {
           return '';
         }
       };
+      
+      const isAllDay = appointment.isAllDay ?? false;
       const startDateString = formatTimestampForInput(
-        originalAppointment.startDate,
-        originalAppointment.isAllDay ? 'date' : 'datetime'
+        appointment.startDate,
+        isAllDay ? 'date' : 'datetime'
       );
       const endDateString = formatTimestampForInput(
-        originalAppointment.endDate,
-        originalAppointment.isAllDay ? 'date' : 'datetime'
+        appointment.endDate,
+        isAllDay ? 'date' : 'datetime'
       );
-      const rsvpDeadlineString = formatTimestampForInput(
-        originalAppointment.rsvpDeadline,
-        originalAppointment.isAllDay ? 'date' : 'datetime'
-      );
-      const recurrenceEndDateString = formatTimestampForInput(
-        originalAppointment.recurrenceEndDate,
-        'date'
-      );
-      const typeName = typesMap.get(originalAppointment.appointmentTypeId);
+      
+      const typeName = typesMap.get(appointment.appointmentTypeId);
       const isSonstiges = typeName === 'Sonstiges';
       const titleIsDefault =
-        !isSonstiges && originalAppointment.title === typeName;
+        !isSonstiges && appointment.title === typeName;
 
-      appointmentForm.reset({
-        title: titleIsDefault ? '' : originalAppointment.title,
-        appointmentTypeId: originalAppointment.appointmentTypeId,
+      instanceForm.reset({
+        originalDateISO: appointment.originalDateISO,
+        title: titleIsDefault ? '' : appointment.title,
         startDate: startDateString,
         endDate: endDateString,
-        isAllDay: originalAppointment.isAllDay ?? false,
-        recurrence: originalAppointment.recurrence ?? 'none',
-        recurrenceEndDate: recurrenceEndDateString,
-        visibilityType: originalAppointment.visibility.type,
-        visibleTeamIds: originalAppointment.visibility.teamIds,
-        rsvpDeadline: rsvpDeadlineString,
-        locationId: originalAppointment.locationId ?? '',
-        meetingPoint: originalAppointment.meetingPoint ?? '',
-        meetingTime: originalAppointment.meetingTime ?? '',
-        description: originalAppointment.description ?? '',
+        isAllDay: isAllDay,
+        locationId: appointment.locationId ?? '',
+        meetingPoint: appointment.meetingPoint ?? '',
+        meetingTime: appointment.meetingTime ?? '',
+        description: appointment.description ?? '',
       });
-      setIsAppointmentDialogOpen(true);
+      
+      setIsInstanceDialogOpen(true);
   };
 
   const resetAppointmentForm = () => {
@@ -2128,6 +2121,19 @@ export default function AdminTerminePage() {
                         : typeName;
                       const isCancelled = app.isCancelled;
 
+                      const originalAppointment = appointments?.find(a => a.id === app.originalId);
+                      let rsvpDeadlineString = '-';
+                      if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                          const startMillis = originalAppointment.startDate.toMillis();
+                          const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                          const offset = startMillis - rsvpMillis;
+
+                          const instanceStartMillis = app.startDate.toMillis();
+                          const instanceRsvpMillis = instanceStartMillis - offset;
+                          rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                      }
+
+
                       return (
                         <TableRow
                           key={app.virtualId}
@@ -2193,25 +2199,8 @@ export default function AdminTerminePage() {
                                 }`
                               : '-'}
                           </TableCell>
-                          <TableCell>
-                            {app.rsvpDeadline
-                              ? format(
-                                  app.rsvpDeadline.toDate(),
-                                  'dd.MM.yy HH:mm',
-                                  { locale: de }
-                                )
-                              : '-'}
-                          </TableCell>
+                          <TableCell>{rsvpDeadlineString}</TableCell>
                           <TableCell className="text-right space-x-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditAppointment(app)}
-                              disabled={isSubmitting}
-                            >
-                              <Edit className="h-4 w-4" />
-                              <span className="sr-only">Termin bearbeiten</span>
-                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
