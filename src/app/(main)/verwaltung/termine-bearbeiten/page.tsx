@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -723,6 +722,12 @@ export default function AdminTerminePage() {
   async function handleSaveForFuture() {
     if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
+
+    if (!isAdmin) {
+        toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
+        setIsSubmitting(false);
+        return;
+    }
 
     try {
       const { firebaseApp } = initializeFirebase();
@@ -1499,7 +1504,7 @@ export default function AdminTerminePage() {
                                       <React.Fragment key={group.id}>
                                         <h4 className="font-semibold text-sm my-2 px-4">{group.name}</h4>
                                         {group.teams.map((team) => (
-                                          <div key={team.id} className="flex items-center space-x-2 px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                                          <div key={team.id} className="flex items-center space-x-2 px-4 py-1.5" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                                             <Checkbox
                                               id={`team-check-${team.id}`}
                                               checked={field.value?.includes(team.id)}
