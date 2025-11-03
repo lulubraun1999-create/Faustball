@@ -181,14 +181,17 @@ interface PollCardProps {
     user: User | null;
     memberProfile: MemberProfile | null;
     onVote: (pollId: string, optionIds: string[]) => void;
-    onRetract: (pollId: string) => void;
+    onRetract: (pollId string) => void;
     votingStates: Record<string, boolean>;
 }
 
 function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }: PollCardProps) {
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
     const userVotes = poll.votes.filter(v => v.userId === user?.uid);
-    const userVotedOptionIds = new Set(userVotes.map(v => v.optionId));
+
+    const userVotedOptionIds = useMemo(() => {
+        return new Set(userVotes.map(v => v.optionId));
+    }, [userVotes]);
     
     const pollExpired = isPast(poll.endDate.toDate());
     const totalVotes = new Set(poll.votes.map(v => v.userId)).size;
