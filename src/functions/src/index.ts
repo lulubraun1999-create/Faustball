@@ -193,7 +193,7 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
 export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
-    if (!request.auth || !request.auth.token.admin) {
+    if (request.auth?.token.admin !== true) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
@@ -202,21 +202,18 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    // KORREKTUR: Prüfen, ob endDate ein gültiger, nicht-leerer String ist
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
         : null;
 
     const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
     
-    // KORREKTUR: Validierungslogik verbessert
     if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
     }
 
     const exceptionsColRef = db.collection('appointmentExceptions');
     
-    // Search for existing exception on the server
     const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
@@ -261,7 +258,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
  */
 export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest) => {
-    if (!request.auth || !request.auth.token.admin) {
+    if (request.auth?.token.admin !== true) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
