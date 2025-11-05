@@ -229,25 +229,6 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
           path: ['recurrenceEndDate'],
         }
       )
-      .refine(
-        (data) => {
-            if (!data.recurrenceEndDate || !data.startDate) {
-                return true; // Don't validate if one is missing, other rules handle that.
-            }
-            try {
-                // This is a simplified check. A more robust check would parse based on isAllDay.
-                const start = new Date(data.startDate);
-                const end = new Date(data.recurrenceEndDate);
-                return end >= start;
-            } catch {
-                return false;
-            }
-        },
-        {
-          message: 'Ende der Wiederholung muss nach dem Startdatum liegen.',
-          path: ['recurrenceEndDate'],
-        }
-      )
       .superRefine((data, ctx) => {
         if (
           data.appointmentTypeId === sonstigeTypeId &&
@@ -575,6 +556,24 @@ export default function AdminTerminePage() {
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
+
+    if (data.recurrence !== 'none' && data.recurrenceEndDate && data.startDate) {
+        try {
+            const start = new Date(data.startDate);
+            const end = new Date(data.recurrenceEndDate);
+            if (end < start) {
+                appointmentForm.setError('recurrenceEndDate', {
+                    message: 'Ende der Wiederholung muss nach dem Startdatum liegen.',
+                });
+                return;
+            }
+        } catch (e) {
+            appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Datumsformat.' });
+            return;
+        }
+    }
+
+
     setIsSubmitting(true);
 
     const selectedTypeName = typesMap.get(data.appointmentTypeId);
