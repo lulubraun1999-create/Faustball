@@ -214,13 +214,11 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         const newEndDateInput = pendingUpdateData.endDate;
 
         if (pendingUpdateData.isAllDay) {
-            // Für ganztägige Termine, parse nur das Datum
             newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
              if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
             }
         } else {
-            // Für Termine mit Zeit, parse Datum und Zeit
             newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
              if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
@@ -230,7 +228,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         if (!isDateValid(newStartDate) || (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '' && !isDateValid(newEndDate))) {
              throw new Error('Invalid date format in input');
         }
-    } catch (e) {
+    } catch (e: any) {
         throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.', e.message);
     }
     
@@ -304,7 +302,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
       const batch = db.batch();
 
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
+      const instanceDate = parseISO(selectedInstanceToEdit.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
       const originalStartDate = originalAppointmentData.startDate?.toDate();
@@ -322,12 +320,20 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      const newStartDate = new Date(pendingUpdateData.startDate!);
+      // *** START ROBUST DATE PARSING ***
+      const newStartDate = parseISO(pendingUpdateData.startDate);
+      if (!isDateValid(newStartDate)) {
+        throw new HttpsError('invalid-argument', `Ungültiges Startdatum-Format: ${pendingUpdateData.startDate}`);
+      }
       
-      // *** KORREKTUR: Sichere Verarbeitung von `endDate` ***
       const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-        ? new Date(pendingUpdateData.endDate) 
+        ? parseISO(pendingUpdateData.endDate) 
         : null;
+
+      if (newEndDate && !isDateValid(newEndDate)) {
+          throw new HttpsError('invalid-argument', `Ungültiges Enddatum-Format: ${pendingUpdateData.endDate}`);
+      }
+      // *** END ROBUST DATE PARSING ***
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
@@ -385,5 +391,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
+        throw new HttpsError('internal', 'Die Terminserie konnte nicht aktualisiert werden.', error.message);
     }
+});
