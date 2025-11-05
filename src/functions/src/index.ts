@@ -1,9 +1,10 @@
 
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types';
-import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
+import { addDays, isValid as isDateValid, startOfDay, parse, parseISO } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -199,48 +200,73 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
+    const originalId = selectedInstanceToEdit.originalId;
 
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-        ? new Date(pendingUpdateData.endDate) 
-        : null;
-    
-    if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-        throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
+    if (!pendingUpdateData || !selectedInstanceToEdit || !originalId) {
+         throw new HttpsError('invalid-argument', 'Fehlende Daten für die Ausnahme.');
     }
 
-    const originalDateStartOfDay = startOfDay(originalDate);
+    // Robustere Datumsumwandlung
+    const originalDate = parseISO(pendingUpdateData.originalDateISO);
+    const newStartDateInput = pendingUpdateData.startDate;
+    const newEndDateInput = pendingUpdateData.endDate;
 
-    const exceptionsColRef = db.collection('appointmentExceptions');
+    if (!isDateValid(originalDate)) {
+        throw new HttpsError('invalid-argument', 'Ungültiges Originaldatum.');
+    }
     
-    const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+    let newStartDate: Date;
+    let newEndDate: Date | null = null;
+    
+    try {
+        if (pendingUpdateData.isAllDay) {
+            newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
+            if (newEndDateInput) {
+               newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
+            }
+        } else {
+            newStartDate = parseISO(newStartDateInput);
+             if (newEndDateInput) {
+               newEndDate = parseISO(newEndDateInput);
+            }
+        }
+
+        if (!isDateValid(newStartDate) || (newEndDateInput && !isDateValid(newEndDate))) {
+             throw new Error('Invalid date format in input');
+        }
+    } catch (e) {
+        throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.');
+    }
+    
+    const originalDateStartOfDay = startOfDay(originalDate);
+    const exceptionsColRef = db.collection('appointmentExceptions');
+    const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
-    const querySnapshot = await q.get();
-    const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
-
-    const modifiedData: AppointmentException['modifiedData'] = {
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
-        title: pendingUpdateData.title,
-        locationId: pendingUpdateData.locationId,
-        description: pendingUpdateData.description,
-        meetingPoint: pendingUpdateData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay,
-    };
-
-    const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: FieldValue.serverTimestamp(),
-        userId: userId,
-    };
-
     try {
+        const querySnapshot = await q.get();
+        const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
+
+        const modifiedData: AppointmentException['modifiedData'] = {
+            startDate: Timestamp.fromDate(newStartDate),
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
+            title: pendingUpdateData.title,
+            locationId: pendingUpdateData.locationId,
+            description: pendingUpdateData.description,
+            meetingPoint: pendingUpdateData.meetingPoint,
+            meetingTime: pendingUpdateData.meetingTime,
+            isAllDay: pendingUpdateData.isAllDay,
+        };
+
+        const exceptionData: Omit<AppointmentException, 'id'> = {
+            originalAppointmentId: originalId,
+            originalDate: Timestamp.fromDate(originalDateStartOfDay),
+            status: 'modified',
+            modifiedData: modifiedData,
+            createdAt: FieldValue.serverTimestamp(),
+            userId: userId,
+        };
+
         if (existingExceptionDoc) {
             await existingExceptionDoc.ref.update({ modifiedData: modifiedData, status: 'modified', userId: userId });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
@@ -253,6 +279,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Änderung konnte nicht gespeichert werden.', error.message);
     }
 });
+
 
 /**
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.

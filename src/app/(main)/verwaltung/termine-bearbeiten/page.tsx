@@ -127,6 +127,7 @@ import {
   set,
   isEqual,
   startOfDay,
+  parseISO,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -860,56 +861,43 @@ export default function AdminTerminePage() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-      const originalAppointment = appointments?.find(
-        (app) => app.id === appointment.originalId
-      );
-      if (!originalAppointment) return;
-      
-      setSelectedInstanceToEdit(appointment);
-      
-      const formatTimestampForInput = (
-        ts: Timestamp | undefined,
-        type: 'datetime' | 'date' = 'datetime'
-      ) => {
-        if (!ts) return '';
-        try {
-          const date = ts.toDate();
-          if (type === 'date') return formatISO(date, { representation: 'date' });
-          return formatISO(date).slice(0, 16);
-        } catch (e) {
-          return '';
-        }
-      };
-      
-      const isAllDay = appointment.isAllDay ?? false;
-      const startDateString = formatTimestampForInput(
-        appointment.startDate,
-        isAllDay ? 'date' : 'datetime'
-      );
-      const endDateString = formatTimestampForInput(
-        appointment.endDate,
-        isAllDay ? 'date' : 'datetime'
-      );
-      
-      const typeName = typesMap.get(appointment.appointmentTypeId);
-      const isSonstiges = typeName === 'Sonstiges';
-      const titleIsDefault =
-        !isSonstiges && appointment.title === typeName;
+    const originalAppointment = appointments?.find(app => app.id === appointment.originalId);
+    if (!originalAppointment) return;
 
-      instanceForm.reset({
+    setSelectedInstanceToEdit(appointment);
+
+    const formatForInput = (date: Date, type: 'datetime' | 'date') => {
+        if (!isDateValid(date)) return '';
+        if (type === 'date') return format(date, 'yyyy-MM-dd');
+        return format(date, "yyyy-MM-dd'T'HH:mm");
+    };
+    
+    const isAllDay = appointment.isAllDay ?? false;
+    const startDate = appointment.startDate.toDate();
+    const endDate = appointment.endDate?.toDate();
+
+    const startDateString = formatForInput(startDate, isAllDay ? 'date' : 'datetime');
+    const endDateString = endDate ? formatForInput(endDate, isAllDay ? 'date' : 'datetime') : '';
+
+    const typeName = typesMap.get(appointment.appointmentTypeId);
+    const isSonstiges = typeName === 'Sonstiges';
+    const titleIsDefault = !isSonstiges && appointment.title === typeName;
+
+    instanceForm.reset({
         originalDateISO: appointment.originalDateISO,
-        title: titleIsDefault ? '' : appointment.title,
         startDate: startDateString,
         endDate: endDateString,
-        isAllDay: isAllDay,
+        isAllDay,
+        title: titleIsDefault ? '' : appointment.title,
         locationId: appointment.locationId ?? '',
         meetingPoint: appointment.meetingPoint ?? '',
         meetingTime: appointment.meetingTime ?? '',
         description: appointment.description ?? '',
-      });
-      
-      setIsInstanceDialogOpen(true);
+    });
+    
+    setIsInstanceDialogOpen(true);
   };
+
 
   const resetAppointmentForm = () => {
     appointmentForm.reset({
@@ -2111,7 +2099,7 @@ export default function AdminTerminePage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
+            <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {Object.keys(groupedAppointments).length > 0 ? (
                 Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
                     <AccordionItem value={monthYear} key={monthYear}>
