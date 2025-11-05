@@ -2119,7 +2119,7 @@ export default function AdminTerminePage() {
                             {monthYear} ({appointmentsInMonth.length})
                         </AccordionTrigger>
                         <AccordionContent>
-                            <div className="overflow-x-auto">
+                          <div className="overflow-x-auto">
                               <Table>
                                 <TableHeader>
                                   <TableRow>
@@ -2127,6 +2127,8 @@ export default function AdminTerminePage() {
                                     <TableHead>Datum/Zeit</TableHead>
                                     <TableHead>Sichtbarkeit</TableHead>
                                     <TableHead>Ort</TableHead>
+                                    <TableHead>Treffpunkt</TableHead>
+                                    <TableHead>Treffzeit</TableHead>
                                     <TableHead>Wiederholung</TableHead>
                                     <TableHead>Rückmeldung bis</TableHead>
                                     <TableHead className="text-right">Aktionen</TableHead>
@@ -2197,6 +2199,8 @@ export default function AdminTerminePage() {
                                             ? locationsMap.get(app.locationId)?.name || '-'
                                             : '-'}
                                         </TableCell>
+                                        <TableCell>{app.meetingPoint || '-'}</TableCell>
+                                        <TableCell>{app.meetingTime || '-'}</TableCell>
                                         <TableCell>
                                           {app.recurrence && app.recurrence !== 'none'
                                             ? `bis ${app.recurrenceEndDate
