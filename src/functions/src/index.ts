@@ -288,6 +288,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const batch = db.batch();
       
       const instanceDateString = selectedInstanceToEdit.originalDateISO;
+      
+      // Robust date parsing for the instance date
       const instanceDate = instanceDateString.includes("T") 
           ? parseISO(instanceDateString) 
           : parse(instanceDateString, 'yyyy-MM-dd', new Date());
