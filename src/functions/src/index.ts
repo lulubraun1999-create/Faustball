@@ -207,25 +207,26 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     // Helper function to safely parse dates, distinguishing between date and datetime-local
-    const parseDate = (dateString: string): Date => {
+    const parseDate = (dateString: string): Date | null => {
+      if (!dateString || typeof dateString !== 'string') return null;
       const format = dateString.includes('T') ? "yyyy-MM-dd'T'HH:mm" : 'yyyy-MM-dd';
-      return parse(dateString, format, new Date());
+      const parsed = parse(dateString, format, new Date());
+      return isDateValid(parsed) ? parsed : null;
     };
 
     try {
         const newStartDate = parseDate(pendingUpdateData.startDate);
-        const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-            ? parseDate(pendingUpdateData.endDate) 
-            : null;
+        const newEndDate = parseDate(pendingUpdateData.endDate);
 
         const originalDateString = selectedInstanceToEdit.originalDateISO;
         if (!originalDateString || typeof originalDateString !== 'string') {
             throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Originaldatum (originalDateISO).');
         }
-
+        
+        // Use parseISO here as it is a full ISO string from the server
         const originalDate = parseISO(originalDateString);
 
-        if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate)) || !isDateValid(originalDate)) {
+        if (!newStartDate || !isDateValid(originalDate)) {
              throw new HttpsError('invalid-argument', `Ungültiges Datumsformat in der Eingabe.`);
         }
     
@@ -322,19 +323,18 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      const parseDate = (dateString: string): Date => {
+      const parseDate = (dateString: string): Date | null => {
+        if (!dateString || typeof dateString !== 'string') return null;
         const format = dateString.includes('T') ? "yyyy-MM-dd'T'HH:mm" : 'yyyy-MM-dd';
-        return parse(dateString, format, new Date());
+        const parsed = parse(dateString, format, new Date());
+        return isDateValid(parsed) ? parsed : null;
       };
       
       const newStartDate = parseDate(pendingUpdateData.startDate);
-      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-          ? parseDate(pendingUpdateData.endDate)
-          : null;
+      const newEndDate = parseDate(pendingUpdateData.endDate);
 
-
-      if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-          throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${pendingUpdateData.startDate}, Ende: ${pendingUpdateData.endDate}`);
+      if (!newStartDate) {
+          throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${pendingUpdateData.startDate}`);
       }
       
       let typeName = 'Termin'; 
@@ -403,3 +403,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     
 
 
+
+
+    
