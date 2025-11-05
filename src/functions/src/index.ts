@@ -217,10 +217,17 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             ? parseDate(pendingUpdateData.endDate, pendingUpdateData.isAllDay) 
             : null;
 
-        const originalDate = parseISO(pendingUpdateData.originalDateISO);
+        const originalDateString = selectedInstanceToEdit.originalDateISO;
+        if (!originalDateString || typeof originalDateString !== 'string') {
+            throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Originaldatum (originalDateISO).');
+        }
+
+        const originalDate = originalDateString.includes("T")
+            ? parseISO(originalDateString)
+            : parse(originalDateString, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
 
         if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate)) || !isDateValid(originalDate)) {
-             throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat in der Eingabe.');
+             throw new HttpsError('invalid-argument', `Ungültiges Datumsformat in der Eingabe. Original: ${originalDateString}`);
         }
     
         const originalDateStartOfDay = startOfDay(originalDate);
@@ -260,7 +267,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         }
     } catch (error: any) {
         console.error("Error saving single instance:", error);
-        throw new HttpsError('internal', 'Änderung konnte nicht gespeichert werden.', error.message);
+        throw new HttpsError('internal', `Änderung konnte nicht gespeichert werden: ${error.message}`);
     }
 });
 
@@ -293,10 +300,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Instanz-Datum (originalDateISO).');
       }
       
-      // Robust date parsing for the instance date
       const instanceDate = instanceDateString.includes("T") 
           ? parseISO(instanceDateString) 
-          : parse(instanceDateString, 'yyyy-MM-dd', new Date());
+          : parse(instanceDateString, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
 
       if (!isDateValid(instanceDate)) {
         throw new HttpsError('invalid-argument', `Ungültiges Instanz-Datum: ${selectedInstanceToEdit.originalDateISO}`);
