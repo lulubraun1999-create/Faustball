@@ -413,6 +413,8 @@ export default function KalenderPage() {
                               )}
                               <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
                               {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
+                              {app.meetingPoint && <p className="text-sm mt-1">Treffpunkt: {app.meetingPoint}</p>}
+                              {app.meetingTime && <p className="text-sm">Treffzeit: {app.meetingTime}</p>}
                               <Button asChild size="sm" className="mt-3 w-full">
                                 <Link href={`/verwaltung/termine#${app.virtualId}`}>
                                   Details & Rückmeldung
@@ -433,3 +435,4 @@ export default function KalenderPage() {
     </div>
   );
 }
+
