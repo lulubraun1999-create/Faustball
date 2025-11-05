@@ -557,7 +557,14 @@ export default function AdminTerminePage() {
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
 
-    if (data.recurrence !== 'none' && data.recurrenceEndDate && data.startDate) {
+    if (data.recurrence !== 'none') {
+        if (!data.recurrenceEndDate || !data.startDate) {
+            // This case should be caught by zod, but as a safeguard:
+             appointmentForm.setError('recurrenceEndDate', {
+                message: 'Start- und Enddatum der Wiederholung sind erforderlich.',
+            });
+            return;
+        }
         try {
             const start = new Date(data.startDate);
             const end = new Date(data.recurrenceEndDate);
@@ -2110,13 +2117,14 @@ export default function AdminTerminePage() {
                 </TableHeader>
                 <TableBody>
                   {Object.keys(groupedAppointments).length > 0 ? (
-                    Object.entries(groupedAppointments).flatMap(([monthYear, appointmentsInMonth]) => [
-                      <TableRow key={monthYear} className="bg-muted/50 hover:bg-muted/50">
+                    Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                      <React.Fragment key={monthYear}>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableCell colSpan={9} className="py-2 px-4 text-sm font-semibold">
                           {monthYear}
                         </TableCell>
-                      </TableRow>,
-                      ...appointmentsInMonth.map((app) => {
+                      </TableRow>
+                      {appointmentsInMonth.map((app) => {
                         const typeName =
                           typesMap.get(app.appointmentTypeId) ||
                           app.appointmentTypeId;
@@ -2308,8 +2316,9 @@ export default function AdminTerminePage() {
                             </TableCell>
                           </TableRow>
                         );
-                      })
-                    ])
+                      })}
+                      </React.Fragment>
+                    ))
                   ) : (
                     <TableRow>
                       <TableCell colSpan={9} className="h-24 text-center">
