@@ -127,6 +127,7 @@ import {
   set,
   isEqual,
   startOfDay,
+  parse,
   parseISO,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -2162,17 +2163,25 @@ export default function AdminTerminePage() {
                                           {displayTitle}
                                         </TableCell>
                                         <TableCell>
-                                          {app.startDate
-                                            ? format(
-                                              app.startDate.toDate(),
-                                              app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
-                                              { locale: de }
-                                            )
-                                            : 'N/A'}
-                                          {app.isException && !isCancelled && (
-                                            <span className="ml-1 text-xs text-blue-600">
-                                              (G)
+                                          {isCancelled ? (
+                                            <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
+                                              ABGESAGT
                                             </span>
+                                          ) : (
+                                            <>
+                                              {app.startDate
+                                                ? format(
+                                                    app.startDate.toDate(),
+                                                    app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                                    { locale: de }
+                                                  )
+                                                : 'N/A'}
+                                              {app.isException && !isCancelled && (
+                                                <span className="ml-1 text-xs text-blue-600">
+                                                  (G)
+                                                </span>
+                                              )}
+                                            </>
                                           )}
                                         </TableCell>
                                         <TableCell>
