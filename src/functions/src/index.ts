@@ -287,7 +287,11 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
       const batch = db.batch();
       
-      const instanceDate = parseISO(selectedInstanceToEdit.originalDateISO);
+      const instanceDateString = selectedInstanceToEdit.originalDateISO;
+      const instanceDate = instanceDateString.includes("T") 
+          ? parseISO(instanceDateString) 
+          : parse(instanceDateString, 'yyyy-MM-dd', new Date());
+
       if (!isDateValid(instanceDate)) {
         throw new HttpsError('invalid-argument', `Ungültiges Instanz-Datum: ${selectedInstanceToEdit.originalDateISO}`);
       }
@@ -384,5 +388,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     }
 });
 
+
+    
 
     
