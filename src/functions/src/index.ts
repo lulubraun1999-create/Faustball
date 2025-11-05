@@ -225,9 +225,9 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
                newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
             }
         } else {
-            newStartDate = parseISO(newStartDateInput);
+            newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
              if (newEndDateInput) {
-               newEndDate = parseISO(newEndDateInput);
+               newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
             }
         }
 
