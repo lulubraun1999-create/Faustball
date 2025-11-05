@@ -207,8 +207,9 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     const parseDate = (dateString: string, isAllDay: boolean): Date => {
-        const format = isAllDay ? 'yyyy-MM-dd' : "yyyy-MM-dd'T'HH:mm";
-        return parse(dateString, format, new Date());
+        // Updated logic to handle different date string formats
+        const formatString = dateString.includes('T') ? "yyyy-MM-dd'T'HH:mm" : 'yyyy-MM-dd';
+        return parse(dateString, formatString, new Date());
     };
 
     try {
@@ -222,9 +223,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Originaldatum (originalDateISO).');
         }
 
-        const originalDate = originalDateString.includes("T")
-            ? parseISO(originalDateString)
-            : parse(originalDateString, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
+        const originalDate = parseISO(originalDateString);
 
         if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate)) || !isDateValid(originalDate)) {
              throw new HttpsError('invalid-argument', `Ungültiges Datumsformat in der Eingabe. Original: ${originalDateString}`);
@@ -302,7 +301,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       
       const instanceDate = instanceDateString.includes("T") 
           ? parseISO(instanceDateString) 
-          : parse(instanceDateString, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
+          : parse(instanceDateString, "yyyy-MM-dd", new Date());
+
 
       if (!isDateValid(instanceDate)) {
         throw new HttpsError('invalid-argument', `Ungültiges Instanz-Datum: ${selectedInstanceToEdit.originalDateISO}`);
@@ -404,3 +404,4 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     
 
     
+
