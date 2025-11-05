@@ -1,5 +1,4 @@
 
-
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
@@ -203,9 +202,14 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
+    // KORREKTUR: Prüfen, ob endDate ein gültiger, nicht-leerer String ist
+    const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+        ? new Date(pendingUpdateData.endDate) 
+        : null;
 
+    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
+    
+    // KORREKTUR: Validierungslogik verbessert
     if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
     }
