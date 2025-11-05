@@ -301,8 +301,12 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
       const batch = db.batch();
-
+      
       const instanceDate = parseISO(selectedInstanceToEdit.originalDateISO);
+      if (!isDateValid(instanceDate)) {
+        throw new HttpsError('invalid-argument', `Ungültiges Instanz-Datum: ${selectedInstanceToEdit.originalDateISO}`);
+      }
+
       const dayBefore = addDays(instanceDate, -1);
       
       const originalStartDate = originalAppointmentData.startDate?.toDate();
@@ -320,7 +324,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      // *** START ROBUST DATE PARSING ***
       let newStartDate: Date;
       let newEndDate: Date | null = null;
       const newStartDateInput = pendingUpdateData.startDate;
@@ -341,7 +344,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
           throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${newStartDateInput}, Ende: ${newEndDateInput}`);
       }
-      // *** END ROBUST DATE PARSING ***
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
