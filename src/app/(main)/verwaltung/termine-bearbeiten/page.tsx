@@ -217,13 +217,7 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
         }
       )
       .refine(
-        (data) => {
-          // @ts-ignore - TS versteht Zod-Refinement hier nicht korrekt
-          if (data.recurrence !== 'none') {
-            return !!data.recurrenceEndDate;
-          }
-          return true;
-        },
+        (data) => data.recurrence === 'none' || !!data.recurrenceEndDate,
         {
           message: 'Enddatum für Wiederholung ist erforderlich.',
           path: ['recurrenceEndDate'],
@@ -244,6 +238,13 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
   }, [appointmentTypes]);
 };
 type AppointmentFormValues = z.infer<ReturnType<typeof useAppointmentSchema>>;
+
+
+const formatDateForInput = (date: Date | undefined, type: 'datetime' | 'date'): string => {
+  if (!date || !isDateValid(date)) return '';
+  if (type === 'date') return format(date, 'yyyy-MM-dd');
+  return format(date, "yyyy-MM-dd'T'HH:mm");
+};
 
 
 export default function AdminTerminePage() {
@@ -556,22 +557,17 @@ export default function AdminTerminePage() {
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
-
+    
     if (data.recurrence !== 'none') {
         if (!data.recurrenceEndDate || !data.startDate) {
-            // This case should be caught by zod, but as a safeguard:
-             appointmentForm.setError('recurrenceEndDate', {
-                message: 'Start- und Enddatum der Wiederholung sind erforderlich.',
-            });
+            appointmentForm.setError('recurrenceEndDate', { message: 'Start- und Enddatum der Wiederholung sind erforderlich.' });
             return;
         }
         try {
             const start = new Date(data.startDate);
             const end = new Date(data.recurrenceEndDate);
             if (end < start) {
-                appointmentForm.setError('recurrenceEndDate', {
-                    message: 'Ende der Wiederholung muss nach dem Startdatum liegen.',
-                });
+                appointmentForm.setError('recurrenceEndDate', { message: 'Ende der Wiederholung muss nach dem Startdatum liegen.' });
                 return;
             }
         } catch (e) {
@@ -866,19 +862,13 @@ export default function AdminTerminePage() {
     if (!originalAppointment) return;
 
     setSelectedInstanceToEdit(appointment);
-
-    const formatForInput = (date: Date, type: 'datetime' | 'date') => {
-        if (!isDateValid(date)) return '';
-        if (type === 'date') return format(date, 'yyyy-MM-dd');
-        return format(date, "yyyy-MM-dd'T'HH:mm");
-    };
     
     const isAllDay = appointment.isAllDay ?? false;
-    const startDate = appointment.startDate.toDate();
+    const startDate = appointment.startDate?.toDate();
     const endDate = appointment.endDate?.toDate();
 
-    const startDateString = formatForInput(startDate, isAllDay ? 'date' : 'datetime');
-    const endDateString = endDate ? formatForInput(endDate, isAllDay ? 'date' : 'datetime') : '';
+    const startDateString = formatDateForInput(startDate, isAllDay ? 'date' : 'datetime');
+    const endDateString = formatDateForInput(endDate, isAllDay ? 'date' : 'datetime');
 
     const typeName = typesMap.get(appointment.appointmentTypeId);
     const isSonstiges = typeName === 'Sonstiges';
@@ -2335,3 +2325,4 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
