@@ -206,11 +206,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
          throw new HttpsError('invalid-argument', 'Fehlende Daten für die Ausnahme.');
     }
 
-    const originalDate = parseISO(pendingUpdateData.originalDateISO);
-    if (!isDateValid(originalDate)) {
-        throw new HttpsError('invalid-argument', 'Ungültiges Originaldatum.');
-    }
-
     let newStartDate: Date;
     let newEndDate: Date | null = null;
     
@@ -219,24 +214,31 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         const newEndDateInput = pendingUpdateData.endDate;
 
         if (pendingUpdateData.isAllDay) {
+            // Für ganztägige Termine, parse nur das Datum
             newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
-            if (newEndDateInput && newEndDateInput.trim() !== '') {
+             if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
             }
         } else {
+            // Für Termine mit Zeit, parse Datum und Zeit
             newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-             if (newEndDateInput && newEndDateInput.trim() !== '') {
+             if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
             }
         }
 
-        if (!isDateValid(newStartDate) || (newEndDateInput && newEndDateInput.trim() !== '' && !isDateValid(newEndDate))) {
+        if (!isDateValid(newStartDate) || (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '' && !isDateValid(newEndDate))) {
              throw new Error('Invalid date format in input');
         }
     } catch (e) {
         throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.', e.message);
     }
     
+    const originalDate = parseISO(pendingUpdateData.originalDateISO);
+     if (!isDateValid(originalDate)) {
+        throw new HttpsError('invalid-argument', 'Ungültiges Originaldatum.');
+    }
+
     const originalDateStartOfDay = startOfDay(originalDate);
     const exceptionsColRef = db.collection('appointmentExceptions');
     const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
@@ -321,6 +323,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
+      
+      // *** KORREKTUR: Sichere Verarbeitung von `endDate` ***
       const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
         : null;
@@ -383,4 +387,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         console.error('Error splitting and saving future instances: ', error);
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
-});
