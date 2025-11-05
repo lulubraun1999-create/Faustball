@@ -205,12 +205,12 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
         : null;
-
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
     
     if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
     }
+
+    const originalDateStartOfDay = startOfDay(originalDate);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
     
@@ -295,7 +295,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : undefined;
+      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+        ? new Date(pendingUpdateData.endDate) 
+        : null;
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
@@ -356,7 +358,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
-    
-
-    
