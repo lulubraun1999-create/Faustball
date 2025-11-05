@@ -206,43 +206,28 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
          throw new HttpsError('invalid-argument', 'Fehlende Daten für die Ausnahme.');
     }
 
-    let newStartDate: Date;
-    let newEndDate: Date | null = null;
-    
-    try {
-        const newStartDateInput = pendingUpdateData.startDate;
-        const newEndDateInput = pendingUpdateData.endDate;
-
-        if (pendingUpdateData.isAllDay) {
-            newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
-             if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
-               newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
-            }
-        } else {
-            newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-             if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
-               newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-            }
-        }
-
-        if (!isDateValid(newStartDate) || (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '' && !isDateValid(newEndDate))) {
-             throw new Error('Invalid date format in input');
-        }
-    } catch (e: any) {
-        throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.', e.message);
-    }
-    
-    const originalDate = parseISO(pendingUpdateData.originalDateISO);
-     if (!isDateValid(originalDate)) {
-        throw new HttpsError('invalid-argument', 'Ungültiges Originaldatum.');
-    }
-
-    const originalDateStartOfDay = startOfDay(originalDate);
-    const exceptionsColRef = db.collection('appointmentExceptions');
-    const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
-                              .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
+    const parseDate = (dateString: string, isAllDay: boolean): Date => {
+        const format = isAllDay ? 'yyyy-MM-dd' : "yyyy-MM-dd'T'HH:mm";
+        return parse(dateString, format, new Date());
+    };
 
     try {
+        const newStartDate = parseDate(pendingUpdateData.startDate, pendingUpdateData.isAllDay);
+        const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+            ? parseDate(pendingUpdateData.endDate, pendingUpdateData.isAllDay) 
+            : null;
+
+        const originalDate = parseISO(pendingUpdateData.originalDateISO);
+
+        if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate)) || !isDateValid(originalDate)) {
+             throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat in der Eingabe.');
+        }
+    
+        const originalDateStartOfDay = startOfDay(originalDate);
+        const exceptionsColRef = db.collection('appointmentExceptions');
+        const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
+                                  .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
+
         const querySnapshot = await q.get();
         const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
 
@@ -324,25 +309,19 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      let newStartDate: Date;
-      let newEndDate: Date | null = null;
-      const newStartDateInput = pendingUpdateData.startDate;
-      const newEndDateInput = pendingUpdateData.endDate;
+      const parseDate = (dateString: string, isAllDay: boolean): Date => {
+        const format = isAllDay ? 'yyyy-MM-dd' : "yyyy-MM-dd'T'HH:mm";
+        return parse(dateString, format, new Date());
+      };
+      
+      const newStartDate = parseDate(pendingUpdateData.startDate, pendingUpdateData.isAllDay);
+      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+          ? parseDate(pendingUpdateData.endDate, pendingUpdateData.isAllDay)
+          : null;
 
-      if (pendingUpdateData.isAllDay) {
-          newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
-          if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
-            newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
-          }
-      } else {
-          newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-          if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
-            newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-          }
-      }
 
       if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-          throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${newStartDateInput}, Ende: ${newEndDateInput}`);
+          throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${pendingUpdateData.startDate}, Ende: ${pendingUpdateData.endDate}`);
       }
       
       let typeName = 'Termin'; 
