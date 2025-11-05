@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -123,11 +124,12 @@ export default function KalenderPage() {
     isLoadingGroups ||
     isLoadingLocations;
 
-  const { teamsForFilter, typesMap, locationsMap } = useMemo(() => {
+  const { teamsForFilter, typesMap, locationsMap, teamsMap } = useMemo(() => {
     const userTeams = allGroups?.filter(g => g.type === 'team' && userTeamIds.includes(g.id)) || [];
     const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
-    return { teamsForFilter: userTeams, typesMap, locationsMap: locs };
+    const teamMap = new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name]));
+    return { teamsForFilter: userTeams, typesMap, locationsMap: locs, teamsMap: teamMap };
   }, [allGroups, appointmentTypes, locations, userTeamIds]);
 
   const unrolledAppointments = useMemo(() => {
@@ -404,6 +406,11 @@ export default function KalenderPage() {
                             <PopoverContent className="w-64">
                               <p className="font-bold">{app.title}</p>
                               <p className="text-sm text-muted-foreground">{typesMap.get(app.appointmentTypeId)}</p>
+                              {app.visibility.type === 'specificTeams' && (
+                                <p className="text-sm text-muted-foreground">
+                                  {app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
+                                </p>
+                              )}
                               <p className="text-sm mt-1">{format(app.instanceDate, 'dd.MM.yyyy HH:mm')} Uhr</p>
                               {app.locationId && <p className="text-sm">{locationsMap.get(app.locationId)?.name}</p>}
                               <Button asChild size="sm" className="mt-3 w-full">
