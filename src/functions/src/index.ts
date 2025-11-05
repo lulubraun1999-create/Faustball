@@ -206,36 +206,35 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
          throw new HttpsError('invalid-argument', 'Fehlende Daten für die Ausnahme.');
     }
 
-    // Robustere Datumsumwandlung
     const originalDate = parseISO(pendingUpdateData.originalDateISO);
-    const newStartDateInput = pendingUpdateData.startDate;
-    const newEndDateInput = pendingUpdateData.endDate;
-
     if (!isDateValid(originalDate)) {
         throw new HttpsError('invalid-argument', 'Ungültiges Originaldatum.');
     }
-    
+
     let newStartDate: Date;
     let newEndDate: Date | null = null;
     
     try {
+        const newStartDateInput = pendingUpdateData.startDate;
+        const newEndDateInput = pendingUpdateData.endDate;
+
         if (pendingUpdateData.isAllDay) {
             newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
-            if (newEndDateInput) {
+            if (newEndDateInput && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
             }
         } else {
             newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
-             if (newEndDateInput) {
+             if (newEndDateInput && newEndDateInput.trim() !== '') {
                newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
             }
         }
 
-        if (!isDateValid(newStartDate) || (newEndDateInput && !isDateValid(newEndDate))) {
+        if (!isDateValid(newStartDate) || (newEndDateInput && newEndDateInput.trim() !== '' && !isDateValid(newEndDate))) {
              throw new Error('Invalid date format in input');
         }
     } catch (e) {
-        throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.');
+        throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat.', e.message);
     }
     
     const originalDateStartOfDay = startOfDay(originalDate);
