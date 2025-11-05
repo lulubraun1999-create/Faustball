@@ -231,23 +231,17 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
       )
       .refine(
         (data) => {
-          if (data.recurrenceEndDate && data.startDate) {
-            try {
-              const recurrenceEnd = new Date(data.recurrenceEndDate);
-              const startDateValue = data.startDate.includes('T')
-                ? data.startDate.split('T')[0]
-                : data.startDate;
-              const start = new Date(startDateValue);
-              return (
-                isDateValid(recurrenceEnd) &&
-                isDateValid(start) &&
-                recurrenceEnd >= start
-              );
-            } catch (e) {
-              return false;
+            if (!data.recurrenceEndDate || !data.startDate) {
+                return true; // Don't validate if one is missing, other rules handle that.
             }
-          }
-          return true;
+            try {
+                // This is a simplified check. A more robust check would parse based on isAllDay.
+                const start = new Date(data.startDate);
+                const end = new Date(data.recurrenceEndDate);
+                return end >= start;
+            } catch {
+                return false;
+            }
         },
         {
           message: 'Ende der Wiederholung muss nach dem Startdatum liegen.',
@@ -2161,7 +2155,7 @@ export default function AdminTerminePage() {
                             <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
                               {displayTitle}
                             </TableCell>
-                            <TableCell>
+                             <TableCell>
                               {isCancelled ? (
                                 <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
                                   ABGESAGT
