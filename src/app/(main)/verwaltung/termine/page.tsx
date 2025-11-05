@@ -498,6 +498,8 @@ export default function VerwaltungTerminePage() {
                                         <TableHead>Datum & Uhrzeit</TableHead>
                                         <TableHead>Mannschaft</TableHead>
                                         <TableHead>Ort</TableHead>
+                                        <TableHead>Treffpunkt</TableHead>
+                                        <TableHead>Treffzeit</TableHead>
                                         <TableHead>Rückmeldung bis</TableHead>
                                         <TableHead>Teilnehmer</TableHead>
                                         <TableHead className="text-right">Aktionen</TableHead>
@@ -561,12 +563,16 @@ export default function VerwaltungTerminePage() {
                                                     <p className="text-sm text-muted-foreground">
                                                       {location.address || 'Keine Adresse hinterlegt'}
                                                     </p>
+                                                     {app.meetingPoint && <p className="text-sm mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
+                                                     {app.meetingTime && <p className="text-sm"><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
                                                   </PopoverContent>
                                                 </Popover>
                                               ) : (
                                                 '-'
                                               )}
                                             </TableCell>
+                                            <TableCell>{app.meetingPoint || '-'}</TableCell>
+                                            <TableCell>{app.meetingTime || '-'}</TableCell>
                                             <TableCell>{rsvpDeadlineString}</TableCell>
                                             <TableCell>
                                                 <ResponseStatus
