@@ -289,6 +289,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       
       const instanceDateString = selectedInstanceToEdit.originalDateISO;
       
+      if (!instanceDateString || typeof instanceDateString !== 'string') {
+        throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Instanz-Datum (originalDateISO).');
+      }
+      
       // Robust date parsing for the instance date
       const instanceDate = instanceDateString.includes("T") 
           ? parseISO(instanceDateString) 
