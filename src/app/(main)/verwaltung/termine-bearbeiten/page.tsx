@@ -2120,7 +2120,7 @@ export default function AdminTerminePage() {
                     Object.entries(groupedAppointments).flatMap(([monthYear, appointmentsInMonth]) => [
                       <TableRow key={monthYear} className="bg-muted/50 hover:bg-muted/50">
                         <TableCell colSpan={9} className="py-2 px-4 text-sm font-semibold">
-                          {monthYear} ({appointmentsInMonth.length})
+                          {monthYear}
                         </TableCell>
                       </TableRow>,
                       ...appointmentsInMonth.map((app) => {
