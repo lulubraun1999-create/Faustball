@@ -1,7 +1,7 @@
 
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types';
 import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
 
@@ -60,7 +60,7 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
     // 2. Firestore Dokumente (users und members) aktualisieren
-    const batch = db.batch();
+    const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
     
@@ -354,5 +354,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
-    
