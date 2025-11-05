@@ -321,17 +321,25 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       // *** START ROBUST DATE PARSING ***
-      const newStartDate = parseISO(pendingUpdateData.startDate);
-      if (!isDateValid(newStartDate)) {
-        throw new HttpsError('invalid-argument', `Ungültiges Startdatum-Format: ${pendingUpdateData.startDate}`);
-      }
-      
-      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-        ? parseISO(pendingUpdateData.endDate) 
-        : null;
+      let newStartDate: Date;
+      let newEndDate: Date | null = null;
+      const newStartDateInput = pendingUpdateData.startDate;
+      const newEndDateInput = pendingUpdateData.endDate;
 
-      if (newEndDate && !isDateValid(newEndDate)) {
-          throw new HttpsError('invalid-argument', `Ungültiges Enddatum-Format: ${pendingUpdateData.endDate}`);
+      if (pendingUpdateData.isAllDay) {
+          newStartDate = parse(newStartDateInput, 'yyyy-MM-dd', new Date());
+          if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
+            newEndDate = parse(newEndDateInput, 'yyyy-MM-dd', new Date());
+          }
+      } else {
+          newStartDate = parse(newStartDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
+          if (newEndDateInput && typeof newEndDateInput === 'string' && newEndDateInput.trim() !== '') {
+            newEndDate = parse(newEndDateInput, "yyyy-MM-dd'T'HH:mm", new Date());
+          }
+      }
+
+      if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
+          throw new HttpsError('invalid-argument', `Ungültiges Datums-Format. Start: ${newStartDateInput}, Ende: ${newEndDateInput}`);
       }
       // *** END ROBUST DATE PARSING ***
       
