@@ -1889,47 +1889,6 @@ export default function AdminTerminePage() {
               <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>{' '}
             </CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-                <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
-                <Select value={teamFilter} onValueChange={setTeamFilter}>
-                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]">
-                    <SelectValue placeholder="Nach Mannschaft filtern..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Mannschaften</SelectItem>
-                    <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
-                    <Separator />
-                    {isLoadingGroups ? (
-                      <SelectItem value="loading" disabled>
-                        Lade...
-                      </SelectItem>
-                    ) : (
-                      sortedTeamsForFilter.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[150px]">
-                    <SelectValue placeholder="Nach Typ filtern..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Alle Typen</SelectItem>
-                    {isLoadingTypes ? (
-                      <SelectItem value="loading" disabled>
-                        Lade...
-                      </SelectItem>
-                    ) : (
-                      appointmentTypes?.map((type) => (
-                        <SelectItem key={type.id} value={type.id}>
-                          {type.name}
-                        </SelectItem>
-                      )) ?? []
-                    )}
-                  </SelectContent>
-                </Select>
               <Button
                 variant="default"
                 onClick={() => {
