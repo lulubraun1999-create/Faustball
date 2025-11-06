@@ -102,6 +102,7 @@ export default function DashboardPage() {
                 allEvents.push({ ...modifiedApp, originalId: app.id, virtualId: app.id, originalDateISO: originalDateStartOfDay.toISOString() });
             } else {
                 let currentDate = app.startDate.toDate();
+                // **FIX:** Safely handle recurrenceEndDate
                 const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
                 const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
                 let iter = 0;
