@@ -209,6 +209,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     // Helper function to safely parse dates, distinguishing between date and datetime-local
     const parseDate = (dateString: string): Date | null => {
       if (!dateString || typeof dateString !== 'string') return null;
+      // Check if the string contains 'T' to determine the format
       const format = dateString.includes('T') ? "yyyy-MM-dd'T'HH:mm" : 'yyyy-MM-dd';
       const parsed = parse(dateString, format, new Date());
       return isDateValid(parsed) ? parsed : null;
@@ -404,5 +405,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
 
 
+
+    
 
     

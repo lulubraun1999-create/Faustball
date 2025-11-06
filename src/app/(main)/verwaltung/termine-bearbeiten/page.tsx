@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -695,7 +693,17 @@ export default function AdminTerminePage() {
     data: SingleAppointmentInstanceFormValues
   ) => {
     if (!selectedInstanceToEdit) return;
-    setPendingUpdateData(data);
+
+    // +++ KORREKTUR START +++
+    // Wandle einen leeren String '' für endDate in 'undefined' um.
+    // Ein leeres Feld soll "kein Enddatum" bedeuten, nicht "ungültiges Datum".
+    const cleanData = {
+      ...data,
+      endDate: data.endDate || undefined,
+    };
+    // +++ KORREKTUR ENDE +++
+
+    setPendingUpdateData(cleanData); // Verwende die bereinigten Daten
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -2325,4 +2333,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
