@@ -38,10 +38,8 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  // KORREKTUR: Nimm die targetUid aus den Daten, oder nimm die ID des Aufrufers als Fallback.
   const targetUid = request.data?.uid || callerUid;
 
-  // Hinzugefügte Validierung
   if (!targetUid || typeof targetUid !== 'string') {
       throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
   }
@@ -212,7 +210,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    // SAFELY handle endDate
     const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
     const originalDateStartOfDay = startOfDay(originalDate);
 
