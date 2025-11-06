@@ -68,6 +68,8 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Card, CardContent } from '@/components/ui/card';
 
 const profileFormSchema = z.object({
   firstName: z.string(),
@@ -111,8 +113,8 @@ export default function ProfileEditPage() {
   const { user: authUser, userProfile, isUserLoading, forceRefresh, isAdmin } = useUser();
   
   const [isMakingAdmin, setIsMakingAdmin] = useState(false);
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [isEmailOpen, setIsEmailOpen] = useState(false);
   const [noAdminExists, setNoAdminExists] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
 
@@ -250,7 +252,7 @@ export default function ProfileEditPage() {
             : 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.',
       });
     } finally {
-      setIsPasswordDialogOpen(false);
+      setIsPasswordOpen(false);
       passwordForm.reset();
     }
   };
@@ -287,7 +289,7 @@ export default function ProfileEditPage() {
             : 'Diese E-Mail wird möglicherweise bereits verwendet oder ein anderer Fehler ist aufgetreten.',
       });
     } finally {
-      setIsEmailDialogOpen(false);
+      setIsEmailOpen(false);
       emailForm.reset();
     }
   };
@@ -388,158 +390,12 @@ export default function ProfileEditPage() {
             <Button variant="ghost" className="justify-start text-left">
               Daten ändern
             </Button>
-
-            <Dialog
-              open={isPasswordDialogOpen}
-              onOpenChange={setIsPasswordDialogOpen}
-            >
-              <DialogTrigger asChild>
-                <Button variant="ghost" className="justify-start text-left">
-                  Passwort ändern
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Neues Passwort festlegen</DialogTitle>
-                  <DialogDescription>
-                    Bestätigen Sie Ihr aktuelles Passwort und geben Sie ein
-                    neues ein. Sie werden danach abgemeldet.
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...passwordForm}>
-                  <form
-                    onSubmit={passwordForm.handleSubmit(onPasswordChange)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={passwordForm.control}
-                      name="currentPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aktuelles Passwort</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={passwordForm.control}
-                      name="newPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Neues Passwort</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={passwordForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Neues Passwort bestätigen</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <DialogFooter>
-                      <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                          Abbrechen
-                        </Button>
-                      </DialogClose>
-                      <Button
-                        type="submit"
-                        disabled={passwordForm.formState.isSubmitting}
-                      >
-                        {passwordForm.formState.isSubmitting && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Speichern
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-
-            <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" className="justify-start text-left">
-                  E-Mail ändern
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>E-Mail-Adresse ändern</DialogTitle>
-                  <DialogDescription>
-                    Bestätigen Sie Ihr Passwort und geben Sie die neue
-                    E-Mail-Adresse ein.
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...emailForm}>
-                  <form
-                    onSubmit={emailForm.handleSubmit(onEmailChange)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={emailForm.control}
-                      name="currentPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aktuelles Passwort</FormLabel>
-                          <FormControl>
-                            <Input type="password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={emailForm.control}
-                      name="newEmail"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Neue E-Mail-Adresse</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="email"
-                              placeholder="neue.email@beispiel.de"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <DialogFooter>
-                      <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                          Abbrechen
-                        </Button>
-                      </DialogClose>
-                      <Button
-                        type="submit"
-                        disabled={emailForm.formState.isSubmitting}
-                      >
-                        {emailForm.formState.isSubmitting && (
-                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Bestätigungs-E-Mail senden
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+            <Button variant="ghost" className="justify-start text-left" onClick={() => setIsPasswordOpen(!isPasswordOpen)}>
+              Passwort ändern
+            </Button>
+            <Button variant="ghost" className="justify-start text-left" onClick={() => setIsEmailOpen(!isEmailOpen)}>
+              E-Mail ändern
+            </Button>
 
             <Button
               variant="ghost"
@@ -602,179 +458,315 @@ export default function ProfileEditPage() {
           </div>
         </aside>
 
-        <main className="md:col-span-3">
-          <h1 className="mb-6 text-2xl font-bold">Daten ändern</h1>
-          <Form {...profileForm}>
-            <form
-              onSubmit={profileForm.handleSubmit(onProfileSubmit)}
-              className="space-y-8"
-            >
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <FormField
-                  control={profileForm.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vorname</FormLabel>
-                      <FormControl>
-                        <Input {...field} readOnly className="bg-muted/50" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nachname</FormLabel>
-                      <FormControl>
-                        <Input {...field} readOnly className="bg-muted/50" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Telefon</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+49 123 4567890" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Wohnort</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Leverkusen" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>Position</FormLabel>
-                  <div className="flex space-x-4">
-                    {['Abwehr', 'Zuspiel', 'Angriff'].map((position) => (
-                      <FormField
-                        key={position}
-                        control={profileForm.control}
-                        name="position"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={position}
-                              className="flex flex-row items-start space-x-2 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(position)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([
-                                          ...(field.value || []),
-                                          position,
-                                        ])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== position
-                                          )
-                                        );
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal">
-                                {position}
-                              </FormLabel>
-                            </FormItem>
-                          );
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-
-                <FormField
-                  control={profileForm.control}
-                  name="gender"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Geschlecht</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value ?? ''}
-                      >
+        <main className="md:col-span-3 space-y-8">
+          <div>
+            <h1 className="mb-6 text-2xl font-bold">Daten ändern</h1>
+            <Form {...profileForm}>
+              <form
+                onSubmit={profileForm.handleSubmit(onProfileSubmit)}
+                className="space-y-8"
+              >
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <FormField
+                    control={profileForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vorname</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Geschlecht auswählen" />
-                          </SelectTrigger>
+                          <Input {...field} readOnly className="bg-muted/50" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="weiblich">weiblich</SelectItem>
-                          <SelectItem value="männlich">männlich</SelectItem>
-                          <SelectItem value="divers (Damenteam)">
-                            divers (Damenteam)
-                          </SelectItem>
-                          <SelectItem value="divers (Herrenteam)">
-                            divers (Herrenteam)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
-                  name="birthday"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Geburtstag</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>E-Mail</FormLabel>
-                  <FormControl>
-                    <Input
-                      readOnly
-                      value={userProfile?.email || ''}
-                      className="bg-muted/50"
-                    />
-                  </FormControl>
-                </FormItem>
-              </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nachname</FormLabel>
+                        <FormControl>
+                          <Input {...field} readOnly className="bg-muted/50" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Telefon</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+49 123 4567890" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="location"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wohnort</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Leverkusen" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormItem>
+                    <FormLabel>Position</FormLabel>
+                    <div className="flex space-x-4">
+                      {['Abwehr', 'Zuspiel', 'Angriff'].map((position) => (
+                        <FormField
+                          key={position}
+                          control={profileForm.control}
+                          name="position"
+                          render={({ field }) => {
+                            return (
+                              <FormItem
+                                key={position}
+                                className="flex flex-row items-start space-x-2 space-y-0"
+                              >
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(position)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([
+                                            ...(field.value || []),
+                                            position,
+                                          ])
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== position
+                                            )
+                                          );
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  {position}
+                                </FormLabel>
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
 
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={profileForm.formState.isSubmitting}
-                >
-                  {profileForm.formState.isSubmitting && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Speichern
-                </Button>
-              </div>
-            </form>
-          </Form>
+                  <FormField
+                    control={profileForm.control}
+                    name="gender"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Geschlecht</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value ?? ''}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Geschlecht auswählen" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="weiblich">weiblich</SelectItem>
+                            <SelectItem value="männlich">männlich</SelectItem>
+                            <SelectItem value="divers (Damenteam)">
+                              divers (Damenteam)
+                            </SelectItem>
+                            <SelectItem value="divers (Herrenteam)">
+                              divers (Herrenteam)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={profileForm.control}
+                    name="birthday"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Geburtstag</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormItem>
+                    <FormLabel>E-Mail</FormLabel>
+                    <FormControl>
+                      <Input
+                        readOnly
+                        value={userProfile?.email || ''}
+                        className="bg-muted/50"
+                      />
+                    </FormControl>
+                  </FormItem>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={profileForm.formState.isSubmitting}
+                  >
+                    {profileForm.formState.isSubmitting && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Speichern
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </div>
+
+          <Collapsible open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+            <CollapsibleContent>
+              <Card className="mt-8">
+                <CardContent className="pt-6">
+                  <h2 className="text-xl font-semibold mb-4">Neues Passwort festlegen</h2>
+                  <Form {...passwordForm}>
+                    <form
+                      onSubmit={passwordForm.handleSubmit(onPasswordChange)}
+                      className="space-y-4"
+                    >
+                      <FormField
+                        control={passwordForm.control}
+                        name="currentPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Aktuelles Passwort</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={passwordForm.control}
+                        name="newPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Neues Passwort</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={passwordForm.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Neues Passwort bestätigen</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="secondary" onClick={() => setIsPasswordOpen(false)}>
+                          Abbrechen
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={passwordForm.formState.isSubmitting}
+                        >
+                          {passwordForm.formState.isSubmitting && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Passwort Speichern
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
+          
+          <Collapsible open={isEmailOpen} onOpenChange={setIsEmailOpen}>
+            <CollapsibleContent>
+              <Card className="mt-8">
+                <CardContent className="pt-6">
+                  <h2 className="text-xl font-semibold mb-4">E-Mail-Adresse ändern</h2>
+                  <Form {...emailForm}>
+                    <form
+                      onSubmit={emailForm.handleSubmit(onEmailChange)}
+                      className="space-y-4"
+                    >
+                      <FormField
+                        control={emailForm.control}
+                        name="currentPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Aktuelles Passwort</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={emailForm.control}
+                        name="newEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Neue E-Mail-Adresse</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="email"
+                                placeholder="neue.email@beispiel.de"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="secondary" onClick={() => setIsEmailOpen(false)}>
+                          Abbrechen
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={emailForm.formState.isSubmitting}
+                        >
+                          {emailForm.formState.isSubmitting && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Bestätigungs-E-Mail senden
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
+
         </main>
       </div>
     </div>
   );
 }
+
+    
