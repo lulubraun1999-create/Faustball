@@ -15,6 +15,10 @@ export function MobileNav() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+  
+  if (!isClient) {
+    return null;
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -66,7 +70,7 @@ export function MobileNav() {
                      <Link href="/verwaltung/mannschaftskasse" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaftskasse</Link>
                 </div>
                 
-                {isClient && (isUserLoading ? (
+                {isUserLoading ? (
                     <div className="pt-6">
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
@@ -80,7 +84,7 @@ export function MobileNav() {
                         <Link href="/verwaltung/news-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>News bearbeiten</Link>
                         <Link href="/verwaltung/mannschaftskasse-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaftskasse bearbeiten</Link>
                     </div>
-                ) : null)}
+                ) : null}
             </div>
         </div>
       </SheetContent>
