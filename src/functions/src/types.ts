@@ -4,7 +4,7 @@ export interface Appointment {
   id: string;
   title: string;
   startDate: Timestamp;
-  endDate?: Timestamp;
+  endDate?: Timestamp | null; // <-- KORRIGIERT
   isAllDay?: boolean;
   appointmentTypeId: string;
   locationId?: string;
@@ -30,7 +30,7 @@ export interface AppointmentException {
   status: 'cancelled' | 'modified';
   modifiedData?: {
     startDate?: Timestamp;
-    endDate?: Timestamp;
+    endDate?: Timestamp | null; // <-- KORRIGIERT
     title?: string;
     locationId?: string;
     description?: string;

@@ -38,7 +38,7 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid;
+  const targetUid = request.data?.uid || callerUid; // Fallback to caller's UID
 
   if (!targetUid || typeof targetUid !== 'string') {
       throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
@@ -210,6 +210,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
+    // SAFELY handle endDate
     const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
     const originalDateStartOfDay = startOfDay(originalDate);
 
@@ -304,6 +305,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
+      // SAFELY handle endDate
       const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
       
       let typeName = 'Termin'; 
@@ -365,6 +367,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
-
-    
