@@ -441,9 +441,7 @@ export default function AdminTerminePage() {
         }
       } else {
         let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = app.recurrenceEndDate
-          ? addDays(app.recurrenceEndDate.toDate(), 1)
-          : addDays(now, 365);
+        const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
         const duration = app.endDate
           ? differenceInMilliseconds(
               app.endDate.toDate(),
