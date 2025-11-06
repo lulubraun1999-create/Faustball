@@ -38,10 +38,12 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Fallback to caller's UID
+  // Safely get the target UID from the request data, or fall back to the caller's UID.
+  const targetUid = request.data?.uid || callerUid;
 
-  if (!targetUid || typeof targetUid !== 'string') {
-      throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+  // Ensure targetUid is a valid string before proceeding.
+  if (typeof targetUid !== 'string' || targetUid.length === 0) {
+    throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
   }
 
   // Prüfen, ob bereits Admins existieren
@@ -210,8 +212,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    // SAFELY handle endDate
-    const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
+    const newEndDate = (pendingUpdateData.endDate && pendingUpdateData.endDate !== '') ? new Date(pendingUpdateData.endDate) : null;
     const originalDateStartOfDay = startOfDay(originalDate);
 
     if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
@@ -305,8 +306,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      // SAFELY handle endDate
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
+      const newEndDate = (pendingUpdateData.endDate && pendingUpdateData.endDate !== '') ? new Date(pendingUpdateData.endDate) : null;
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
