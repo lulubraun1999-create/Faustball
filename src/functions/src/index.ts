@@ -224,7 +224,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             throw new HttpsError('invalid-argument', 'Ungültiges oder fehlendes Originaldatum (originalDateISO).');
         }
         
-        // Use parseISO here as it is a full ISO string from the server
         const originalDate = parseISO(originalDateString);
 
         if (!newStartDate || !isDateValid(originalDate)) {
@@ -241,7 +240,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
         const modifiedData: AppointmentException['modifiedData'] = {
             startDate: Timestamp.fromDate(newStartDate),
-            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             title: pendingUpdateData.title,
             locationId: pendingUpdateData.locationId,
             description: pendingUpdateData.description,
@@ -371,7 +370,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : undefined,
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
