@@ -138,8 +138,10 @@ export default function KalenderPage() {
     const exceptionsMap = new Map<string, AppointmentException>();
     
     exceptions?.forEach((ex) => {
-        const key = `${ex.originalAppointmentId}-${format(ex.originalDate.toDate(), 'yyyy-MM-dd')}`;
-        exceptionsMap.set(key, ex);
+        if (ex.originalDate) {
+            const key = `${ex.originalAppointmentId}-${format(ex.originalDate.toDate(), 'yyyy-MM-dd')}`;
+            exceptionsMap.set(key, ex);
+        }
     });
 
     appointments.forEach((app) => {
@@ -170,6 +172,7 @@ export default function KalenderPage() {
         events.push(instance);
       } else {
         let current = startOfDay(app.startDate.toDate());
+        // **FIX:** Safely handle recurrenceEndDate
         const end = app.recurrenceEndDate ? app.recurrenceEndDate.toDate() : addMonths(new Date(), 12);
         
         const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
@@ -180,7 +183,8 @@ export default function KalenderPage() {
 
             if (exception?.status !== 'cancelled') {
                 const instanceStartDate = new Date(current);
-                instanceStartDate.setHours(app.startDate.toDate().getHours(), app.startDate.toDate().getMinutes());
+                const appStartDate = app.startDate.toDate();
+                instanceStartDate.setHours(appStartDate.getHours(), appStartDate.getMinutes());
 
                 let instance: UnrolledAppointment = {
                     ...app,
@@ -436,3 +440,6 @@ export default function KalenderPage() {
   );
 }
 
+
+
+    

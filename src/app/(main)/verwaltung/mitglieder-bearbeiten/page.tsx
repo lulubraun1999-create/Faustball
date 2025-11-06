@@ -79,7 +79,7 @@ export default function AdminMitgliederPage() {
   // Filter States
   const [selectedTeamFilterOption, setSelectedTeamFilterOption] = useState<string>('all'); // 'all', 'myTeams', 'noTeam' or a teamId
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all'); // 'all', 'admin', 'user'
-  const [searchTerm, setSearchTerm] = useState<string>(''); // Zustand für Suchbegriff
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Eigenes Member-Profil holen
   const currentUserMemberRef = useMemoFirebase(
