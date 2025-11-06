@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
-import type { Appointment, AppointmentException, AppointmentType } from './types';
+// KORRIGIERTER IMPORT: AppointmentType wird jetzt gefunden (nach Korrektur 1)
+import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
 
 
@@ -219,8 +220,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
-        // +++ KORREKTUR 1 (von undefined zu null) +++
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
         title: pendingUpdateData.title,
         locationId: pendingUpdateData.locationId,
         description: pendingUpdateData.description,
@@ -293,15 +293,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      // +++ KORREKTUR 2 (von undefined zu null) +++
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
+      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null; // <-- KORRIGIERT (zu null)
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
       if (originalAppointmentData.appointmentTypeId) { 
           const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
           if (typeDoc.exists) {
-              const typeData = typeDoc.data() as AppointmentType;
+              // Hier wird AppointmentType benötigt
+              const typeData = typeDoc.data() as AppointmentType; 
               typeName = typeData.name;
               isSonstiges = typeName === 'Sonstiges';
           }
@@ -329,8 +329,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         startDate: Timestamp.fromDate(newStartDate),
-        // +++ KORREKTUR 3 (von undefined zu null) +++
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
             
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         

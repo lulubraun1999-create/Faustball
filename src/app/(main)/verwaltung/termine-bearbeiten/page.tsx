@@ -441,7 +441,9 @@ export default function AdminTerminePage() {
         }
       } else {
         let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
+        const recurrenceEndDate = app.recurrenceEndDate
+          ? addDays(app.recurrenceEndDate.toDate(), 1)
+          : addDays(now, 365);
         const duration = app.endDate
           ? differenceInMilliseconds(
               app.endDate.toDate(),
@@ -692,16 +694,16 @@ export default function AdminTerminePage() {
   ) => {
     if (!selectedInstanceToEdit) return;
 
-    // +++ KORREKTUR START +++
-    // Wandle einen leeren String '' für endDate in 'undefined' um.
-    // Ein leeres Feld soll "kein Enddatum" bedeuten, nicht "ungültiges Datum".
+    // +++ KORRIGIERTER CODEBLOCK +++
     const cleanData = {
       ...data,
-      endDate: data.endDate || undefined,
+      // Muss 'null' sein, damit es zum Backend (Korrektur 1 & 2) passt
+      endDate: data.endDate || null, 
     };
-    // +++ KORREKTUR ENDE +++
 
     setPendingUpdateData(cleanData); // Verwende die bereinigten Daten
+    // +++ ENDE KORREKTUR +++
+
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -1505,155 +1507,6 @@ export default function AdminTerminePage() {
                     <FormItem>
                       <div className="flex items-center justify-between">
                         <FormLabel>Ort</FormLabel>
-                        <Dialog
-                          open={isLocationDialogOpen}
-                          onOpenChange={setIsLocationDialogOpen}
-                        >
-                          <DialogTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7"
-                            >
-                              <Plus className="h-3 w-3 mr-1" /> Verwalten
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-md">
-                            <DialogHeader>
-                              <DialogTitle>Orte verwalten</DialogTitle>
-                            </DialogHeader>
-                            <Form {...locationForm}>
-                              <form
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                              >
-                                <div className="space-y-4 py-4">
-                                  <FormField
-                                    control={locationForm.control}
-                                    name="name"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>Name des Ortes</FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            placeholder="z.B. Fritz-Jacobi-Anlage"
-                                            {...field}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <FormField
-                                    control={locationForm.control}
-                                    name="address"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          Adresse (optional)
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            placeholder="Straße, PLZ Ort"
-                                            {...field}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <Button
-                                    type="button"
-                                    className="w-full"
-                                    onClick={locationForm.handleSubmit(
-                                      onSubmitLocation
-                                    )}
-                                    disabled={
-                                      locationForm.formState.isSubmitting
-                                    }
-                                  >
-                                    {locationForm.formState.isSubmitting && (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    )}
-                                    Ort Speichern
-                                  </Button>
-                                </div>
-                              </form>
-                            </Form>
-                            <Separator className="my-4" />
-                            <h4 className="text-sm font-medium mb-2">
-                              Bestehende Orte
-                            </h4>
-                            <ScrollArea className="h-40">
-                              <div className="space-y-2 pr-4">
-                                {locations && locations.length > 0 ? (
-                                  locations.map((loc) => (
-                                    <div
-                                      key={loc.id}
-                                      className="flex justify-between items-center p-2 hover:bg-accent rounded-md"
-                                    >
-                                      <div>
-                                        <p>{loc.name}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                          {loc.address}
-                                        </p>
-                                      </div>
-                                      <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7"
-                                          >
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                          </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                            <AlertDialogTitle>
-                                              Sind Sie sicher?
-                                            </AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                              Möchten Sie "{loc.name}" wirklich
-                                              löschen?
-                                            </AlertDialogDescription>
-                                          </AlertDialogHeader>
-                                          <AlertDialogFooter>
-                                            <AlertDialogCancel>
-                                              Abbrechen
-                                            </AlertDialogCancel>
-                                            <AlertDialogAction
-                                              onClick={() =>
-                                                onDeleteLocation(loc.id)
-                                              }
-                                              className="bg-destructive hover:bg-destructive/90"
-                                            >
-                                              Löschen
-                                            </AlertDialogAction>
-                                          </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                      </AlertDialog>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="text-sm text-muted-foreground text-center">
-                                    Keine Orte gefunden.
-                                  </p>
-                                )}
-                              </div>
-                            </ScrollArea>
-                            <DialogFooter className="mt-4">
-                              <DialogClose asChild>
-                                <Button type="button" variant="outline">
-                                  Schließen
-                                </Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
                       </div>
                       <Select
                         onValueChange={field.onChange}
