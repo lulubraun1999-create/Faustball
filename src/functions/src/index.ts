@@ -1,3 +1,4 @@
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
@@ -37,7 +38,8 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid;
+  // KORREKTUR: Nimm die targetUid aus den Daten, oder nimm die ID des Aufrufers als Fallback.
+  const targetUid = request.data?.uid || callerUid;
 
   // Hinzugefügte Validierung
   if (!targetUid || typeof targetUid !== 'string') {
@@ -366,3 +368,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
+
+
+    
