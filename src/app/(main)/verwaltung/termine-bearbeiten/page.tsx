@@ -99,7 +99,6 @@ import {
   ListTodo,
   Loader2,
   Plus,
-  Filter,
   MapPin,
   CalendarPlus,
   CalendarX,
@@ -257,14 +256,10 @@ export default function AdminTerminePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
-  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [isUpdateTypeDialogOpen, setIsUpdateTypeDialogOpen] = useState(false);
   const [pendingUpdateData, setPendingUpdateData] =
     useState<SingleAppointmentInstanceFormValues | null>(null);
-
-  const [teamFilter, setTeamFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const appointmentsRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'appointments') : null),
@@ -308,10 +303,9 @@ export default function AdminTerminePage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
-  const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo<{
+  const { typesMap, locationsMap, teamsMap, groupedTeams } = useMemo<{
     typesMap: Map<string, string>;
     locationsMap: Map<string, Location>;
-    teams: Group[];
     teamsMap: Map<string, string>;
     groupedTeams: GroupWithTeams[];
   }>(() => {
@@ -351,7 +345,7 @@ export default function AdminTerminePage() {
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teams, teamsMap, groupedTeams: grouped };
+    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -514,35 +508,9 @@ export default function AdminTerminePage() {
     return allEvents;
   }, [appointments, exceptions, isLoadingExceptions]);
 
-  const filteredAppointments = useMemo(() => {
-    if (isMemberProfileLoading) return [];
-    if (!memberProfile && !isMemberProfileLoading) return [];
-  
-    const userTeamIdsSet = new Set(memberProfile?.teams || []);
-  
-    let preFiltered = unrolledAppointments;
-  
-    if (teamFilter === 'myTeams') {
-      preFiltered = unrolledAppointments.filter((app) => {
-        if (app.visibility.type === 'all') return true;
-        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
-      });
-    } else if (teamFilter !== 'all') {
-      preFiltered = unrolledAppointments.filter(
-        (app) => app.visibility.teamIds.includes(teamFilter)
-      );
-    }
-  
-    const finalFiltered = preFiltered.filter(
-      (app) => typeFilter === 'all' || app.appointmentTypeId === typeFilter
-    );
-  
-    return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile, isMemberProfileLoading]);
-
   const groupedAppointments = useMemo(() => {
     const groups: Record<string, UnrolledAppointment[]> = {};
-    filteredAppointments.forEach(app => {
+    unrolledAppointments.forEach(app => {
       const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
       if (!groups[monthYear]) {
         groups[monthYear] = [];
@@ -550,7 +518,7 @@ export default function AdminTerminePage() {
       groups[monthYear].push(app);
     });
     return groups;
-  }, [filteredAppointments]);
+  }, [unrolledAppointments]);
 
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
@@ -694,16 +662,12 @@ export default function AdminTerminePage() {
   ) => {
     if (!selectedInstanceToEdit) return;
 
-    // +++ KORRIGIERTER CODEBLOCK +++
     const cleanData = {
       ...data,
-      // Muss 'null' sein, damit es zum Backend (Korrektur 1 & 2) passt
-      endDate: data.endDate || null, 
+      endDate: data.endDate || '', // Use empty string instead of null
     };
 
-    setPendingUpdateData(cleanData); // Verwende die bereinigten Daten
-    // +++ ENDE KORREKTUR +++
-
+    setPendingUpdateData(cleanData); 
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -1008,10 +972,6 @@ export default function AdminTerminePage() {
     if (matchB) return 1;
     return a.name.localeCompare(b.name);
   };
-  const sortedTeamsForFilter = useMemo(() => {
-    if (!teams) return [];
-    return [...teams].sort(customSort)
-  }, [teams]);
   
   const sortedGroupedTeams = useMemo(() => {
     if (!groups) return [];
@@ -2130,7 +2090,7 @@ export default function AdminTerminePage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={9} className="h-24 text-center">
-                          Keine Termine entsprechen den aktuellen Filtern.
+                          Keine Termine gefunden.
                       </TableCell>
                     </TableRow>
                   )}

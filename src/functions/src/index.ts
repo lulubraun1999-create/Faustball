@@ -1,10 +1,8 @@
-'use client';
-
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
-import type { Appointment, AppointmentException, AppointmentType } from './types';
-import { addDays, isValid as isDateValid, startOfDay, parse } from 'date-fns';
+import type { Appointment, AppointmentException, AppointmentType } from './types'; 
+import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -39,7 +37,12 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Standardmäßig sich selbst
+  const targetUid = request.data?.uid;
+
+  // Hinzugefügte Validierung
+  if (!targetUid || typeof targetUid !== 'string') {
+      throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
+  }
 
   // Prüfen, ob bereits Admins existieren
   let adminsExist = false;
@@ -200,10 +203,16 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
+
+    if (!pendingUpdateData || !selectedInstanceToEdit) {
+        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    }
+
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
+    // SAFELY handle endDate
     const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
+    const originalDateStartOfDay = startOfDay(originalDate);
 
     if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
@@ -211,7 +220,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const exceptionsColRef = db.collection('appointmentExceptions');
     
-    // Search for existing exception on the server
     const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
@@ -262,6 +270,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
+
+    if (!pendingUpdateData || !selectedInstanceToEdit) {
+        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    }
 
     try {
       const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
