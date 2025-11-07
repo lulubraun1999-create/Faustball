@@ -6,7 +6,7 @@ export interface Appointment {
   title: string;
   startDate: Timestamp;
   endDate: Timestamp | null;
-  isAllDay: boolean; // Geändert von optional zu erforderlich
+  isAllDay: boolean;
   appointmentTypeId: string;
   locationId?: string;
   description?: string;
@@ -14,12 +14,12 @@ export interface Appointment {
       type: 'all' | 'specificTeams';
       teamIds: string[];
   };
-  recurrence: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'; // Geändert von optional zu erforderlich
+  recurrence: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
   recurrenceEndDate?: Timestamp | null;
   rsvpDeadline?: Timestamp | null;
   meetingPoint?: string;
   meetingTime?: string;
-  createdAt: Timestamp | FieldValue; // Geändert von optional zu erforderlich
+  createdAt: Timestamp | FieldValue;
   lastUpdated?: Timestamp | FieldValue;
   createdBy: string;
 }
@@ -39,8 +39,8 @@ export interface AppointmentException {
     meetingTime?: string;
     isAllDay?: boolean;
   };
-  createdAt: Timestamp | FieldValue; // Geändert von optional zu erforderlich
-  lastUpdated?: Timestamp | FieldValue; // Hinzugefügt
+  createdAt: Timestamp | FieldValue;
+  lastUpdated?: Timestamp | FieldValue;
   userId: string;
 }
 
@@ -48,4 +48,3 @@ export interface AppointmentType {
     id: string;
     name: string;
 }
-

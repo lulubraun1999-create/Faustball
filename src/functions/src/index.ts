@@ -271,7 +271,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    // Correctly unpack the nested data object
     const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
     const userId = request.auth.uid;
 
@@ -293,22 +292,19 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const instanceDate = new Date(pendingUpdateData.originalDateISO);
         const dayBefore = addDays(instanceDate, -1);
         
-        const originalStartDate = originalAppointmentData.startDate.toDate(); // Safe now, as it's required in the type
+        const originalStartDate = originalAppointmentData.startDate.toDate();
         
-        // End the old series
         if (dayBefore >= originalStartDate) {
             batch.update(originalAppointmentRef, {
                 recurrenceEndDate: Timestamp.fromDate(dayBefore),
                 lastUpdated: FieldValue.serverTimestamp()
             });
         } else {
-            // If the edit is on the very first instance, the old series is no longer needed.
             batch.delete(originalAppointmentRef);
         }
 
         const newAppointmentRef = db.collection("appointments").doc();
         
-        // --- Start: Radically different approach. Build new object from scratch. ---
         const newStartDate = new Date(pendingUpdateData.startDate);
         const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
             ? new Date(pendingUpdateData.endDate) 
@@ -334,44 +330,33 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
 
         let finalTitle = originalTitle;
-        // Only change title if the new title is different from the original display title
         if (pendingUpdateData.title !== originalDisplayTitle) {
             finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
                 ? pendingUpdateData.title.trim() 
                 : typeName;
         }
         
-        const newAppointmentData: Appointment = {
-            id: newAppointmentRef.id, // ID is usually not stored in the doc, but good for type conformity
+        const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
-            
             startDate: Timestamp.fromDate(newStartDate),
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-            
             recurrence: originalAppointmentData.recurrence,
             recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-            
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: originalAppointmentData.rsvpDeadline,
-            
             locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
             description: pendingUpdateData.description ?? originalAppointmentData.description,
             meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
             meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-            
             createdBy: userId,
             createdAt: FieldValue.serverTimestamp(),
             lastUpdated: FieldValue.serverTimestamp(),
         };
-        // --- End: New explicit object creation ---
 
-        // Remove the 'id' field before setting the document
-        const { id, ...dataToSet } = newAppointmentData;
-        batch.set(newAppointmentRef, dataToSet);
+        batch.set(newAppointmentRef, newAppointmentData);
 
-        // Delete all future exceptions for the old series
         const instanceStartOfDay = startOfDay(instanceDate);
         const exceptionsQuery = db.collection('appointmentExceptions')
             .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
@@ -388,3 +373,4 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
