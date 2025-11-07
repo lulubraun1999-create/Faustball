@@ -134,6 +134,7 @@ import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 
 type GroupWithTeams = Group & { teams: Group[] };
@@ -2096,7 +2097,7 @@ export default function AdminTerminePage() {
                                     </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                    {appointmentsInMonth.map((app) => {
+                                    {appointmentsInMonth.map((app, index) => {
                                         const typeName =
                                         typesMap.get(app.appointmentTypeId) ||
                                         app.appointmentTypeId;
@@ -2122,171 +2123,187 @@ export default function AdminTerminePage() {
                                         rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
                                         }
 
+                                        const showBanner = index < appointmentsInMonth.length - 1 &&
+                                            appointmentsInMonth[index].startDate.toDate() < new Date('2024-12-01') &&
+                                            appointmentsInMonth[index + 1].startDate.toDate() >= new Date('2024-12-01');
+
 
                                         return (
-                                        <TableRow
-                                            key={app.virtualId}
-                                            className={cn(
-                                            isCancelled &&
-                                            'text-muted-foreground opacity-70'
-                                            )}
-                                        >
-                                            <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
-                                            {displayTitle}
-                                            </TableCell>
-                                            <TableCell>
-                                            {isCancelled ? (
-                                                <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
-                                                ABGESAGT
-                                                </span>
-                                            ) : (
-                                                <>
-                                                {app.startDate
+                                          <React.Fragment key={app.virtualId}>
+                                            <TableRow
+                                                
+                                                className={cn(
+                                                isCancelled &&
+                                                'text-muted-foreground opacity-70'
+                                                )}
+                                            >
+                                                <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
+                                                {displayTitle}
+                                                </TableCell>
+                                                <TableCell>
+                                                {isCancelled ? (
+                                                    <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
+                                                    ABGESAGT
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                    {app.startDate
+                                                        ? format(
+                                                            app.startDate.toDate(),
+                                                            app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                                            { locale: de }
+                                                        )
+                                                        : 'N/A'}
+                                                    {app.isException && !isCancelled && (
+                                                        <span className="ml-1 text-xs text-blue-600">
+                                                        (G)
+                                                        </span>
+                                                    )}
+                                                    </>
+                                                )}
+                                                </TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>
+                                                {app.visibility.type === 'all'
+                                                    ? 'Alle'
+                                                    : app.visibility.teamIds
+                                                    .map((id) => teamsMap.get(id) || id)
+                                                    .join(', ') || '-'}
+                                                </TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>
+                                                {app.locationId
+                                                    ? locationsMap.get(app.locationId)?.name || '-'
+                                                    : '-'}
+                                                </TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>{app.meetingPoint || '-'}</TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>{app.meetingTime || '-'}</TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>
+                                                {app.recurrence && app.recurrence !== 'none'
+                                                    ? `bis ${app.recurrenceEndDate
                                                     ? format(
-                                                        app.startDate.toDate(),
-                                                        app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                                        app.recurrenceEndDate.toDate(),
+                                                        'dd.MM.yy',
                                                         { locale: de }
                                                     )
-                                                    : 'N/A'}
-                                                {app.isException && !isCancelled && (
-                                                    <span className="ml-1 text-xs text-blue-600">
-                                                    (G)
-                                                    </span>
-                                                )}
-                                                </>
-                                            )}
-                                            </TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>
-                                            {app.visibility.type === 'all'
-                                                ? 'Alle'
-                                                : app.visibility.teamIds
-                                                .map((id) => teamsMap.get(id) || id)
-                                                .join(', ') || '-'}
-                                            </TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>
-                                            {app.locationId
-                                                ? locationsMap.get(app.locationId)?.name || '-'
-                                                : '-'}
-                                            </TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingPoint || '-'}</TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingTime || '-'}</TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>
-                                            {app.recurrence && app.recurrence !== 'none'
-                                                ? `bis ${app.recurrenceEndDate
-                                                ? format(
-                                                    app.recurrenceEndDate.toDate(),
-                                                    'dd.MM.yy',
-                                                    { locale: de }
-                                                )
-                                                : '...'
-                                                }`
-                                                : '-'}
-                                            </TableCell>
-                                            <TableCell className={cn(isCancelled && "line-through")}>{rsvpDeadlineString}</TableCell>
-                                            <TableCell className="text-right space-x-0">
-                                            <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}>
-                                                <Edit className="h-4 w-4" />
-                                                <span className="sr-only">Einzelnen Termin bearbeiten</span>
-                                            </Button>
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    disabled={isSubmitting}
-                                                >
-                                                    {' '}
-                                                    {isCancelled ? (
-                                                    <RefreshCw className="h-4 w-4 text-green-600" />
-                                                    ) : (
-                                                    <CalendarX className="h-4 w-4 text-orange-600" />
-                                                    )}{' '}
-                                                    <span className="sr-only">
-                                                    {isCancelled
-                                                        ? 'Absage rückgängig'
-                                                        : 'Diesen Termin absagen'}
-                                                    </span>
+                                                    : '...'
+                                                    }`
+                                                    : '-'}
+                                                </TableCell>
+                                                <TableCell className={cn(isCancelled && "line-through")}>{rsvpDeadlineString}</TableCell>
+                                                <TableCell className="text-right space-x-0">
+                                                <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}>
+                                                    <Edit className="h-4 w-4" />
+                                                    <span className="sr-only">Einzelnen Termin bearbeiten</span>
                                                 </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    {' '}
-                                                    <AlertDialogTitle>
-                                                    {isCancelled
-                                                        ? 'Absage rückgängig machen?'
-                                                        : 'Nur diesen Termin absagen?'}
-                                                    </AlertDialogTitle>{' '}
-                                                    <AlertDialogDescription>
-                                                    {isCancelled
-                                                        ? `Soll der abgesagte Termin am ${format(
-                                                        app.startDate.toDate(),
-                                                        'dd.MM.yyyy'
-                                                        )} wiederhergestellt werden?`
-                                                        : `Möchten Sie nur den Termin am ${format(
-                                                        app.startDate.toDate(),
-                                                        'dd.MM.yyyy'
-                                                        )} absagen? Die Serie bleibt bestehen.`}
-                                                    </AlertDialogDescription>{' '}
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    {' '}
-                                                    <AlertDialogCancel>
-                                                    Abbrechen
-                                                    </AlertDialogCancel>{' '}
-                                                    <AlertDialogAction
-                                                    onClick={() =>
-                                                        handleCancelSingleInstance(app)
-                                                    }
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        disabled={isSubmitting}
                                                     >
-                                                    {isCancelled
-                                                        ? 'Wiederherstellen'
-                                                        : 'Absagen'}
-                                                    </AlertDialogAction>{' '}
-                                                </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                        {' '}
+                                                        {isCancelled ? (
+                                                        <RefreshCw className="h-4 w-4 text-green-600" />
+                                                        ) : (
+                                                        <CalendarX className="h-4 w-4 text-orange-600" />
+                                                        )}{' '}
+                                                        <span className="sr-only">
+                                                        {isCancelled
+                                                            ? 'Absage rückgängig'
+                                                            : 'Diesen Termin absagen'}
+                                                        </span>
+                                                    </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        {' '}
+                                                        <AlertDialogTitle>
+                                                        {isCancelled
+                                                            ? 'Absage rückgängig machen?'
+                                                            : 'Nur diesen Termin absagen?'}
+                                                        </AlertDialogTitle>{' '}
+                                                        <AlertDialogDescription>
+                                                        {isCancelled
+                                                            ? `Soll der abgesagte Termin am ${format(
+                                                            app.startDate.toDate(),
+                                                            'dd.MM.yyyy'
+                                                            )} wiederhergestellt werden?`
+                                                            : `Möchten Sie nur den Termin am ${format(
+                                                            app.startDate.toDate(),
+                                                            'dd.MM.yyyy'
+                                                            )} absagen? Die Serie bleibt bestehen.`}
+                                                        </AlertDialogDescription>{' '}
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        {' '}
+                                                        <AlertDialogCancel>
+                                                        Abbrechen
+                                                        </AlertDialogCancel>{' '}
+                                                        <AlertDialogAction
+                                                        onClick={() =>
+                                                            handleCancelSingleInstance(app)
+                                                        }
+                                                        >
+                                                        {isCancelled
+                                                            ? 'Wiederherstellen'
+                                                            : 'Absagen'}
+                                                        </AlertDialogAction>{' '}
+                                                    </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
 
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon">
-                                                    {' '}
-                                                    <Trash2 className="h-4 w-4 text-destructive" />{' '}
-                                                    <span className="sr-only">
-                                                    Serie löschen
-                                                    </span>
-                                                </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    {' '}
-                                                    <AlertDialogTitle>
-                                                    Ganze Serie löschen?
-                                                    </AlertDialogTitle>{' '}
-                                                    <AlertDialogDescription>
-                                                    Diese Aktion kann nicht rückgängig gemacht
-                                                    werden und löscht die gesamte Terminserie "
-                                                    {displayTitle}". Alle zukünftigen Termine
-                                                    dieser Serie werden entfernt.
-                                                    </AlertDialogDescription>{' '}
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    {' '}
-                                                    <AlertDialogCancel>
-                                                    Abbrechen
-                                                    </AlertDialogCancel>{' '}
-                                                    <AlertDialogAction
-                                                    onClick={() =>
-                                                        handleDeleteAppointment(app.originalId)
-                                                    }
-                                                    className="bg-destructive hover:bg-destructive/90"
-                                                    >
-                                                    Serie löschen
-                                                    </AlertDialogAction>{' '}
-                                                </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                            </TableCell>
-                                        </TableRow>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon">
+                                                        {' '}
+                                                        <Trash2 className="h-4 w-4 text-destructive" />{' '}
+                                                        <span className="sr-only">
+                                                        Serie löschen
+                                                        </span>
+                                                    </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        {' '}
+                                                        <AlertDialogTitle>
+                                                        Ganze Serie löschen?
+                                                        </AlertDialogTitle>{' '}
+                                                        <AlertDialogDescription>
+                                                        Diese Aktion kann nicht rückgängig gemacht
+                                                        werden und löscht die gesamte Terminserie "
+                                                        {displayTitle}". Alle zukünftigen Termine
+                                                        dieser Serie werden entfernt.
+                                                        </AlertDialogDescription>{' '}
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        {' '}
+                                                        <AlertDialogCancel>
+                                                        Abbrechen
+                                                        </AlertDialogCancel>{' '}
+                                                        <AlertDialogAction
+                                                        onClick={() =>
+                                                            handleDeleteAppointment(app.originalId)
+                                                        }
+                                                        className="bg-destructive hover:bg-destructive/90"
+                                                        >
+                                                        Serie löschen
+                                                        </AlertDialogAction>{' '}
+                                                    </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                                </TableCell>
+                                            </TableRow>
+                                            {showBanner && (
+                                              <TableRow>
+                                                <TableCell
+                                                  colSpan={9}
+                                                  className="bg-destructive/90 text-destructive-foreground text-center font-bold"
+                                                >
+                                                  Ab hier Doppelbuchungen möglich
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
+                                          </React.Fragment>
                                         );
                                     })}
                                     </TableBody>
