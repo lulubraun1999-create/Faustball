@@ -287,6 +287,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
       const batch = db.batch();
 
+      // End the old series one day before the instance that was edited
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
@@ -295,6 +296,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
       }
       
+      // Only update if the new end date is after or on the start date, otherwise delete
       if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
@@ -302,7 +304,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       } else {
         batch.delete(originalAppointmentRef);
       }
-
+      
+      // --- Create the new appointment series ---
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate);
@@ -313,55 +316,36 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
           throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
       }
-      
-      let typeName = 'Termin'; 
-      let isSonstiges = false;
-      if (originalAppointmentData.appointmentTypeId) { 
-          const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
-          if (typeDoc.exists) {
-              const typeData = typeDoc.data() as AppointmentType; 
-              typeName = typeData.name;
-              isSonstiges = typeName === 'Sonstiges';
-          }
-      }
 
-      const originalTitle = originalAppointmentData.title || '';
-      const titleIsDefault = !isSonstiges && originalTitle === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
-
-      let finalTitle = originalTitle;
-      if (pendingUpdateData.title !== originalDisplayTitle) {
-          finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
-              ? pendingUpdateData.title.trim() 
-              : typeName;
-      }
-      
+      // Explicitly define the new appointment object, do not spread originalAppointmentData
       const newAppointmentData: Omit<Appointment, 'id'> = {
-        title: finalTitle || 'Termin',
+        title: pendingUpdateData.title || originalAppointmentData.title,
         appointmentTypeId: originalAppointmentData.appointmentTypeId,
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         recurrence: originalAppointmentData.recurrence,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+        // Carry over the original recurrence end date
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate ? originalAppointmentData.recurrenceEndDate : null,
+        
         visibility: originalAppointmentData.visibility,
+        rsvpDeadline: originalAppointmentData.rsvpDeadline ? originalAppointmentData.rsvpDeadline : null,
         
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Beibehaltung der ursprünglichen Logik
         
-        createdBy: userId,
+        createdBy: userId, // Set new creator
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
       };
 
       batch.set(newAppointmentRef, newAppointmentData);
 
+      // Delete all future exceptions for the old series
       const instanceStartOfDay = startOfDay(instanceDate);
-      
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
@@ -370,10 +354,11 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
       
       await batch.commit();
+      
       return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
+        throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
