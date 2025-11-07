@@ -189,7 +189,7 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
 /**
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
-export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
+export const saveSingleAppointmentException = onCall(async (request: CallableRequest<any>) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
@@ -264,7 +264,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 /**
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
  */
-export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest) => {
+export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest<any>) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
