@@ -1,9 +1,9 @@
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
-// KORRIGIERTER IMPORT: AppointmentType wird jetzt gefunden (nach Korrektur 1)
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
+import { addDays } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -38,9 +38,12 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Standardmäßig sich selbst
+  const targetUid = request.data?.uid || callerUid; // Fallback to the caller's UID
 
-  // Prüfen, ob bereits Admins existieren
+  if (typeof targetUid !== 'string' || targetUid.length === 0) {
+    throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
+  }
+
   let adminsExist = false;
   try {
       const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
@@ -50,16 +53,13 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
        throw new HttpsError('internal', 'Could not verify admin existence for promotion.', error.message);
   }
 
-  // Autorisierung: Erlaube, wenn der Aufrufer Admin ist ODER wenn kein Admin existiert und der Aufrufer sich selbst ernennt.
   if (!isCallerAdmin && !(adminsExist === false && targetUid === callerUid)) {
       throw new HttpsError('permission-denied', 'Only an admin can set other users as admins, or you must be the first user.');
   }
 
   try {
-    // 1. Custom Claim im Auth Token setzen
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
-    // 2. Firestore Dokumente (users und members) aktualisieren
     const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
@@ -93,7 +93,6 @@ export const revokeAdminRole = onCall(async (request: CallableRequest) => {
         throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
     }
 
-    // Prevent last admin from revoking themselves
     if (request.auth.uid === targetUid) {
         const adminSnapshot = await db.collection('users').where('role', '==', 'admin').get();
         if (adminSnapshot.size <= 1) {
@@ -161,7 +160,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
         throw new HttpsError('permission-denied', 'You do not have permission to send messages to this room.');
     }
 
-    // Benutzerprofildaten für den Anzeigenamen abrufen
     const userDoc = await db.collection('users').doc(userId).get();
     if (!userDoc.exists) {
         throw new HttpsError('not-found', 'User profile not found.');
@@ -169,7 +167,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
     const userData = userDoc.data();
     const userName = `${userData?.firstName || ''} ${userData?.lastName || ''}`.trim() || 'Unbekannt';
 
-    // Nachrichtendaten erstellen und in die Datenbank schreiben
     const messageData = {
         userId: userId,
         userName: userName,
@@ -200,18 +197,24 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
+    if (!pendingUpdateData || !selectedInstanceToEdit) {
+        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    }
+    
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
+    const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+      ? new Date(pendingUpdateData.endDate) 
+      : null;
 
-    if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-        throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
+    if (isNaN(originalDate.getTime()) || isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
+        throw new HttpsError('invalid-argument', 'Invalid date format provided.');
     }
 
+    const originalDateStartOfDay = new Date(originalDate);
+    originalDateStartOfDay.setHours(0, 0, 0, 0);
+
     const exceptionsColRef = db.collection('appointmentExceptions');
-    
-    // Search for existing exception on the server
     const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
@@ -220,7 +223,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
         title: pendingUpdateData.title,
         locationId: pendingUpdateData.locationId,
         description: pendingUpdateData.description,
@@ -229,21 +232,27 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay,
     };
 
-    const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: FieldValue.serverTimestamp(),
-        userId: userId,
-    };
-
     try {
         if (existingExceptionDoc) {
-            await existingExceptionDoc.ref.update({ modifiedData: modifiedData, status: 'modified', userId: userId });
+            await db.collection('appointmentExceptions').doc(existingExceptionDoc.id).update({
+                 modifiedData: modifiedData,
+                 status: 'modified',
+                 userId: userId,
+                 lastUpdated: FieldValue.serverTimestamp()
+            });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
-            await exceptionsColRef.add(exceptionData);
+             const newExceptionData: Omit<AppointmentException, 'id'> = {
+                originalAppointmentId: selectedInstanceToEdit.originalId,
+                originalDate: Timestamp.fromDate(originalDateStartOfDay),
+                status: 'modified',
+                modifiedData: modifiedData,
+                createdAt: FieldValue.serverTimestamp(),
+                lastUpdated: FieldValue.serverTimestamp(),
+                userId: userId,
+            };
+            const newDocRef = db.collection('appointmentExceptions').doc();
+            await db.collection('appointmentExceptions').doc(newDocRef.id).set(newExceptionData);
             return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
         }
     } catch (error: any) {
@@ -263,6 +272,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
+    if (!pendingUpdateData || !selectedInstanceToEdit) {
+        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    }
+
     try {
       const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
       const originalAppointmentSnap = await originalAppointmentRef.get();
@@ -277,12 +290,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
-      const originalStartDate = originalAppointmentData.startDate?.toDate();
-      if (!originalStartDate) {
-          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
-      }
+      const instanceStartOfDay = new Date(instanceDate);
+      instanceStartOfDay.setHours(0,0,0,0);
       
-      if (dayBefore >= originalStartDate) {
+      if (dayBefore >= instanceStartOfDay) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
         });
@@ -292,15 +303,20 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null; // <-- KORRIGIERT (zu null)
+      const newStartDate = new Date(pendingUpdateData.startDate);
+      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+        ? new Date(pendingUpdateData.endDate) 
+        : null;
+
+      if (isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
+          throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
+      }
       
       let typeName = 'Termin'; 
       let isSonstiges = false;
       if (originalAppointmentData.appointmentTypeId) { 
           const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
           if (typeDoc.exists) {
-              // Hier wird AppointmentType benötigt
               const typeData = typeDoc.data() as AppointmentType; 
               typeName = typeData.name;
               isSonstiges = typeName === 'Sonstiges';
@@ -329,7 +345,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
@@ -342,7 +358,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
-        .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
+        .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
         
       const exceptionsSnap = await exceptionsQuery.get();
       exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
