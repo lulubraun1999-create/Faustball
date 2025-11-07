@@ -57,6 +57,9 @@ import {
   startOfDay,
   differenceInMilliseconds,
   isBefore,
+  set,
+  getMonth,
+  getYear,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -68,6 +71,7 @@ import {
 } from '@/components/ui/popover';
 import Link from 'next/link';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -140,25 +144,26 @@ export default function KalenderPage() {
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions?.forEach(ex => {
         if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-            const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+            const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
             exceptionsMap.set(key, ex);
         }
     });
 
     appointments.forEach(app => {
       if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+
       const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
+      const appStartDate = app.startDate.toDate();
 
       if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
-        const singleDate = app.startDate.toDate();
-        const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
+        const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
         let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
             const modData = exception.modifiedData;
-            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
+            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
             isException = true;
         }
         
@@ -172,10 +177,14 @@ export default function KalenderPage() {
         });
 
       } else {
-        let currentDate = app.startDate.toDate();
+        let currentDate = appStartDate;
         const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         let iter = 0;
-        const MAX_ITERATIONS = 500;
+        const MAX_ITERATIONS = 500; // Sicherheits-Check
+
+        const startMonth = getMonth(currentDate);
+        const startDayOfMonth = currentDate.getDate();
+        const startDayOfWeek = currentDate.getDay();
 
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
@@ -185,13 +194,14 @@ export default function KalenderPage() {
                 let isException = false;
                 let instanceData = { ...app };
                 let instanceStartDate = currentDate;
-                let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
+                let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
 
                 if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                    instanceData = { ...instanceData, ...instanceException.modifiedData };
-                    instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
-                    instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
                     isException = true;
+                    const modData = instanceException.modifiedData;
+                    instanceData = { ...instanceData, ...modData };
+                    instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
+                    instanceEndDate = modData?.endDate?.toDate() ?? instanceEndDate;
                 }
                 
                 events.push({
@@ -207,14 +217,19 @@ export default function KalenderPage() {
                 });
             }
 
+          iter++;
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            case 'monthly':
+                const nextMonth = addMonths(currentDate, 1);
+                const daysInNextMonth = new Date(getYear(nextMonth), getMonth(nextMonth) + 1, 0).getDate();
+                const targetDate = Math.min(startDayOfMonth, daysInNextMonth);
+                currentDate = set(nextMonth, { date: targetDate });
+                break;
             default: iter = MAX_ITERATIONS; break;
           }
-          iter++;
         }
       }
     });

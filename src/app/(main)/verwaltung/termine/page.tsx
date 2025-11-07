@@ -64,7 +64,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
-import { addDays, addMonths, addWeeks, format as formatDate, isBefore, startOfDay, differenceInMilliseconds } from "date-fns";
+import { addDays, addMonths, addWeeks, format as formatDate, isBefore, startOfDay, differenceInMilliseconds, set, getMonth, getYear } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   Tooltip,
@@ -77,6 +77,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
@@ -167,7 +168,7 @@ export default function VerwaltungTerminePage() {
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions?.forEach(ex => {
         if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-            const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+            const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
             exceptionsMap.set(key, ex);
         }
     });
@@ -177,13 +178,14 @@ export default function VerwaltungTerminePage() {
   
     appointments.forEach(app => {
       if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+
       const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
+      const appStartDate = app.startDate.toDate();
 
       if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
-        const singleDate = app.startDate.toDate();
-        if (isBefore(singleDate, today)) return;
+        if (isBefore(appStartDate, today)) return;
 
-        const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
+        const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         if (exception?.status === 'cancelled') return;
 
@@ -191,7 +193,7 @@ export default function VerwaltungTerminePage() {
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
             const modData = exception.modifiedData;
-            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
+            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
             isException = true;
         }
 
@@ -204,10 +206,14 @@ export default function VerwaltungTerminePage() {
           isException,
         });
       } else {
-        let currentDate = app.startDate.toDate();
+        let currentDate = appStartDate;
         const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         let iter = 0;
-        const MAX_ITERATIONS = 500;
+        const MAX_ITERATIONS = 500; // Sicherheits-Check
+
+        const startMonth = getMonth(currentDate);
+        const startDayOfMonth = currentDate.getDate();
+        const startDayOfWeek = currentDate.getDay();
   
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= today) {
@@ -218,13 +224,14 @@ export default function VerwaltungTerminePage() {
                 let isException = false;
                 let instanceData = { ...app };
                 let instanceStartDate = currentDate;
-                let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
+                let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
 
                 if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                    instanceData = { ...instanceData, ...instanceException.modifiedData };
-                    instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
-                    instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
                     isException = true;
+                    const modData = instanceException.modifiedData;
+                    instanceData = { ...instanceData, ...modData };
+                    instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
+                    instanceEndDate = modData?.endDate?.toDate() ?? instanceEndDate;
                 }
                 
                 allEvents.push({
@@ -241,14 +248,19 @@ export default function VerwaltungTerminePage() {
             }
           }
           
+          iter++;
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            case 'monthly':
+                const nextMonth = addMonths(currentDate, 1);
+                const daysInNextMonth = new Date(getYear(nextMonth), getMonth(nextMonth) + 1, 0).getDate();
+                const targetDate = Math.min(startDayOfMonth, daysInNextMonth);
+                currentDate = set(nextMonth, { date: targetDate });
+                break;
             default: iter = MAX_ITERATIONS; break;
           }
-          iter++;
         }
       }
     });

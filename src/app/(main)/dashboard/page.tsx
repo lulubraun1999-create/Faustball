@@ -9,8 +9,9 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@
 import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore';
 import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentException, AppointmentType } from '@/lib/types';
 import Link from 'next/link';
-import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore } from 'date-fns';
+import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getMonth, getYear, set } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -73,80 +74,87 @@ export default function DashboardPage() {
     }, [allGroups, memberProfile]);
 
     const { nextMatchDay, nextAppointments } = useMemo(() => {
-      if (!appointments || !appointmentTypes || !memberProfile || isLoadingExceptions) return { nextMatchDay: null, nextAppointments: [] };
-      
-      const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
-      const userTeamIds = new Set(memberProfile.teams || []);
-      
-      const exceptionsMap = new Map<string, AppointmentException>();
-      exceptions?.forEach(ex => {
-          if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-              const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
-              exceptionsMap.set(key, ex);
-          }
-      });
+        if (!appointments || !appointmentTypes || !memberProfile || isLoadingExceptions) return { nextMatchDay: null, nextAppointments: [] };
+        
+        const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
+        const userTeamIds = new Set(memberProfile.teams || []);
+        
+        const exceptionsMap = new Map<string, AppointmentException>();
+        exceptions?.forEach(ex => {
+            if (ex.originalDate && ex.originalDate instanceof Timestamp) {
+                const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+                exceptionsMap.set(key, ex);
+            }
+        });
+  
+        const allEvents: UnrolledAppointment[] = [];
+        const today = startOfDay(new Date());
+  
+        appointments.forEach(app => {
+            if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
 
-      const allEvents: UnrolledAppointment[] = [];
-      const today = startOfDay(new Date());
+            const isVisibleToUser = (event: Appointment) => {
+                if (event.visibility.type === 'all') return true;
+                return event.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+            };
+  
+            if (!isVisibleToUser(app)) return;
 
-      appointments.forEach(app => {
-          if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
-          const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
+            const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
+            const appStartDate = app.startDate.toDate();
 
-          const isVisibleToUser = (event: Appointment) => {
-              if (event.visibility.type === 'all') return true;
-              return event.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
-          };
-
-          if (!isVisibleToUser(app)) return;
-
-          if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
-              const singleDate = app.startDate.toDate();
-              if (isBefore(singleDate, today)) return;
-
-              const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
-              const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
-              if (exception?.status === 'cancelled') return;
-
-              let finalData: Appointment = { ...app };
-              let isException = false;
-              if (exception?.status === 'modified' && exception.modifiedData) {
-                  const modData = exception.modifiedData;
-                  finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
-                  isException = true;
-              }
-
-              allEvents.push({
-                  ...finalData,
-                  instanceDate: finalData.startDate.toDate(),
-                  originalId: app.id,
-                  virtualId: app.id,
-                  isCancelled: false,
-                  isException,
-                  originalDateISO: originalDateStartOfDayISO,
-              });
-          } else {
-              let currentDate = app.startDate.toDate();
+            if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+                if (isBefore(appStartDate, today)) return;
+  
+                const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
+                const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
+                
+                if (exception?.status === 'cancelled') return;
+  
+                let finalData: Appointment = { ...app };
+                let isException = false;
+                if (exception?.status === 'modified' && exception.modifiedData) {
+                    const modData = exception.modifiedData;
+                    finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
+                    isException = true;
+                }
+  
+                allEvents.push({
+                    ...finalData,
+                    instanceDate: finalData.startDate.toDate(),
+                    originalId: app.id,
+                    virtualId: app.id,
+                    isCancelled: false,
+                    isException,
+                    originalDateISO: originalDateStartOfDayISO,
+                });
+            } else {
+              let currentDate = appStartDate;
               const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
               let iter = 0;
-              const MAX_ITERATIONS = 500;
-
+              const MAX_ITERATIONS = 500; // Sicherheits-Check
+              
+              const startMonth = getMonth(currentDate);
+              const startDayOfMonth = currentDate.getDate();
+              const startDayOfWeek = currentDate.getDay();
+  
               while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
                   if (currentDate >= today) {
                       const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
                       const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
-
+  
                       if (instanceException?.status !== 'cancelled') {
                           let isException = false;
                           let instanceData = { ...app };
                           let instanceStartDate = currentDate;
-                          let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
-
+                          let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
+  
                           if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                              instanceData = { ...instanceData, ...instanceException.modifiedData };
-                              instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
-                              instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
                               isException = true;
+                              const modData = instanceException.modifiedData;
+                              instanceData = { ...instanceData, ...modData };
+                              instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
+                              instanceEndDate = modData?.endDate?.toDate() ?? instanceEndDate;
                           }
                           
                            allEvents.push({
@@ -163,30 +171,35 @@ export default function DashboardPage() {
                           });
                       }
                   }
-
+  
+                  iter++;
                   switch (app.recurrence) {
                       case 'daily': currentDate = addDays(currentDate, 1); break;
                       case 'weekly': currentDate = addWeeks(currentDate, 1); break;
                       case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-                      case 'monthly': currentDate = addMonths(currentDate, 1); break;
+                      case 'monthly':
+                          const nextMonth = addMonths(currentDate, 1);
+                          const daysInNextMonth = new Date(getYear(nextMonth), getMonth(nextMonth) + 1, 0).getDate();
+                          const targetDate = Math.min(startDayOfMonth, daysInNextMonth);
+                          currentDate = set(nextMonth, { date: targetDate });
+                          break;
                       default: iter = MAX_ITERATIONS; break;
                   }
-                  iter++;
               }
-          }
-      });
-      
-      const sortedEvents = allEvents.sort((a, b) => a.instanceDate.getTime() - b.instanceDate.getTime());
-      
-      const matchDays = sortedEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
-      const otherAppointments = sortedEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
-
-      return {
-          nextMatchDay: matchDays[0] || null,
-          nextAppointments: otherAppointments.slice(0, 3),
-      };
-      
-    }, [appointments, exceptions, appointmentTypes, memberProfile, isLoadingExceptions]);
+            }
+        });
+        
+        const sortedEvents = allEvents.sort((a, b) => a.instanceDate.getTime() - b.instanceDate.getTime());
+        
+        const matchDays = sortedEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
+        const otherAppointments = sortedEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
+  
+        return {
+            nextMatchDay: matchDays[0] || null,
+            nextAppointments: otherAppointments.slice(0, 3),
+        };
+        
+      }, [appointments, exceptions, appointmentTypes, memberProfile, isLoadingExceptions]);
 
     const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups || isLoadingTypes;
 
