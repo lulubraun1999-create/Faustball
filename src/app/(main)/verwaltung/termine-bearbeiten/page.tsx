@@ -690,7 +690,7 @@ export default function AdminTerminePage() {
           originalId: selectedInstanceToEdit.originalId,
         };
 
-        await saveSingleException(payload);
+        await saveSingleException({pendingUpdateData: pendingUpdateData, selectedInstanceToEdit: {originalId: selectedInstanceToEdit.originalId}});
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -721,12 +721,7 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      const payload = {
-        ...pendingUpdateData,
-        originalId: selectedInstanceToEdit.originalId,
-      };
-
-      await saveFutureInstancesFn(payload);
+      await saveFutureInstancesFn({pendingUpdateData, selectedInstanceToEdit: { originalId: selectedInstanceToEdit.originalId }});
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -1008,6 +1003,8 @@ export default function AdminTerminePage() {
   }
 
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
+  
+  let lastMonth = '';
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -2056,14 +2053,15 @@ export default function AdminTerminePage() {
             <div className="overflow-x-auto">
                {Object.keys(groupedAppointments).length > 0 ? (
                  <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-                    {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth], monthIndex) => {
-                      // Check if the next month is December 2024 to show the banner
-                      const currentMonthDate = appointmentsInMonth[0]?.startDate.toDate();
-                      const showDoppelbuchungBanner = 
-                        currentMonthDate &&
-                        currentMonthDate.getFullYear() === 2024 &&
-                        currentMonthDate.getMonth() === 11; // 11 = December
+                    {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => {
+                         const currentMonthDate = appointmentsInMonth[0]?.startDate.toDate();
+                         const monthKey = format(currentMonthDate, 'yyyy-MM');
+                         const prevMonthKey = lastMonth;
+                         lastMonth = monthKey;
 
+                         const showDoppelbuchungBanner = 
+                            prevMonthKey === '2024-11' && monthKey === '2024-12';
+                      
                       return (
                         <React.Fragment key={monthYear}>
                            {showDoppelbuchungBanner && (
@@ -2288,7 +2286,7 @@ export default function AdminTerminePage() {
                               </AccordionContent>
                           </AccordionItem>
                         </React.Fragment>
-                      );
+                      )
                     })}
                  </Accordion>
                 ) : (
