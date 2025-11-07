@@ -205,7 +205,7 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
 
     const canVoteNow = !pollExpired && userVotedOptionIds.size === 0 && canUserVote;
     const canRetractVote = !pollExpired && userVotedOptionIds.size > 0 && canUserVote;
-    const showResults = pollExpired || userVotedOptionIds.size > 0 || !canUserVote;
+    const showResults = pollExpired || userVotedOptionIds.size > 0;
 
 
     useEffect(() => {
