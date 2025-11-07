@@ -661,20 +661,20 @@ export default function AdminTerminePage() {
     instanceForm.reset();
   };
 
+  const callCloudFunction = async (functionName: string, data: any) => {
+    const { firebaseApp } = initializeFirebase();
+    const functions = getFunctions(firebaseApp);
+    const func = httpsCallable(functions, functionName);
+    await func(data);
+  };
+
   async function handleSaveSingleOnly() {
     if (!firestore || !pendingUpdateData || !user) return;
     setIsSubmitting(true);
     
     try {
-        const { firebaseApp } = initializeFirebase();
-        const functions = getFunctions(firebaseApp);
-        const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
-
-        // Pass the raw form data directly
-        await saveSingleException(pendingUpdateData);
-
-        toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
-
+      await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
+      toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) {
         toast({
             variant: "destructive",
@@ -698,13 +698,7 @@ export default function AdminTerminePage() {
     }
 
     try {
-      const { firebaseApp } = initializeFirebase();
-      const functions = getFunctions(firebaseApp);
-      const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
-      
-      // Pass the raw form data directly, Cloud Function handles logic
-      await saveFutureInstancesFn(pendingUpdateData);
-      
+      await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
@@ -717,7 +711,7 @@ export default function AdminTerminePage() {
         setIsSubmitting(false);
         resetSingleInstanceDialogs();
     }
-}
+  }
 
 
   const handleCancelSingleInstance = async (
@@ -2043,4 +2037,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
