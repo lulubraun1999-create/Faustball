@@ -194,20 +194,18 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
-    
-    // Correctly access nested data if necessary, or directly if not.
-    // Based on frontend code, it's sent directly, not nested.
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+
+    const { originalId, originalDateISO, startDate, endDate, isAllDay, title, locationId, description, meetingPoint, meetingTime } = request.data;
     const userId = request.auth.uid;
 
-    if (!pendingUpdateData || !selectedInstanceToEdit) {
-        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    if (!originalId || !originalDateISO || !startDate) {
+        throw new HttpsError('invalid-argument', 'Missing required data for exception.');
     }
-    
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-      ? new Date(pendingUpdateData.endDate) 
+
+    const originalDate = new Date(originalDateISO);
+    const newStartDate = new Date(startDate);
+    const newEndDate = (endDate && typeof endDate === 'string' && endDate.trim() !== '') 
+      ? new Date(endDate) 
       : null;
 
     if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
@@ -217,7 +215,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const originalDateStartOfDay = startOfDay(originalDate);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+    const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
     const querySnapshot = await q.get();
@@ -226,12 +224,12 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-        title: pendingUpdateData.title,
-        locationId: pendingUpdateData.locationId,
-        description: pendingUpdateData.description,
-        meetingPoint: pendingUpdateData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay,
+        title: title,
+        locationId: locationId,
+        description: description,
+        meetingPoint: meetingPoint,
+        meetingTime: meetingTime,
+        isAllDay: isAllDay,
     };
 
     try {
@@ -246,7 +244,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
              const newExceptionData: Omit<AppointmentException, 'id'> = {
-                originalAppointmentId: selectedInstanceToEdit.originalId,
+                originalAppointmentId: originalId,
                 originalDate: Timestamp.fromDate(originalDateStartOfDay),
                 status: 'modified',
                 modifiedData: modifiedData,
@@ -272,15 +270,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    const { originalId, originalDateISO, startDate, endDate, isAllDay, title, locationId, description, meetingPoint, meetingTime } = request.data;
     const userId = request.auth.uid;
 
-    if (!pendingUpdateData || !selectedInstanceToEdit) {
-        throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
+    if (!originalId || !originalDateISO || !startDate) {
+        throw new HttpsError('invalid-argument', 'Missing required data to split series.');
     }
 
     try {
-        const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
+        const originalAppointmentRef = db.collection('appointments').doc(originalId);
         const originalAppointmentSnap = await originalAppointmentRef.get();
 
         if (!originalAppointmentSnap.exists) {
@@ -290,7 +288,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
         const batch = db.batch();
 
-        const instanceDate = new Date(pendingUpdateData.originalDateISO);
+        const instanceDate = new Date(originalDateISO);
         if(!isValid(instanceDate)) {
              throw new HttpsError('invalid-argument', 'Invalid original instance date provided.');
         }
@@ -313,9 +311,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             batch.delete(originalAppointmentRef);
         }
         
-        const newStartDate = new Date(pendingUpdateData.startDate);
-        const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-            ? new Date(pendingUpdateData.endDate) 
+        const newStartDate = new Date(startDate);
+        const newEndDate = (endDate && typeof endDate === 'string' && endDate.trim() !== '') 
+            ? new Date(endDate) 
             : null;
 
         if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
@@ -338,9 +336,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
 
         let finalTitle = originalTitle;
-        if (pendingUpdateData.title !== originalDisplayTitle) {
-            finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
-                ? pendingUpdateData.title.trim() 
+        if (title !== originalDisplayTitle) {
+            finalTitle = (title && title.trim() !== '') 
+                ? title.trim() 
                 : typeName;
         }
         
@@ -349,15 +347,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
             startDate: Timestamp.fromDate(newStartDate),
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-            isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+            isAllDay: isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
             recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
-            locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-            description: pendingUpdateData.description ?? originalAppointmentData.description,
-            meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-            meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+            locationId: locationId ?? originalAppointmentData.locationId,
+            description: description ?? originalAppointmentData.description,
+            meetingPoint: meetingPoint ?? originalAppointmentData.meetingPoint,
+            meetingTime: meetingTime ?? originalAppointmentData.meetingTime,
             createdBy: userId,
             createdAt: FieldValue.serverTimestamp(),
             lastUpdated: FieldValue.serverTimestamp(),
@@ -368,7 +366,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
         const instanceStartOfDay = startOfDay(instanceDate);
         const exceptionsQuery = db.collection('appointmentExceptions')
-            .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+            .where('originalAppointmentId', '==', originalId)
             .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
             
         const exceptionsSnap = await exceptionsQuery.get();
@@ -382,5 +380,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
 
 

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -660,14 +661,7 @@ export default function AdminTerminePage() {
   ) => {
     if (!selectedInstanceToEdit) return;
   
-    // Convert local datetime-local string to ISO string for the backend
-    const payload = {
-        ...data,
-        startDate: new Date(data.startDate).toISOString(),
-        endDate: data.endDate ? new Date(data.endDate).toISOString() : '',
-    };
-  
-    setPendingUpdateData(payload);
+    setPendingUpdateData(data);
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -689,10 +683,12 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        await saveSingleException({
-            pendingUpdateData,
-            selectedInstanceToEdit,
-        });
+        const payload = {
+            ...pendingUpdateData,
+            originalId: selectedInstanceToEdit.originalId,
+        };
+
+        await saveSingleException(payload);
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -723,10 +719,12 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      await saveFutureInstancesFn({
-        pendingUpdateData,
-        selectedInstanceToEdit,
-      });
+      const payload = {
+        ...pendingUpdateData,
+        originalId: selectedInstanceToEdit.originalId,
+      };
+
+      await saveFutureInstancesFn(payload);
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -2095,3 +2093,4 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
