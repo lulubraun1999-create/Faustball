@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -982,10 +981,9 @@ export default function AdminTerminePage() {
     );
   }
 
-  const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
-  
   const monthKeys = Object.keys(groupedAppointments);
-
+  const accordionDefaultValue = monthKeys.length > 0 ? [monthKeys[0]] : [];
+  
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Dialog
@@ -2029,22 +2027,24 @@ export default function AdminTerminePage() {
             <div className="flex justify-center p-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : Object.keys(groupedAppointments).length > 0 ? (
+          ) : monthKeys.length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {monthKeys.map((monthYear, index) => {
                 const appointmentsInMonth = groupedAppointments[monthYear];
                 const prevMonthYear = index > 0 ? monthKeys[index - 1] : '';
 
-                const showBanner =
-                  monthYear === 'Dezember 2024' &&
-                  prevMonthYear === 'November 2024';
+                const showBanner = monthYear === 'Dezember 2024' && prevMonthYear === 'November 2024';
 
                 return (
                   <React.Fragment key={monthYear}>
                     {showBanner && (
-                      <div className="my-4 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-center text-sm font-semibold text-destructive">
-                        Ab hier Doppelbuchungen möglich
-                      </div>
+                      <tr>
+                        <td colSpan={9} className="p-0">
+                          <div className="my-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm font-semibold text-destructive">
+                            Ab hier Doppelbuchungen möglich
+                          </div>
+                        </td>
+                      </tr>
                     )}
                     <AccordionItem value={monthYear}>
                       <AccordionTrigger className="text-lg font-semibold">
@@ -2270,4 +2270,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
