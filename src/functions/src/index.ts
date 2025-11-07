@@ -273,9 +273,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
-    const { originalId, originalDateISO } = selectedInstanceToEdit;
-    const { startDate: startDateString, endDate: endDateString, ...rest } = pendingUpdateData;
+    const { originalId, originalDateISO, startDate: startDateString, endDate: endDateString, ...rest } = request.data;
     const userId = request.auth.uid;
 
     if (!originalId || !originalDateISO || !startDateString) {

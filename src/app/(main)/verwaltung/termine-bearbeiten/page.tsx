@@ -155,6 +155,7 @@ type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
 const singleAppointmentInstanceSchema = z
   .object({
+    originalId: z.string(), // ID of the original recurring appointment
     originalDateISO: z.string(), // Keep as ISO string for backend
     startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'), // Keep as string for form
     endDate: z.string().optional(), // Keep as string for form
@@ -661,7 +662,7 @@ export default function AdminTerminePage() {
   };
 
   async function handleSaveSingleOnly() {
-    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
+    if (!firestore || !pendingUpdateData || !user) return;
     setIsSubmitting(true);
     
     try {
@@ -687,7 +688,7 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
+    if (!firestore || !pendingUpdateData || !user) return;
     setIsSubmitting(true);
 
     if (!isAdmin) {
@@ -701,15 +702,8 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
       
-      const payload = {
-        pendingUpdateData: pendingUpdateData,
-        selectedInstanceToEdit: {
-            originalId: selectedInstanceToEdit.originalId,
-            originalDateISO: selectedInstanceToEdit.originalDateISO,
-        },
-      };
-
-      await saveFutureInstancesFn(payload);
+      // Pass the raw form data directly, Cloud Function handles logic
+      await saveFutureInstancesFn(pendingUpdateData);
       
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -830,6 +824,7 @@ export default function AdminTerminePage() {
     const titleIsDefault = !isSonstiges && appointment.title === typeName;
 
     instanceForm.reset({
+        originalId: appointment.originalId,
         originalDateISO: appointment.originalDateISO,
         startDate: startDateString,
         endDate: endDateString,
@@ -1561,6 +1556,10 @@ export default function AdminTerminePage() {
               <input
                 type="hidden"
                 {...instanceForm.register('originalDateISO')}
+              />
+               <input
+                type="hidden"
+                {...instanceForm.register('originalId')}
               />
               <FormField
                 control={instanceForm.control}
