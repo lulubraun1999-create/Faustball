@@ -322,50 +322,26 @@ export default function AdminTerminePage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
-  const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo<{
-    typesMap: Map<string, string>;
-    locationsMap: Map<string, Location>;
-    teams: Group[];
-    teamsMap: Map<string, string>;
-    groupedTeams: GroupWithTeams[];
-  }>(() => {
-    const allGroups: Group[] = groups || [];
-    const typesMap = new Map(
-      appointmentTypes?.map((t: AppointmentType) => [t.id, t.name])
-    );
-    const locationsMap = new Map(
-      locations?.map((l: Location) => [l.id, l])
-    );
+  const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo(() => {
+    const allGroups = groups || [];
+    const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
+    const locationsMap = new Map(locations?.map((l) => [l.id, l]));
     const classes = allGroups
-      .filter((g: Group) => g.type === 'class')
-      .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
+      .filter((g) => g.type === 'class')
+      .sort((a, b) => a.name.localeCompare(b.name));
     const teams = allGroups
-      .filter((g: Group) => g.type === 'team')
-      .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
-    const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
-
-    const customSort = (a: Group, b: Group) => {
-      const regex = /^(U)(\d+)/i;
-      const matchA = a.name.match(regex);
-      const matchB = b.name.match(regex);
-
-      if (matchA && matchB) {
-        return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
-      }
-      return a.name.localeCompare(b.name);
-    };
-
+      .filter((g) => g.type === 'team')
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const teamsMap = new Map(teams.map((t) => [t.id, t.name]));
+  
     const grouped = classes
-      .sort(customSort)
-      .map((c: Group) => ({
+      .map((c) => ({
         ...c,
-        teams: teams
-          .filter((t: Group) => t.parentId === c.id)
-          .sort(customSort),
+        teams: teams.filter((t) => t.parentId === c.id),
       }))
-      .filter((c: GroupWithTeams) => c.teams.length > 0);
-
-    return { typesMap, locationsMap, teams, teamsMap, groupedTeams };
+      .filter((c) => c.teams.length > 0);
+  
+    return { typesMap, locationsMap, teams, teamsMap, groupedTeams: grouped };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -529,24 +505,27 @@ export default function AdminTerminePage() {
   }, [appointments, exceptions, isLoadingExceptions]);
 
  const filteredAppointments = useMemo(() => {
-    if (isMemberProfileLoading) return [];
-    
-    // Safety check: if memberProfile is not loaded, we can't filter by 'myTeams'.
-    // Default to 'all' in this case to prevent errors.
-    const effectiveTeamFilter = teamFilter === 'myTeams' && !memberProfile ? 'all' : teamFilter;
-    const userTeamIdsSet = new Set(memberProfile?.teams || []);
+    // Wait until appointments are loaded
+    if (!unrolledAppointments) return [];
   
     let preFiltered = unrolledAppointments;
   
-    if (effectiveTeamFilter === 'myTeams') {
-      preFiltered = unrolledAppointments.filter((app) => {
-        if (app.visibility.type === 'all') return true;
-        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
-      });
-    } else if (effectiveTeamFilter !== 'all') {
-      preFiltered = unrolledAppointments.filter(
-        (app) => app.visibility.teamIds.includes(effectiveTeamFilter)
-      );
+    // Only apply team-based filtering if the member profile is loaded.
+    if (memberProfile) {
+        const userTeamIdsSet = new Set(memberProfile.teams || []);
+        if (teamFilter === 'myTeams') {
+            preFiltered = unrolledAppointments.filter((app) => {
+                if (app.visibility.type === 'all') return true;
+                return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
+            });
+        } else if (teamFilter !== 'all') {
+            preFiltered = unrolledAppointments.filter(
+                (app) => app.visibility.teamIds.includes(teamFilter)
+            );
+        }
+    } else if (teamFilter !== 'all') {
+        // If profile is not loaded yet but a specific team is selected, return nothing to avoid showing wrong data.
+        return [];
     }
   
     const finalFiltered = preFiltered.filter(
@@ -554,7 +533,7 @@ export default function AdminTerminePage() {
     );
   
     return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile, isMemberProfileLoading]);
+  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
 
   const groupedAppointments = useMemo(() => {
     const groups: Record<string, UnrolledAppointment[]> = {};
