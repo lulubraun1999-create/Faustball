@@ -194,7 +194,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -269,7 +269,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
