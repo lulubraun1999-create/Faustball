@@ -304,12 +304,7 @@ export default function AdminTerminePage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
-  const { typesMap, locationsMap, teamsMap, groupedTeams } = useMemo<{
-    typesMap: Map<string, string>;
-    locationsMap: Map<string, Location>;
-    teamsMap: Map<string, string>;
-    groupedTeams: GroupWithTeams[];
-  }>(() => {
+  const { typesMap, locationsMap, teamsMap, groupedTeams } = useMemo(() => {
     const allGroups: Group[] = groups || [];
     const typesMap = new Map(
       appointmentTypes?.map((t: AppointmentType) => [t.id, t.name])
@@ -325,16 +320,14 @@ export default function AdminTerminePage() {
       .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
 
-
     const grouped: GroupWithTeams[] = classes
       .map((c: Group) => ({
         ...c,
-        teams: teams
-          .filter((t: Group) => t.parentId === c.id),
+        teams: teams.filter((t: Group) => t.parentId === c.id),
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teamsMap, groupedTeams };
+    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -2037,4 +2030,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
