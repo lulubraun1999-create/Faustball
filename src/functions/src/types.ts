@@ -1,10 +1,11 @@
+
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 export interface Appointment {
   id: string;
   title: string;
   startDate: Timestamp;
-  endDate?: Timestamp | null; // <-- KORRIGIERT
+  endDate?: Timestamp | null;
   isAllDay?: boolean;
   appointmentTypeId: string;
   locationId?: string;
@@ -30,7 +31,7 @@ export interface AppointmentException {
   status: 'cancelled' | 'modified';
   modifiedData?: {
     startDate?: Timestamp;
-    endDate?: Timestamp | null; // <-- KORRIGIERT
+    endDate?: Timestamp | null;
     title?: string;
     locationId?: string;
     description?: string;
@@ -39,6 +40,7 @@ export interface AppointmentException {
     isAllDay?: boolean;
   };
   createdAt?: Timestamp | FieldValue;
+  lastUpdated?: Timestamp | FieldValue; // Hinzugefügt für Konsistenz
   userId: string;
 }
 

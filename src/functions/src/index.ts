@@ -1,9 +1,9 @@
 
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/httpshttps';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid as isDateValid } from 'date-fns';
+import { addDays } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -38,7 +38,7 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid;
+  const targetUid = request.data?.uid || callerUid; // Fallback to the caller's UID
 
   if (typeof targetUid !== 'string' || targetUid.length === 0) {
     throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
@@ -200,28 +200,21 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     if (!pendingUpdateData || !selectedInstanceToEdit) {
         throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
     }
-
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    if (!isDateValid(originalDate)) {
-      throw new HttpsError('invalid-argument', 'Invalid original date provided.');
-    }
     
+    const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
-    if (!isDateValid(newStartDate)) {
-      throw new HttpsError('invalid-argument', 'Invalid start date provided.');
-    }
-
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
       ? new Date(pendingUpdateData.endDate) 
       : null;
-    if (newEndDate && !isDateValid(newEndDate)) {
-        throw new HttpsError('invalid-argument', 'Invalid end date provided.');
+
+    if (isNaN(originalDate.getTime()) || isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
+        throw new HttpsError('invalid-argument', 'Invalid date format provided.');
     }
 
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
+    const originalDateStartOfDay = new Date(originalDate);
+    originalDateStartOfDay.setHours(0, 0, 0, 0);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    
     const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
@@ -239,22 +232,27 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay,
     };
 
-    const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: existingExceptionDoc?.data().createdAt || FieldValue.serverTimestamp(),
-        userId: userId,
-    };
-
     try {
         if (existingExceptionDoc) {
-            await existingExceptionDoc.ref.update({ ...exceptionData, lastUpdated: FieldValue.serverTimestamp() });
+            await updateDoc(existingExceptionDoc.ref, {
+                 modifiedData: modifiedData,
+                 status: 'modified',
+                 userId: userId,
+                 lastUpdated: FieldValue.serverTimestamp()
+            });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
+             const newExceptionData: Omit<AppointmentException, 'id'> = {
+                originalAppointmentId: selectedInstanceToEdit.originalId,
+                originalDate: Timestamp.fromDate(originalDateStartOfDay),
+                status: 'modified',
+                modifiedData: modifiedData,
+                createdAt: FieldValue.serverTimestamp(),
+                lastUpdated: FieldValue.serverTimestamp(),
+                userId: userId,
+            };
             const newDocRef = db.collection('appointmentExceptions').doc();
-            await newDocRef.set(exceptionData);
+            await setDoc(newDocRef, newExceptionData);
             return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
         }
     } catch (error: any) {
@@ -292,7 +290,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
-      const instanceStartOfDay = new Date(instanceDate.setHours(0,0,0,0));
+      const instanceStartOfDay = new Date(instanceDate);
+      instanceStartOfDay.setHours(0,0,0,0);
       
       if (dayBefore >= instanceStartOfDay) {
         batch.update(originalAppointmentRef, {
@@ -304,12 +303,12 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const newAppointmentRef = db.collection("appointments").doc();
       
-      const newStartDate = new Date(pendingUpdateData.startDate!);
+      const newStartDate = new Date(pendingUpdateData.startDate);
       const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
         : null;
 
-      if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
+      if (isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
           throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
       }
       
@@ -372,5 +371,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
-    
