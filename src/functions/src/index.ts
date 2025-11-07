@@ -302,6 +302,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
       }
       
+      // Compare with the start of the series, not the instance
       if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
