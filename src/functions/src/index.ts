@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays } from 'date-fns';
+import { addDays, isValid, startOfDay } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -193,7 +193,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
-
+    
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
@@ -207,12 +207,11 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
       ? new Date(pendingUpdateData.endDate) 
       : null;
 
-    if (isNaN(originalDate.getTime()) || isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
+    if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Invalid date format provided.');
     }
 
-    const originalDateStartOfDay = new Date(originalDate);
-    originalDateStartOfDay.setHours(0, 0, 0, 0);
+    const originalDateStartOfDay = startOfDay(originalDate);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
     const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
@@ -311,7 +310,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         ? new Date(pendingUpdateData.endDate) 
         : null;
 
-      if (isNaN(newStartDate.getTime()) || (newEndDate && isNaN(newEndDate.getTime()))) {
+      if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
           throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
       }
       
@@ -359,8 +358,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       batch.set(newAppointmentRef, newAppointmentData);
 
-      const instanceStartOfDay = new Date(instanceDate);
-      instanceStartOfDay.setHours(0,0,0,0);
+      const instanceStartOfDay = startOfDay(instanceDate);
       
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
@@ -377,3 +375,4 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
+
