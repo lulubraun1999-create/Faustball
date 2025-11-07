@@ -15,13 +15,13 @@ export interface Appointment {
       type: 'all' | 'specificTeams';
       teamIds: string[];
   };
-  recurrence: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
-  recurrenceEndDate: Timestamp | null;
-  rsvpDeadline: Timestamp | null;
+  recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+  recurrenceEndDate?: Timestamp | null;
+  rsvpDeadline?: Timestamp | null;
   meetingPoint?: string;
   meetingTime?: string;
-  createdAt: Timestamp | FieldValue;
-  lastUpdated: Timestamp | FieldValue;
+  createdAt?: Timestamp | FieldValue;
+  lastUpdated?: Timestamp | FieldValue;
   createdBy: string;
 }
 
