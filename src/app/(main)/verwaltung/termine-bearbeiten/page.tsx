@@ -607,23 +607,20 @@ export default function AdminTerminePage() {
       title: finalTitle || '',
       appointmentTypeId: data.appointmentTypeId,
       startDate: startDateTimestamp,
-      ...(endDateTimestamp && !data.isAllDay && { endDate: endDateTimestamp }),
+      endDate: (endDateTimestamp && !data.isAllDay) ? endDateTimestamp : null,
       isAllDay: data.isAllDay,
       recurrence: data.recurrence,
-      ...(recurrenceEndDateTimestamp &&
-        data.recurrence !== 'none' && {
-          recurrenceEndDate: recurrenceEndDateTimestamp,
-        }),
+      recurrenceEndDate: (recurrenceEndDateTimestamp && data.recurrence !== 'none') ? recurrenceEndDateTimestamp : null,
       visibility: {
         type: data.visibilityType,
         teamIds:
           data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [],
       },
-      ...(rsvpDeadlineTimestamp && { rsvpDeadline: rsvpDeadlineTimestamp }),
-      ...(data.locationId && { locationId: data.locationId }),
-      ...(data.meetingPoint && { meetingPoint: data.meetingPoint }),
-      ...(data.meetingTime && { meetingTime: data.meetingTime }),
-      ...(data.description && { description: data.description }),
+      rsvpDeadline: rsvpDeadlineTimestamp,
+      locationId: data.locationId || undefined,
+      meetingPoint: data.meetingPoint || undefined,
+      meetingTime: data.meetingTime || undefined,
+      description: data.description || undefined,
       createdBy: selectedAppointment?.createdBy || user.uid,
       createdAt: selectedAppointment?.createdAt || serverTimestamp(),
     };
