@@ -2038,9 +2038,9 @@ export default function AdminTerminePage() {
           ) : Object.keys(groupedAppointments).length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => {
-                const isDecember = monthYear === 'Dezember 2024';
-                const isAfterNovember = lastMonthKey === 'November 2024';
-                const showBanner = isDecember && isAfterNovember;
+                const isDecember2024 = monthYear === 'Dezember 2024';
+                const lastWasNovember2024 = lastMonthKey === 'November 2024';
+                const showBanner = isDecember2024 && lastWasNovember2024;
                 lastMonthKey = monthYear;
                 
                 return (
@@ -2275,3 +2275,5 @@ export default function AdminTerminePage() {
   );
 }
 
+
+    
