@@ -1,9 +1,10 @@
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
-// KORRIGIERTER IMPORT: AppointmentType wird jetzt gefunden (nach Korrektur 1)
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
+import { addDays, isValid, startOfDay, parseISO } from 'date-fns';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 
 // Firebase Admin SDK initialisieren
@@ -11,6 +12,7 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 const db = getFirestore();
+const localTimeZone = 'Europe/Berlin';
 
 /**
  * Prüft, ob bereits ein Admin-Benutzer im System existiert.
@@ -38,9 +40,12 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Standardmäßig sich selbst
+  const targetUid = request.data?.uid || callerUid; // Fallback to the caller's UID
 
-  // Prüfen, ob bereits Admins existieren
+  if (typeof targetUid !== 'string' || targetUid.length === 0) {
+    throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
+  }
+
   let adminsExist = false;
   try {
       const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
@@ -50,16 +55,13 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
        throw new HttpsError('internal', 'Could not verify admin existence for promotion.', error.message);
   }
 
-  // Autorisierung: Erlaube, wenn der Aufrufer Admin ist ODER wenn kein Admin existiert und der Aufrufer sich selbst ernennt.
   if (!isCallerAdmin && !(adminsExist === false && targetUid === callerUid)) {
       throw new HttpsError('permission-denied', 'Only an admin can set other users as admins, or you must be the first user.');
   }
 
   try {
-    // 1. Custom Claim im Auth Token setzen
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
-    // 2. Firestore Dokumente (users und members) aktualisieren
     const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
@@ -93,7 +95,6 @@ export const revokeAdminRole = onCall(async (request: CallableRequest) => {
         throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
     }
 
-    // Prevent last admin from revoking themselves
     if (request.auth.uid === targetUid) {
         const adminSnapshot = await db.collection('users').where('role', '==', 'admin').get();
         if (adminSnapshot.size <= 1) {
@@ -161,7 +162,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
         throw new HttpsError('permission-denied', 'You do not have permission to send messages to this room.');
     }
 
-    // Benutzerprofildaten für den Anzeigenamen abrufen
     const userDoc = await db.collection('users').doc(userId).get();
     if (!userDoc.exists) {
         throw new HttpsError('not-found', 'User profile not found.');
@@ -169,7 +169,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
     const userData = userDoc.data();
     const userName = `${userData?.firstName || ''} ${userData?.lastName || ''}`.trim() || 'Unbekannt';
 
-    // Nachrichtendaten erstellen und in die Datenbank schreiben
     const messageData = {
         userId: userId,
         userName: userName,
@@ -196,23 +195,28 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
-    
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+
+    const data = request.data;
     const userId = request.auth.uid;
 
-    const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null;
-    const originalDateStartOfDay = new Date(originalDate.setHours(0, 0, 0, 0));
-
-    if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
-        throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
+    if (!data.originalId || !data.originalDateISO || !data.startDate) {
+        throw new HttpsError('invalid-argument', 'Missing required data for exception (originalId, originalDateISO, startDate).');
     }
 
+    const originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+    const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+    const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
+      ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+      : null;
+
+    if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
+        throw new HttpsError('invalid-argument', 'Invalid date format provided.');
+    }
+
+    const originalDateStartOfDay = startOfDay(originalDate);
+
     const exceptionsColRef = db.collection('appointmentExceptions');
-    
-    // Search for existing exception on the server
-    const q = exceptionsColRef.where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+    const q = exceptionsColRef.where('originalAppointmentId', '==', data.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
     const querySnapshot = await q.get();
@@ -220,30 +224,37 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
-        title: pendingUpdateData.title,
-        locationId: pendingUpdateData.locationId,
-        description: pendingUpdateData.description,
-        meetingPoint: pendingUpdateData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay,
-    };
-
-    const exceptionData: Omit<AppointmentException, 'id'> = {
-        originalAppointmentId: selectedInstanceToEdit.originalId,
-        originalDate: Timestamp.fromDate(originalDateStartOfDay),
-        status: 'modified',
-        modifiedData: modifiedData,
-        createdAt: FieldValue.serverTimestamp(),
-        userId: userId,
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+        title: data.title,
+        locationId: data.locationId,
+        description: data.description,
+        meetingPoint: data.meetingPoint,
+        meetingTime: data.meetingTime,
+        isAllDay: data.isAllDay,
     };
 
     try {
         if (existingExceptionDoc) {
-            await existingExceptionDoc.ref.update({ modifiedData: modifiedData, status: 'modified', userId: userId });
+            const docRefToUpdate = db.collection('appointmentExceptions').doc(existingExceptionDoc.id);
+            await docRefToUpdate.update({
+                 modifiedData: modifiedData,
+                 status: 'modified',
+                 userId: userId,
+                 lastUpdated: FieldValue.serverTimestamp()
+            });
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
-            await exceptionsColRef.add(exceptionData);
+             const newExceptionData: Omit<AppointmentException, 'id'> = {
+                originalAppointmentId: data.originalId,
+                originalDate: Timestamp.fromDate(originalDateStartOfDay),
+                status: 'modified',
+                modifiedData: modifiedData,
+                createdAt: FieldValue.serverTimestamp(),
+                lastUpdated: FieldValue.serverTimestamp(),
+                userId: userId,
+            };
+            const newDocRef = db.collection('appointmentExceptions').doc();
+            await newDocRef.set(newExceptionData);
             return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
         }
     } catch (error: any) {
@@ -251,6 +262,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Änderung konnte nicht gespeichert werden.', error.message);
     }
 });
+
 
 /**
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
@@ -260,98 +272,113 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    const data = request.data;
     const userId = request.auth.uid;
 
+    if (!data.originalId || !data.originalDateISO || !data.startDate) {
+        throw new HttpsError('invalid-argument', 'Missing required data to split series.');
+    }
+
     try {
-      const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
-      const originalAppointmentSnap = await originalAppointmentRef.get();
+        const originalAppointmentRef = db.collection('appointments').doc(data.originalId);
+        const originalAppointmentSnap = await originalAppointmentRef.get();
 
-      if (!originalAppointmentSnap.exists) {
-        throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
-      }
+        if (!originalAppointmentSnap.exists) {
+            throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
+        }
 
-      const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const batch = db.batch();
+        const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
+        const batch = db.batch();
 
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
-      const dayBefore = addDays(instanceDate, -1);
-      
-      const originalStartDate = originalAppointmentData.startDate?.toDate();
-      if (!originalStartDate) {
-          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
-      }
-      
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, {
-          recurrenceEndDate: Timestamp.fromDate(dayBefore),
-        });
-      } else {
-        batch.delete(originalAppointmentRef);
-      }
-
-      const newAppointmentRef = db.collection("appointments").doc();
-      
-      const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = pendingUpdateData.endDate ? new Date(pendingUpdateData.endDate) : null; // <-- KORRIGIERT (zu null)
-      
-      let typeName = 'Termin'; 
-      let isSonstiges = false;
-      if (originalAppointmentData.appointmentTypeId) { 
-          const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
-          if (typeDoc.exists) {
-              // Hier wird AppointmentType benötigt
-              const typeData = typeDoc.data() as AppointmentType; 
-              typeName = typeData.name;
-              isSonstiges = typeName === 'Sonstiges';
-          }
-      }
-
-      const originalTitle = originalAppointmentData.title || '';
-      const titleIsDefault = !isSonstiges && originalTitle === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
-
-      let finalTitle = originalTitle;
-      if (pendingUpdateData.title !== originalDisplayTitle) {
-          finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
-              ? pendingUpdateData.title.trim() 
-              : typeName;
-      }
-      
-      const newAppointmentData: Omit<Appointment, 'id'> = {
-        ...originalAppointmentData, 
+        const instanceDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+        if(!isValid(instanceDate)) {
+             throw new HttpsError('invalid-argument', `Invalid original instance date provided: ${data.originalDateISO}`);
+        }
+        const dayBefore = addDays(instanceDate, -1);
         
-        title: finalTitle || 'Termin',
-        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description: pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+        const originalStartDate = (originalAppointmentData.startDate instanceof Timestamp) 
+          ? originalAppointmentData.startDate.toDate() 
+          : null;
+
+        if (!originalStartDate || !isValid(originalStartDate)) {
+            throw new HttpsError('failed-precondition', 'Original appointment has no valid start date.');
+        }
         
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null, // <-- KORRIGIERT (zu null)
+        if (dayBefore >= originalStartDate) {
+            batch.update(originalAppointmentRef, {
+                recurrenceEndDate: Timestamp.fromDate(dayBefore),
+                lastUpdated: FieldValue.serverTimestamp()
+            });
+        } else {
+            batch.delete(originalAppointmentRef);
+        }
+        
+        const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
+            ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+            : null;
+
+        if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
+            throw new HttpsError('invalid-argument', `Invalid start or end date for new series. Start: ${data.startDate}, End: ${data.endDate}`);
+        }
+        
+        let typeName = 'Termin'; 
+        let isSonstiges = false;
+        if (originalAppointmentData.appointmentTypeId) { 
+            const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
+            if (typeDoc.exists) {
+                const typeData = typeDoc.data() as AppointmentType; 
+                typeName = typeData.name;
+                isSonstiges = typeName === 'Sonstiges';
+            }
+        }
+
+        const originalTitle = originalAppointmentData.title || '';
+        const titleIsDefault = !isSonstiges && originalTitle === typeName;
+        const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
+
+        let finalTitle = originalTitle;
+        if (data.title !== originalDisplayTitle) {
+            finalTitle = (data.title && data.title.trim() !== '') 
+                ? data.title.trim() 
+                : typeName;
+        }
+        
+        const newAppointmentData: Omit<Appointment, 'id'> = {
+            title: finalTitle || 'Termin',
+            appointmentTypeId: originalAppointmentData.appointmentTypeId,
+            startDate: Timestamp.fromDate(newStartDate),
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+            isAllDay: data.isAllDay ?? originalAppointmentData.isAllDay,
+            recurrence: originalAppointmentData.recurrence,
+            recurrenceEndDate: originalAppointmentData.recurrenceEndDate ?? null,
+            visibility: originalAppointmentData.visibility,
+            rsvpDeadline: originalAppointmentData.rsvpDeadline ?? null,
+            locationId: data.locationId ?? originalAppointmentData.locationId,
+            description: data.description ?? originalAppointmentData.description,
+            meetingPoint: data.meetingPoint ?? originalAppointmentData.meetingPoint,
+            meetingTime: data.meetingTime ?? originalAppointmentData.meetingTime,
+            createdBy: userId,
+            createdAt: FieldValue.serverTimestamp(),
+            lastUpdated: FieldValue.serverTimestamp(),
+        };
+
+        const newAppointmentRef = db.collection("appointments").doc();
+        batch.set(newAppointmentRef, newAppointmentData);
+
+        const instanceStartOfDay = startOfDay(instanceDate);
+        const exceptionsQuery = db.collection('appointmentExceptions')
+            .where('originalAppointmentId', '==', data.originalId)
+            .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
             
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+        const exceptionsSnap = await exceptionsQuery.get();
+        exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
         
-        createdAt: FieldValue.serverTimestamp(),
-        lastUpdated: FieldValue.serverTimestamp(),
-        createdBy: userId,
-      };
-
-      batch.set(newAppointmentRef, newAppointmentData);
-
-      const exceptionsQuery = db.collection('appointmentExceptions')
-        .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
-        .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
-        
-      const exceptionsSnap = await exceptionsQuery.get();
-      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
-      
-      await batch.commit();
-      return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
+        await batch.commit();
+        return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
+        throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
