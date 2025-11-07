@@ -211,11 +211,24 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 
     const originalDate = new Date(pendingUpdateData.originalDateISO);
-    const newStartDate = new Date(pendingUpdateData.startDate);
-    const newEndDate = (pendingUpdateData.endDate && pendingUpdateData.endDate !== '') ? new Date(pendingUpdateData.endDate) : null;
+    
+    // Robust date parsing for startDate
+    const newStartDate = pendingUpdateData.startDate ? new Date(pendingUpdateData.startDate) : null;
+    if (!newStartDate || !isDateValid(newStartDate)) {
+      throw new HttpsError('invalid-argument', 'Invalid start date provided.');
+    }
+
+    // Robust date parsing for endDate
+    const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+      ? new Date(pendingUpdateData.endDate) 
+      : null;
+    if (newEndDate && !isDateValid(newEndDate)) {
+        throw new HttpsError('invalid-argument', 'Invalid end date provided.');
+    }
+    
     const originalDateStartOfDay = startOfDay(originalDate);
 
-    if (!isDateValid(originalDate) || !isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
+    if (!isDateValid(originalDate)) {
         throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
     }
 
@@ -306,8 +319,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      const newEndDate = (pendingUpdateData.endDate && pendingUpdateData.endDate !== '') ? new Date(pendingUpdateData.endDate) : null;
-      
+      // Robust date parsing for endDate
+      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+        ? new Date(pendingUpdateData.endDate) 
+        : null;
+
+      if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
+          throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
+      }
+
       let typeName = 'Termin'; 
       let isSonstiges = false;
       if (originalAppointmentData.appointmentTypeId) { 
