@@ -290,10 +290,12 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
-      const instanceStartOfDay = new Date(instanceDate);
-      instanceStartOfDay.setHours(0,0,0,0);
+      const originalStartDate = originalAppointmentData.startDate?.toDate();
+      if (!originalStartDate) {
+          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
+      }
       
-      if (dayBefore >= instanceStartOfDay) {
+      if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
         });
@@ -356,6 +358,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       batch.set(newAppointmentRef, newAppointmentData);
 
+      const instanceStartOfDay = new Date(instanceDate);
+      instanceStartOfDay.setHours(0,0,0,0);
+      
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
