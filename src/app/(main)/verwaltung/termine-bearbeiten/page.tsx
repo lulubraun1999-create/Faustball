@@ -662,9 +662,9 @@ export default function AdminTerminePage() {
     setIsSubmitting(true);
     
     try {
-      // Create payload with raw form data. The function will parse ISO strings.
       const payload = {
-        ...pendingUpdateData,
+        pendingUpdateData,
+        selectedInstanceToEdit,
       };
       await callCloudFunction('saveSingleAppointmentException', payload);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
@@ -691,8 +691,10 @@ export default function AdminTerminePage() {
     }
   
     try {
-      // Pass raw form data directly to the function
-      const payload = { ...pendingUpdateData };
+      const payload = {
+        pendingUpdateData,
+        selectedInstanceToEdit,
+      };
       await callCloudFunction('saveFutureAppointmentInstances', payload);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
