@@ -241,10 +241,10 @@ export default function AdminTerminePage() {
   }, [appointmentTypes, locations, groups]);
 
   const unrolledAppointments = useMemo(() => {
-    if (!appointments || !exceptions) return [];
+    if (!appointments || isLoadingExceptions) return [];
   
     const exceptionsMap = new Map<string, AppointmentException>();
-    exceptions.forEach((ex) => {
+    exceptions?.forEach((ex) => {
       if (ex.originalDate && ex.originalDate instanceof Timestamp) {
         const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
         exceptionsMap.set(key, ex);
@@ -256,18 +256,15 @@ export default function AdminTerminePage() {
   
     appointments.forEach((app) => {
       if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
-  
       const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
   
       if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
         const singleDate = app.startDate.toDate();
-        if (isBefore(singleDate, today) && !exceptionsMap.has(`${app.id}-${startOfDay(singleDate).toISOString()}`)) {
-          return; 
-        }
+        if (isBefore(singleDate, today)) return;
         
         const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
-        
+
         let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
@@ -288,16 +285,14 @@ export default function AdminTerminePage() {
       } else {
         let currentDate = app.startDate.toDate();
         const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
-        
         let iter = 0;
         const MAX_ITERATIONS = 500;
   
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= today) {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
-            const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
-            const instanceException = exceptionsMap.get(instanceKey);
-            
+            const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
+
             let isException = false;
             let instanceData = { ...app };
             let instanceStartDate = currentDate;
@@ -313,7 +308,7 @@ export default function AdminTerminePage() {
             allEvents.push({
               ...instanceData,
               id: `${app.id}-${currentDate.toISOString()}`,
-              virtualId: instanceKey,
+              virtualId: `${app.id}-${currentDateStartOfDayISO}`,
               originalId: app.id,
               originalDateISO: currentDateStartOfDayISO,
               instanceDate: instanceStartDate,
@@ -336,7 +331,7 @@ export default function AdminTerminePage() {
       }
     });
     return allEvents;
-  }, [appointments, exceptions]);
+  }, [appointments, exceptions, isLoadingExceptions]);
   
 
   const filteredAndGroupedAppointments = useMemo(() => {
@@ -578,3 +573,4 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+

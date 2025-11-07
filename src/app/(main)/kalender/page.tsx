@@ -56,6 +56,7 @@ import {
   addHours,
   startOfDay,
   differenceInMilliseconds,
+  isBefore,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -103,7 +104,7 @@ export default function KalenderPage() {
   const allAppointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(allAppointmentsRef);
 
-  const exceptionsRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null), [firestore, isAdmin]);
+  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
   const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
@@ -125,108 +126,116 @@ export default function KalenderPage() {
     isLoadingLocations;
 
   const { teamsForFilter, typesMap, locationsMap, teamsMap } = useMemo(() => {
-    const userTeams = allGroups?.filter(g => g.type === 'team' && userTeamIds.includes(g.id)) || [];
+    const adminOrUserTeams = allGroups?.filter(g => g.type === 'team' && (isAdmin || userTeamIds.includes(g.id))) || [];
     const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
     const teamMap = new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name]));
-    return { teamsForFilter: userTeams, typesMap, locationsMap: locs, teamsMap: teamMap };
-  }, [allGroups, appointmentTypes, locations, userTeamIds]);
+    return { teamsForFilter: adminOrUserTeams, typesMap, locationsMap: locs, teamsMap: teamMap };
+  }, [allGroups, appointmentTypes, locations, userTeamIds, isAdmin]);
 
   const unrolledAppointments = useMemo(() => {
-    if (!appointments) return [];
+    if (!appointments || isLoadingExceptions) return [];
+    
     const events: UnrolledAppointment[] = [];
     const exceptionsMap = new Map<string, AppointmentException>();
-    
-    exceptions?.forEach((ex) => {
-        if (ex.originalDate) {
-            const key = `${ex.originalAppointmentId}-${format(ex.originalDate.toDate(), 'yyyy-MM-dd')}`;
+    exceptions?.forEach(ex => {
+        if (ex.originalDate && ex.originalDate instanceof Timestamp) {
+            const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
             exceptionsMap.set(key, ex);
         }
     });
 
-    appointments.forEach((app) => {
-      if (!app.startDate) return;
+    appointments.forEach(app => {
+      if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+      const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
 
-      if (!app.recurrence || app.recurrence === 'none') {
-        const instanceDate = app.startDate.toDate();
-        const exceptionKey = `${app.id}-${format(instanceDate, 'yyyy-MM-dd')}`;
-        const exception = exceptionsMap.get(exceptionKey);
+      if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+        const singleDate = app.startDate.toDate();
+        const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
+        const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
-        let instance: UnrolledAppointment = {
-          ...app,
-          instanceDate,
+        let finalData: Appointment = { ...app };
+        let isException = false;
+        if (exception?.status === 'modified' && exception.modifiedData) {
+            const modData = exception.modifiedData;
+            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
+            isException = true;
+        }
+        
+        events.push({
+          ...finalData,
+          instanceDate: finalData.startDate.toDate(),
           originalId: app.id,
           virtualId: app.id,
           isCancelled: exception?.status === 'cancelled',
-        };
+          isException,
+        });
 
-        if (exception?.status === 'modified' && exception.modifiedData) {
-          const modData = exception.modifiedData;
-          instance = {
-            ...instance,
-            ...modData,
-            startDate: modData.startDate || instance.startDate,
-            isException: true,
-          };
-        }
-        events.push(instance);
       } else {
-        let current = startOfDay(app.startDate.toDate());
-        // **FIX:** Safely handle recurrenceEndDate
-        const end = app.recurrenceEndDate ? app.recurrenceEndDate.toDate() : addMonths(new Date(), 12);
-        
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-        
-        while (current <= end) {
-            const exceptionKey = `${app.id}-${format(current, 'yyyy-MM-dd')}`;
-            const exception = exceptionsMap.get(exceptionKey);
+        let currentDate = app.startDate.toDate();
+        const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
+        let iter = 0;
+        const MAX_ITERATIONS = 500;
 
-            if (exception?.status !== 'cancelled') {
-                const instanceStartDate = new Date(current);
-                const appStartDate = app.startDate.toDate();
-                instanceStartDate.setHours(appStartDate.getHours(), appStartDate.getMinutes());
+        while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
+            const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
+            const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-                let instance: UnrolledAppointment = {
-                    ...app,
-                    instanceDate: instanceStartDate,
-                    originalId: app.id,
-                    virtualId: `${app.id}_${format(current, 'yyyy-MM-dd')}`,
-                    startDate: Timestamp.fromDate(instanceStartDate),
-                    endDate: app.endDate ? Timestamp.fromMillis(instanceStartDate.getTime() + duration) : undefined,
-                };
-    
-                if (exception?.status === 'modified' && exception.modifiedData) {
-                    const modData = exception.modifiedData;
-                    instance = {
-                        ...instance,
-                        ...modData,
-                        startDate: modData.startDate || instance.startDate,
-                        isException: true,
-                    };
+            if (instanceException?.status !== 'cancelled') {
+                let isException = false;
+                let instanceData = { ...app };
+                let instanceStartDate = currentDate;
+                let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
+
+                if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                    instanceData = { ...instanceData, ...instanceException.modifiedData };
+                    instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
+                    instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
+                    isException = true;
                 }
-                events.push(instance);
+                
+                events.push({
+                    ...instanceData,
+                    id: `${app.id}-${currentDate.toISOString()}`,
+                    virtualId: `${app.id}-${currentDateStartOfDayISO}`,
+                    originalId: app.id,
+                    instanceDate: instanceStartDate,
+                    startDate: Timestamp.fromDate(instanceStartDate),
+                    endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+                    isCancelled: false,
+                    isException,
+                });
             }
 
           switch (app.recurrence) {
-            case 'daily': current = addDays(current, 1); break;
-            case 'weekly': current = addWeeks(current, 1); break;
-            case 'bi-weekly': current = addWeeks(current, 2); break;
-            case 'monthly': current = addMonths(current, 1); break;
-            default: current = addMonths(end, 1); break;
+            case 'daily': currentDate = addDays(currentDate, 1); break;
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            default: iter = MAX_ITERATIONS; break;
           }
+          iter++;
         }
       }
     });
     return events;
-  }, [appointments, exceptions]);
+  }, [appointments, exceptions, isLoadingExceptions]);
   
   const filteredAppointments = useMemo(() => {
+      const userTeamIdsSet = new Set(userTeamIds);
       return unrolledAppointments.filter(app => {
           const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(app.appointmentTypeId);
-          const teamMatch = selectedTeams.length === 0 || app.visibility.type === 'all' || app.visibility.teamIds.some(id => selectedTeams.includes(id));
+          
+          let teamMatch = false;
+          if (selectedTeams.length === 0) { // If no team filter, show based on user's teams or 'all'
+              teamMatch = app.visibility.type === 'all' || app.visibility.teamIds.some(id => userTeamIdsSet.has(id));
+          } else { // If team filter is active, show based on filter
+              teamMatch = app.visibility.type === 'all' || app.visibility.teamIds.some(id => selectedTeams.includes(id));
+          }
+
           return typeMatch && teamMatch && !app.isCancelled;
       })
-  }, [unrolledAppointments, selectedTeams, selectedTypes]);
+  }, [unrolledAppointments, selectedTeams, selectedTypes, userTeamIds]);
 
   const handleDownloadIcs = useCallback(() => {
     const events: ics.EventAttributes[] = filteredAppointments.map((app) => {
@@ -259,9 +268,9 @@ export default function KalenderPage() {
     });
   }, [filteredAppointments, locationsMap]);
   
-  const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
-  const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start, end });
+  const startCal = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
+  const endCal = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: startCal, end: endCal });
 
   const Header = () => (
     <div className="flex items-center justify-between py-2 px-1">

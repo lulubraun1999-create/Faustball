@@ -47,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -64,7 +64,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMemoFirebase } from "@/firebase/provider";
-import { addDays, addMonths, addWeeks, format as formatDate } from "date-fns";
+import { addDays, addMonths, addWeeks, format as formatDate, isBefore, startOfDay, differenceInMilliseconds } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   Tooltip,
@@ -81,9 +81,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
 type UnrolledAppointment = Appointment & {
-  instanceDate: Date; // The specific date of this virtual instance
-  instanceId: string; // A unique ID for this virtual instance
-  isCancelled?: boolean;
+  instanceDate: Date; 
+  virtualId: string;
+  originalId: string;
+  isCancelled: boolean;
+  isException: boolean;
 };
 
 export default function VerwaltungTerminePage() {
@@ -164,59 +166,93 @@ export default function VerwaltungTerminePage() {
     
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions?.forEach(ex => {
-        const originalDateString = formatDate(ex.originalDate.toDate(), 'yyyy-MM-dd');
-        exceptionsMap.set(`${ex.originalAppointmentId}_${originalDateString}`, ex);
+        if (ex.originalDate && ex.originalDate instanceof Timestamp) {
+            const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+            exceptionsMap.set(key, ex);
+        }
     });
 
     const allEvents: UnrolledAppointment[] = [];
+    const today = startOfDay(new Date());
   
     appointments.forEach(app => {
-      if (!app.startDate) return;
+      if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+      const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
 
-      const unroll = (currentDate: Date, originalDate?: Date) => {
-        const dateStr = formatDate(currentDate, 'yyyy-MM-dd');
-        const originalDateStr = formatDate(originalDate || currentDate, 'yyyy-MM-dd');
-        const instanceId = `${app.id}_${dateStr}`;
-        const exception = exceptionsMap.get(`${app.id}_${originalDateStr}`);
-        
-        let instance: UnrolledAppointment = {
-          ...app,
-          instanceDate: currentDate,
-          instanceId: instanceId,
-          isCancelled: exception?.status === 'cancelled',
-        };
+      if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+        const singleDate = app.startDate.toDate();
+        if (isBefore(singleDate, today)) return;
 
+        const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
+        const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
+        if (exception?.status === 'cancelled') return;
+
+        let finalData: Appointment = { ...app };
+        let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
-            instance = { ...instance, ...exception.modifiedData };
+            const modData = exception.modifiedData;
+            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
+            isException = true;
         }
-        
-        allEvents.push(instance);
-      };
 
-      if (!app.recurrence || app.recurrence === 'none' || !app.recurrenceEndDate) {
-        unroll(app.startDate.toDate());
+        allEvents.push({
+          ...finalData,
+          instanceDate: finalData.startDate.toDate(),
+          originalId: app.id,
+          virtualId: app.id,
+          isCancelled: false,
+          isException,
+        });
       } else {
         let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = addDays(app.recurrenceEndDate.toDate(), 1);
-        
+        const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         let iter = 0;
-        const MAX_ITERATIONS = 365;
+        const MAX_ITERATIONS = 500;
   
-        while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          unroll(currentDate);
+        while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
+          if (currentDate >= today) {
+            const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
+            const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
+
+            if (instanceException?.status !== 'cancelled') {
+                let isException = false;
+                let instanceData = { ...app };
+                let instanceStartDate = currentDate;
+                let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
+
+                if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                    instanceData = { ...instanceData, ...instanceException.modifiedData };
+                    instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
+                    instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
+                    isException = true;
+                }
+                
+                allEvents.push({
+                    ...instanceData,
+                    id: `${app.id}-${currentDate.toISOString()}`,
+                    virtualId: `${app.id}-${currentDateStartOfDayISO}`,
+                    originalId: app.id,
+                    instanceDate: instanceStartDate,
+                    startDate: Timestamp.fromDate(instanceStartDate),
+                    endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+                    isCancelled: false,
+                    isException,
+                });
+            }
+          }
           
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
             case 'monthly': currentDate = addMonths(currentDate, 1); break;
-            default: currentDate = addDays(recurrenceEndDate, 1); break;
+            default: iter = MAX_ITERATIONS; break;
           }
           iter++;
         }
       }
     });
-    return allEvents.filter(event => event.instanceDate >= new Date());
+    return allEvents;
   }, [appointments, exceptions, isLoadingExceptions]);
 
   const isUserRelevantForAppointment = (
@@ -252,11 +288,7 @@ export default function VerwaltungTerminePage() {
 
         return true;
       })
-      .sort(
-        (a, b) =>
-          (a.startDate as Timestamp).toMillis() -
-          (b.startDate as Timestamp).toMillis(),
-      );
+      .sort((a,b) => a.instanceDate.getTime() - b.instanceDate.getTime());
   }, [unrolledAppointments, selectedType, selectedTeam, profile]);
 
   useEffect(() => {
@@ -291,12 +323,12 @@ export default function VerwaltungTerminePage() {
   ) => {
     if (!auth.user || !firestore) return;
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responseId = `${appointment.id}_${dateString}_${auth.user.uid}`;
+    const responseId = `${appointment.originalId}_${dateString}_${auth.user.uid}`;
     const docRef = doc(firestore, 'appointmentResponses', responseId);
 
     const responseData: AppointmentResponse = {
       id: responseId,
-      appointmentId: appointment.id,
+      appointmentId: appointment.originalId,
       userId: auth.user.uid,
       date: dateString,
       status: newStatus,
@@ -323,7 +355,7 @@ export default function VerwaltungTerminePage() {
   const deleteResponse = async (appointment: UnrolledAppointment) => {
       if (!auth.user || !firestore) return;
       const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-      const responseId = `${appointment.id}_${dateString}_${auth.user.uid}`;
+      const responseId = `${appointment.originalId}_${dateString}_${auth.user.uid}`;
       const docRef = doc(firestore, 'appointmentResponses', responseId);
 
       const existingResponse = allResponses?.find(r => r.id === responseId);
@@ -359,7 +391,7 @@ export default function VerwaltungTerminePage() {
 
   const handleAbsageClick = (appointment: UnrolledAppointment) => {
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const userResponse = allResponses?.find(r => r.id === `${appointment.id}_${dateString}_${auth.user?.uid}`);
+    const userResponse = allResponses?.find(r => r.id === `${appointment.originalId}_${dateString}_${auth.user?.uid}`);
     setCurrentAbsageApp(appointment);
     setAbsageGrund(userResponse?.reason || "");
     setIsAbsageDialogOpen(true);
@@ -387,19 +419,9 @@ export default function VerwaltungTerminePage() {
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
   const formatDateTime = (app: UnrolledAppointment) => {
-    if (!app.startDate) return "Kein Datum";
+    if (!app.instanceDate) return "Kein Datum";
     const start = app.instanceDate;
-    const originalStart = app.startDate.toDate();
-
-    start.setHours(originalStart.getHours());
-    start.setMinutes(originalStart.getMinutes());
-    start.setSeconds(originalStart.getSeconds());
-
-    const end = app.endDate ? app.endDate.toDate() : undefined;
-    if (end) {
-        const duration = end.getTime() - originalStart.getTime();
-        end.setTime(start.getTime() + duration);
-    }
+    const end = app.endDate ? app.endDate.toDate() : null;
 
     const dateFormat = "dd.MM.yyyy";
     const timeFormat = "HH:mm";
@@ -510,7 +532,7 @@ export default function VerwaltungTerminePage() {
                                         {appointmentsInMonth.map((app) => {
                                         const canRespond = isUserRelevantForAppointment(app, profile) && !app.isCancelled;
                                         const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
-                                        const userResponse = allResponses?.find(r => r.id === `${app.id}_${dateString}_${auth.user?.uid}`);
+                                        const userResponse = allResponses?.find(r => r.id === `${app.originalId}_${dateString}_${auth.user?.uid}`);
 
                                         const userStatus = userResponse?.status;
                                         const location = app.locationId ? locationsMap.get(app.locationId) : null;
@@ -519,7 +541,7 @@ export default function VerwaltungTerminePage() {
                                         const titleIsDefault = !isSonstiges && app.title === typeName;
                                         const showTitle = app.title && (!titleIsDefault || isSonstiges);
                                         const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
-                                        const originalAppointment = appointments?.find(a => a.id === app.id);
+                                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                         let rsvpDeadlineString = '-';
                                         if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
                                             const startMillis = originalAppointment.startDate.toMillis();
@@ -532,9 +554,9 @@ export default function VerwaltungTerminePage() {
 
                                         return (
                                             <TableRow 
-                                                key={app.instanceId} 
-                                                id={app.instanceId} 
-                                                ref={el => rowRefs.current[app.instanceId] = el}
+                                                key={app.virtualId} 
+                                                id={app.virtualId} 
+                                                ref={el => rowRefs.current[app.virtualId] = el}
                                                 className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
                                             <TableCell className="font-medium">
                                                 {displayTitle}
@@ -719,7 +741,7 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
 
     const relevantMembers = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter(Boolean) as MemberProfile[];
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.id && r.date === dateString);
+    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === dateString);
 
     const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
     const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');

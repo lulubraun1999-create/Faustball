@@ -9,16 +9,18 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@
 import { collection, query, where, Timestamp, limit, orderBy, doc } from 'firebase/firestore';
 import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentException, AppointmentType } from '@/lib/types';
 import Link from 'next/link';
-import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
+import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
   originalId: string;
-  originalDateISO?: string;
-  isException?: boolean;
-  isCancelled?: boolean;
+  originalDateISO: string;
+  isException: boolean;
+  isCancelled: boolean;
+  instanceDate: Date; // The actual date of this specific instance
 };
+
 
 export default function DashboardPage() {
     const { user, isUserLoading, isAdmin } = useUser();
@@ -35,8 +37,8 @@ export default function DashboardPage() {
     const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
     const exceptionsRef = useMemoFirebase(
-      () => (firestore && isAdmin ? collection(firestore, 'appointmentExceptions') : null),
-      [firestore, isAdmin]
+      () => (firestore ? collection(firestore, 'appointmentExceptions') : null),
+      [firestore]
     );
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
@@ -71,101 +73,120 @@ export default function DashboardPage() {
     }, [allGroups, memberProfile]);
 
     const { nextMatchDay, nextAppointments } = useMemo(() => {
-        if (!appointments || !appointmentTypes || !memberProfile) return { nextMatchDay: null, nextAppointments: [] };
-        
-        const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
-        const userTeamIds = new Set(memberProfile.teams || []);
-        
-        const exceptionsMap = new Map<string, AppointmentException>();
-        exceptions?.forEach(ex => {
-            if (ex.originalDate) {
-                const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
-                exceptionsMap.set(key, ex);
-            }
-        });
+      if (!appointments || !appointmentTypes || !memberProfile || isLoadingExceptions) return { nextMatchDay: null, nextAppointments: [] };
+      
+      const spieltagTypeId = appointmentTypes.find(t => t.name.toLowerCase() === 'spieltag')?.id;
+      const userTeamIds = new Set(memberProfile.teams || []);
+      
+      const exceptionsMap = new Map<string, AppointmentException>();
+      exceptions?.forEach(ex => {
+          if (ex.originalDate && ex.originalDate instanceof Timestamp) {
+              const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+              exceptionsMap.set(key, ex);
+          }
+      });
 
-        const allEvents: UnrolledAppointment[] = [];
-        const now = startOfDay(new Date());
+      const allEvents: UnrolledAppointment[] = [];
+      const today = startOfDay(new Date());
 
-        appointments.forEach(app => {
-            if (!app.startDate) return;
+      appointments.forEach(app => {
+          if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+          const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
 
-            if (app.recurrence === 'none') {
-                const originalDateStartOfDay = startOfDay(app.startDate.toDate());
-                if (originalDateStartOfDay < now) return;
+          const isVisibleToUser = (event: Appointment) => {
+              if (event.visibility.type === 'all') return true;
+              return event.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
+          };
 
-                const key = `${app.id}-${originalDateStartOfDay.toISOString()}`;
-                const exception = exceptionsMap.get(key);
-                if (exception?.status === 'cancelled') return;
+          if (!isVisibleToUser(app)) return;
 
-                const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
-                allEvents.push({ ...modifiedApp, originalId: app.id, virtualId: app.id, originalDateISO: originalDateStartOfDay.toISOString() });
-            } else {
-                let currentDate = app.startDate.toDate();
-                // **FIX:** Safely handle recurrenceEndDate
-                const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
-                const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
-                let iter = 0;
-                const MAX_ITERATIONS = 500;
+          if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+              const singleDate = app.startDate.toDate();
+              if (isBefore(singleDate, today)) return;
 
-                while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-                    const currentDateStartOfDay = startOfDay(currentDate);
-                    if (currentDateStartOfDay >= now) {
-                        const instanceKey = `${app.id}-${currentDateStartOfDay.toISOString()}`;
-                        const instanceException = exceptionsMap.get(instanceKey);
+              const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
+              const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
+              if (exception?.status === 'cancelled') return;
 
-                        if (instanceException?.status !== 'cancelled') {
-                            const newStartDate = Timestamp.fromDate(currentDate);
-                            const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-                            
-                            let instanceData: UnrolledAppointment = {
-                                ...app,
-                                id: `${app.id}-${currentDate.toISOString()}`,
-                                virtualId: instanceKey,
-                                originalId: app.id,
-                                originalDateISO: currentDateStartOfDay.toISOString(),
-                                startDate: newStartDate,
-                                endDate: newEndDate,
-                            };
+              let finalData: Appointment = { ...app };
+              let isException = false;
+              if (exception?.status === 'modified' && exception.modifiedData) {
+                  const modData = exception.modifiedData;
+                  finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
+                  isException = true;
+              }
 
-                            if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                                instanceData = { ...instanceData, ...instanceException.modifiedData, isException: true };
-                            }
-                            
-                            allEvents.push(instanceData);
-                        }
-                    }
+              allEvents.push({
+                  ...finalData,
+                  instanceDate: finalData.startDate.toDate(),
+                  originalId: app.id,
+                  virtualId: app.id,
+                  isCancelled: false,
+                  isException,
+                  originalDateISO: originalDateStartOfDayISO,
+              });
+          } else {
+              let currentDate = app.startDate.toDate();
+              const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
+              let iter = 0;
+              const MAX_ITERATIONS = 500;
 
-                    switch (app.recurrence) {
-                        case 'daily': currentDate = addDays(currentDate, 1); break;
-                        case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-                        case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-                        case 'monthly': currentDate = addMonths(currentDate, 1); break;
-                        default: currentDate = addDays(recurrenceEndDate, 1); break;
-                    }
-                    iter++;
-                }
-            }
-        });
-        
-        const sortedEvents = allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-        
-        const isVisibleToUser = (event: UnrolledAppointment) => {
-            if (event.visibility.type === 'all') return true;
-            return event.visibility.teamIds.some(teamId => userTeamIds.has(teamId));
-        };
+              while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
+                  if (currentDate >= today) {
+                      const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
+                      const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-        const relevantEvents = sortedEvents.filter(isVisibleToUser);
-        
-        const matchDays = relevantEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
-        const otherAppointments = relevantEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
+                      if (instanceException?.status !== 'cancelled') {
+                          let isException = false;
+                          let instanceData = { ...app };
+                          let instanceStartDate = currentDate;
+                          let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
 
-        return {
-            nextMatchDay: matchDays[0] || null,
-            nextAppointments: otherAppointments.slice(0, 3),
-        };
-        
-    }, [appointments, exceptions, appointmentTypes, memberProfile]);
+                          if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                              instanceData = { ...instanceData, ...instanceException.modifiedData };
+                              instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
+                              instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
+                              isException = true;
+                          }
+                          
+                           allEvents.push({
+                              ...instanceData,
+                              id: `${app.id}-${currentDate.toISOString()}`,
+                              virtualId: `${app.id}-${currentDateStartOfDayISO}`,
+                              originalId: app.id,
+                              originalDateISO: currentDateStartOfDayISO,
+                              instanceDate: instanceStartDate,
+                              startDate: Timestamp.fromDate(instanceStartDate),
+                              endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+                              isCancelled: false,
+                              isException,
+                          });
+                      }
+                  }
+
+                  switch (app.recurrence) {
+                      case 'daily': currentDate = addDays(currentDate, 1); break;
+                      case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+                      case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+                      case 'monthly': currentDate = addMonths(currentDate, 1); break;
+                      default: iter = MAX_ITERATIONS; break;
+                  }
+                  iter++;
+              }
+          }
+      });
+      
+      const sortedEvents = allEvents.sort((a, b) => a.instanceDate.getTime() - b.instanceDate.getTime());
+      
+      const matchDays = sortedEvents.filter(e => e.appointmentTypeId === spieltagTypeId);
+      const otherAppointments = sortedEvents.filter(e => e.appointmentTypeId !== spieltagTypeId);
+
+      return {
+          nextMatchDay: matchDays[0] || null,
+          nextAppointments: otherAppointments.slice(0, 3),
+      };
+      
+    }, [appointments, exceptions, appointmentTypes, memberProfile, isLoadingExceptions]);
 
     const isLoading = isUserLoading || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingNews || isLoadingPolls || isLoadingGroups || isLoadingTypes;
 
@@ -191,10 +212,10 @@ export default function DashboardPage() {
                             <div className="space-y-1">
                                 <p className="text-2xl font-bold">{nextMatchDay.title}</p>
                                 <p className="text-muted-foreground text-lg">
-                                    {format(nextMatchDay.startDate.toDate(), 'eeee, dd. MMMM yyyy', { locale: de })}
+                                    {format(nextMatchDay.instanceDate, 'eeee, dd. MMMM yyyy', { locale: de })}
                                 </p>
                                 <p className="text-muted-foreground">
-                                    {nextMatchDay.isAllDay ? 'Ganztägig' : format(nextMatchDay.startDate.toDate(), 'HH:mm \'Uhr\'', { locale: de })}
+                                    {nextMatchDay.isAllDay ? 'Ganztägig' : format(nextMatchDay.instanceDate, 'HH:mm \'Uhr\'', { locale: de })}
                                 </p>
                             </div>
                              <Button variant="outline" asChild>
@@ -231,10 +252,10 @@ export default function DashboardPage() {
                                     {nextAppointments.map((app) => (
                                         <TableRow key={app.virtualId}>
                                             <TableCell>
-                                                {format(app.startDate.toDate(), 'eee, dd.MM.yy', { locale: de })}
+                                                {format(app.instanceDate, 'eee, dd.MM.yy', { locale: de })}
                                             </TableCell>
                                             <TableCell>
-                                                {app.isAllDay ? 'Ganztags' : format(app.startDate.toDate(), 'HH:mm', { locale: de })}
+                                                {app.isAllDay ? 'Ganztags' : format(app.instanceDate, 'HH:mm', { locale: de })}
                                             </TableCell>
                                             <TableCell className="font-medium">{app.title}</TableCell>
                                         </TableRow>
