@@ -334,7 +334,7 @@ export default function AdminTerminePage() {
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
+    return { typesMap, locationsMap, teamsMap, groupedTeams };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -669,11 +669,10 @@ export default function AdminTerminePage() {
   };
 
   async function handleSaveSingleOnly() {
-    if (!firestore || !pendingUpdateData || !user) return;
+    if (!pendingUpdateData) return;
     setIsSubmitting(true);
     
     try {
-      // Sende die rohen Formulardaten an die Cloud Function
       await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) {
@@ -689,7 +688,7 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!firestore || !pendingUpdateData || !user) return;
+    if (!pendingUpdateData) return;
     setIsSubmitting(true);
 
     if (!isAdmin) {
@@ -699,7 +698,6 @@ export default function AdminTerminePage() {
     }
 
     try {
-      // Sende die rohen Formulardaten an die Cloud Function
       await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -2039,3 +2037,4 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
