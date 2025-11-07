@@ -195,8 +195,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    // Correctly unpack the nested data object
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
+    // **FIX:** Correctly unpack the nested data object
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -271,7 +271,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
+    // **FIX:** Correctly unpack the nested data object
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -292,7 +293,14 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const instanceDate = new Date(pendingUpdateData.originalDateISO);
         const dayBefore = addDays(instanceDate, -1);
         
-        const originalStartDate = originalAppointmentData.startDate.toDate();
+        // **FIX:** Safely call .toDate() only if startDate exists and is a Timestamp
+        const originalStartDate = (originalAppointmentData.startDate instanceof Timestamp) 
+          ? originalAppointmentData.startDate.toDate() 
+          : null;
+
+        if (!originalStartDate) {
+            throw new HttpsError('failed-precondition', 'Original appointment has no valid start date.');
+        }
         
         if (dayBefore >= originalStartDate) {
             batch.update(originalAppointmentRef, {
@@ -336,6 +344,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
                 : typeName;
         }
         
+        // **FIX:** Explicitly construct the new object instead of spreading
         const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -343,9 +352,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
-            recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+            // **FIX:** Safely access recurrenceEndDate
+            recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
-            rsvpDeadline: originalAppointmentData.rsvpDeadline,
+            rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
             locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
             description: pendingUpdateData.description ?? originalAppointmentData.description,
             meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
@@ -373,4 +383,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
-
