@@ -11,8 +11,6 @@ const nextConfig: NextConfig = {
   },
   allowedDevOrigins: [
       "https://*.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
-      "https://6000-firebase-studio-1761141556801.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
-      "https://9000-firebase-studio-1761141556801.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
   ],
   images: {
     remotePatterns: [
@@ -45,4 +43,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
