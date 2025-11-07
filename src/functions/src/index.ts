@@ -38,7 +38,11 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; // Standardmäßig sich selbst
+  const targetUid = request.data?.uid || callerUid; 
+
+  if (typeof targetUid !== 'string' || targetUid.length === 0) {
+    throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
+  }
 
   // Prüfen, ob bereits Admins existieren
   let adminsExist = false;
@@ -293,14 +297,19 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const instanceDate = new Date(pendingUpdateData.originalDateISO);
       const dayBefore = addDays(instanceDate, -1);
       
-      const instanceStartOfDay = new Date(instanceDate);
-      instanceStartOfDay.setHours(0,0,0,0);
+      const originalStartDate = originalAppointmentData.startDate?.toDate();
+      if (!originalStartDate) {
+          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
+      }
       
-      if (dayBefore >= instanceStartOfDay) {
+      // KORREKTE LOGIK: Vergleiche mit dem Start der gesamten Serie
+      if (dayBefore >= originalStartDate) {
+        // Die alte Serie wird gekürzt
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
         });
       } else {
+        // Die Bearbeitung findet am/vor dem ersten Termin statt, also wird die alte Serie komplett ersetzt/gelöscht
         batch.delete(originalAppointmentRef);
       }
 
@@ -359,6 +368,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       batch.set(newAppointmentRef, newAppointmentData);
 
+      const instanceStartOfDay = new Date(instanceDate);
+      instanceStartOfDay.setHours(0,0,0,0);
+      
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
         .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
