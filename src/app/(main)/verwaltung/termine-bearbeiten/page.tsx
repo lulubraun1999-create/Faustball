@@ -159,7 +159,6 @@ const singleAppointmentInstanceSchema = z
   .object({
     originalDateISO: z.string(),
     startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'),
-    // +++ KORRIGIERT: .nullable() hinzugefügt +++
     endDate: z.string().optional().nullable(),
     isAllDay: z.boolean().default(false),
     title: z.string().optional(),
@@ -223,6 +222,19 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
           path: ['recurrenceEndDate'],
         }
       )
+       .refine(data => {
+            if(data.recurrence !== 'none' && data.recurrenceEndDate && data.startDate) {
+                try {
+                    const start = new Date(data.startDate);
+                    const end = new Date(data.recurrenceEndDate);
+                    return end >= start;
+                } catch(e) { return false; }
+            }
+            return true;
+        }, {
+            message: 'Ende der Wiederholung muss nach dem Startdatum liegen.',
+            path: ['recurrenceEndDate'],
+        })
       .superRefine((data, ctx) => {
         if (
           data.appointmentTypeId === sonstigeTypeId &&
@@ -343,7 +355,7 @@ export default function AdminTerminePage() {
       return a.name.localeCompare(b.name);
     };
 
-    const grouped: GroupWithTeams[] = classes
+    const grouped = classes
       .sort(customSort)
       .map((c: Group) => ({
         ...c,
@@ -516,22 +528,24 @@ export default function AdminTerminePage() {
     return allEvents;
   }, [appointments, exceptions, isLoadingExceptions]);
 
-  const filteredAppointments = useMemo(() => {
+ const filteredAppointments = useMemo(() => {
     if (isMemberProfileLoading) return [];
-    if (!memberProfile && !isMemberProfileLoading) return [];
-  
+    
+    // Safety check: if memberProfile is not loaded, we can't filter by 'myTeams'.
+    // Default to 'all' in this case to prevent errors.
+    const effectiveTeamFilter = teamFilter === 'myTeams' && !memberProfile ? 'all' : teamFilter;
     const userTeamIdsSet = new Set(memberProfile?.teams || []);
   
     let preFiltered = unrolledAppointments;
   
-    if (teamFilter === 'myTeams') {
+    if (effectiveTeamFilter === 'myTeams') {
       preFiltered = unrolledAppointments.filter((app) => {
         if (app.visibility.type === 'all') return true;
         return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
       });
-    } else if (teamFilter !== 'all') {
+    } else if (effectiveTeamFilter !== 'all') {
       preFiltered = unrolledAppointments.filter(
-        (app) => app.visibility.teamIds.includes(teamFilter)
+        (app) => app.visibility.teamIds.includes(effectiveTeamFilter)
       );
     }
   
@@ -557,26 +571,6 @@ export default function AdminTerminePage() {
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
-    
-    if (data.recurrence !== 'none') {
-        if (!data.recurrenceEndDate || !data.startDate) {
-            appointmentForm.setError('recurrenceEndDate', { message: 'Start- und Enddatum der Wiederholung sind erforderlich.' });
-            return;
-        }
-        try {
-            const start = new Date(data.startDate);
-            const end = new Date(data.recurrenceEndDate);
-            if (end < start) {
-                appointmentForm.setError('recurrenceEndDate', { message: 'Ende der Wiederholung muss nach dem Startdatum liegen.' });
-                return;
-            }
-        } catch (e) {
-            appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Datumsformat.' });
-            return;
-        }
-    }
-
-
     setIsSubmitting(true);
 
     const selectedTypeName = typesMap.get(data.appointmentTypeId);
@@ -696,15 +690,12 @@ export default function AdminTerminePage() {
   ) => {
     if (!selectedInstanceToEdit) return;
 
-    // +++ KORRIGIERTER CODEBLOCK +++
     const cleanData = {
       ...data,
-      // Muss 'null' sein, damit es zum Backend (Korrektur 1 & 2) passt
       endDate: data.endDate || null, 
     };
 
-    setPendingUpdateData(cleanData); // Verwende die bereinigten Daten
-    // +++ ENDE KORREKTUR +++
+    setPendingUpdateData(cleanData);
 
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
@@ -727,10 +718,12 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        await saveSingleException({
-            pendingUpdateData,
-            selectedInstanceToEdit,
-        });
+        const payload = {
+            ...pendingUpdateData,
+            originalId: selectedInstanceToEdit.originalId,
+        }
+
+        await saveSingleException(payload);
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -761,10 +754,12 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      await saveFutureInstancesFn({
-        pendingUpdateData,
-        selectedInstanceToEdit,
-      });
+      const payload = {
+            ...pendingUpdateData,
+            originalId: selectedInstanceToEdit.originalId,
+        }
+
+      await saveFutureInstancesFn(payload);
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -1443,12 +1438,15 @@ export default function AdminTerminePage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Mannschaften auswählen</FormLabel>
-                        <FormControl>
-                           <Select>
-                            <SelectTrigger>
-                               <SelectValue placeholder="Mannschaften auswählen..." />
-                            </SelectTrigger>
-                            <SelectContent>
+                           <Popover>
+                            <PopoverTrigger asChild>
+                               <FormControl>
+                                    <Button variant="outline" role="combobox" className={cn("w-full justify-between", !field.value?.length && "text-muted-foreground")}>
+                                        {field.value?.length ? `${field.value.length} ausgewählt` : "Mannschaften auswählen..."}
+                                    </Button>
+                               </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] max-h-[--radix-popover-content-available-height] p-0">
                                 <ScrollArea className="h-48">
                                   {isLoadingGroups ? (
                                     <div className="p-4 text-center text-sm">Lade...</div>
@@ -1475,9 +1473,8 @@ export default function AdminTerminePage() {
                                     ))
                                   )}
                                 </ScrollArea>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
+                            </PopoverContent>
+                          </Popover>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -2101,233 +2098,233 @@ export default function AdminTerminePage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Art (Titel)</TableHead>
-                    <TableHead>Datum/Zeit</TableHead>
-                    <TableHead>Sichtbarkeit</TableHead>
-                    <TableHead>Ort</TableHead>
-                    <TableHead>Treffpunkt</TableHead>
-                    <TableHead>Treffzeit</TableHead>
-                    <TableHead>Wiederholung</TableHead>
-                    <TableHead>Rückmeldung bis</TableHead>
-                    <TableHead className="text-right">Aktionen</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Object.keys(groupedAppointments).length > 0 ? (
-                    Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
-                      <React.Fragment key={monthYear}>
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={9} className="py-2 px-4 text-sm font-semibold">
-                          {monthYear}
-                        </TableCell>
-                      </TableRow>
-                      {appointmentsInMonth.map((app) => {
-                        const typeName =
-                          typesMap.get(app.appointmentTypeId) ||
-                          app.appointmentTypeId;
-                        const isSonstiges = typeName === 'Sonstiges';
-                        const titleIsDefault =
-                          !isSonstiges && app.title === typeName;
-                        const showTitle =
-                          app.title && (!titleIsDefault || isSonstiges);
-                        const displayTitle = showTitle
-                          ? `${typeName} (${app.title})`
-                          : typeName;
-                        const isCancelled = app.isCancelled;
+               {Object.keys(groupedAppointments).length > 0 ? (
+                 <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
+                    {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                         <AccordionItem value={monthYear} key={monthYear}>
+                            <AccordionTrigger className="text-lg font-semibold">
+                                {monthYear} ({appointmentsInMonth.length})
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <Table>
+                                    <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Art (Titel)</TableHead>
+                                        <TableHead>Datum/Zeit</TableHead>
+                                        <TableHead>Sichtbarkeit</TableHead>
+                                        <TableHead>Ort</TableHead>
+                                        <TableHead>Treffpunkt</TableHead>
+                                        <TableHead>Treffzeit</TableHead>
+                                        <TableHead>Wiederholung</TableHead>
+                                        <TableHead>Rückmeldung bis</TableHead>
+                                        <TableHead className="text-right">Aktionen</TableHead>
+                                    </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                    {appointmentsInMonth.map((app) => {
+                                        const typeName =
+                                        typesMap.get(app.appointmentTypeId) ||
+                                        app.appointmentTypeId;
+                                        const isSonstiges = typeName === 'Sonstiges';
+                                        const titleIsDefault =
+                                        !isSonstiges && app.title === typeName;
+                                        const showTitle =
+                                        app.title && (!titleIsDefault || isSonstiges);
+                                        const displayTitle = showTitle
+                                        ? `${typeName} (${app.title})`
+                                        : typeName;
+                                        const isCancelled = app.isCancelled;
 
-                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
-                        let rsvpDeadlineString = '-';
-                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
-                          const startMillis = originalAppointment.startDate.toMillis();
-                          const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
-                          const offset = startMillis - rsvpMillis;
+                                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
+                                        let rsvpDeadlineString = '-';
+                                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                                        const startMillis = originalAppointment.startDate.toMillis();
+                                        const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                                        const offset = startMillis - rsvpMillis;
 
-                          const instanceStartMillis = app.startDate.toMillis();
-                          const instanceRsvpMillis = instanceStartMillis - offset;
-                          rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
-                        }
+                                        const instanceStartMillis = app.startDate.toMillis();
+                                        const instanceRsvpMillis = instanceStartMillis - offset;
+                                        rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                                        }
 
 
-                        return (
-                          <TableRow
-                            key={app.virtualId}
-                            className={cn(
-                              isCancelled &&
-                              'text-muted-foreground opacity-70'
-                            )}
-                          >
-                            <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
-                              {displayTitle}
-                            </TableCell>
-                             <TableCell>
-                              {isCancelled ? (
-                                <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
-                                  ABGESAGT
-                                </span>
-                              ) : (
-                                <>
-                                  {app.startDate
-                                    ? format(
-                                        app.startDate.toDate(),
-                                        app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
-                                        { locale: de }
-                                      )
-                                    : 'N/A'}
-                                  {app.isException && !isCancelled && (
-                                    <span className="ml-1 text-xs text-blue-600">
-                                      (G)
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>
-                              {app.visibility.type === 'all'
-                                ? 'Alle'
-                                : app.visibility.teamIds
-                                  .map((id) => teamsMap.get(id) || id)
-                                  .join(', ') || '-'}
-                            </TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>
-                              {app.locationId
-                                ? locationsMap.get(app.locationId)?.name || '-'
-                                : '-'}
-                            </TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingPoint || '-'}</TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingTime || '-'}</TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>
-                              {app.recurrence && app.recurrence !== 'none'
-                                ? `bis ${app.recurrenceEndDate
-                                  ? format(
-                                    app.recurrenceEndDate.toDate(),
-                                    'dd.MM.yy',
-                                    { locale: de }
-                                  )
-                                  : '...'
-                                }`
-                                : '-'}
-                            </TableCell>
-                            <TableCell className={cn(isCancelled && "line-through")}>{rsvpDeadlineString}</TableCell>
-                            <TableCell className="text-right space-x-0">
-                              <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}>
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Einzelnen Termin bearbeiten</span>
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled={isSubmitting}
-                                  >
-                                    {' '}
-                                    {isCancelled ? (
-                                      <RefreshCw className="h-4 w-4 text-green-600" />
-                                    ) : (
-                                      <CalendarX className="h-4 w-4 text-orange-600" />
-                                    )}{' '}
-                                    <span className="sr-only">
-                                      {isCancelled
-                                        ? 'Absage rückgängig'
-                                        : 'Diesen Termin absagen'}
-                                    </span>
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    {' '}
-                                    <AlertDialogTitle>
-                                      {isCancelled
-                                        ? 'Absage rückgängig machen?'
-                                        : 'Nur diesen Termin absagen?'}
-                                    </AlertDialogTitle>{' '}
-                                    <AlertDialogDescription>
-                                      {isCancelled
-                                        ? `Soll der abgesagte Termin am ${format(
-                                          app.startDate.toDate(),
-                                          'dd.MM.yyyy'
-                                        )} wiederhergestellt werden?`
-                                        : `Möchten Sie nur den Termin am ${format(
-                                          app.startDate.toDate(),
-                                          'dd.MM.yyyy'
-                                        )} absagen? Die Serie bleibt bestehen.`}
-                                    </AlertDialogDescription>{' '}
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    {' '}
-                                    <AlertDialogCancel>
-                                      Abbrechen
-                                    </AlertDialogCancel>{' '}
-                                    <AlertDialogAction
-                                      onClick={() =>
-                                        handleCancelSingleInstance(app)
-                                      }
-                                    >
-                                      {isCancelled
-                                        ? 'Wiederherstellen'
-                                        : 'Absagen'}
-                                    </AlertDialogAction>{' '}
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                        return (
+                                        <TableRow
+                                            key={app.virtualId}
+                                            className={cn(
+                                            isCancelled &&
+                                            'text-muted-foreground opacity-70'
+                                            )}
+                                        >
+                                            <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
+                                            {displayTitle}
+                                            </TableCell>
+                                            <TableCell>
+                                            {isCancelled ? (
+                                                <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
+                                                ABGESAGT
+                                                </span>
+                                            ) : (
+                                                <>
+                                                {app.startDate
+                                                    ? format(
+                                                        app.startDate.toDate(),
+                                                        app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                                        { locale: de }
+                                                    )
+                                                    : 'N/A'}
+                                                {app.isException && !isCancelled && (
+                                                    <span className="ml-1 text-xs text-blue-600">
+                                                    (G)
+                                                    </span>
+                                                )}
+                                                </>
+                                            )}
+                                            </TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>
+                                            {app.visibility.type === 'all'
+                                                ? 'Alle'
+                                                : app.visibility.teamIds
+                                                .map((id) => teamsMap.get(id) || id)
+                                                .join(', ') || '-'}
+                                            </TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>
+                                            {app.locationId
+                                                ? locationsMap.get(app.locationId)?.name || '-'
+                                                : '-'}
+                                            </TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingPoint || '-'}</TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingTime || '-'}</TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>
+                                            {app.recurrence && app.recurrence !== 'none'
+                                                ? `bis ${app.recurrenceEndDate
+                                                ? format(
+                                                    app.recurrenceEndDate.toDate(),
+                                                    'dd.MM.yy',
+                                                    { locale: de }
+                                                )
+                                                : '...'
+                                                }`
+                                                : '-'}
+                                            </TableCell>
+                                            <TableCell className={cn(isCancelled && "line-through")}>{rsvpDeadlineString}</TableCell>
+                                            <TableCell className="text-right space-x-0">
+                                            <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}>
+                                                <Edit className="h-4 w-4" />
+                                                <span className="sr-only">Einzelnen Termin bearbeiten</span>
+                                            </Button>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    disabled={isSubmitting}
+                                                >
+                                                    {' '}
+                                                    {isCancelled ? (
+                                                    <RefreshCw className="h-4 w-4 text-green-600" />
+                                                    ) : (
+                                                    <CalendarX className="h-4 w-4 text-orange-600" />
+                                                    )}{' '}
+                                                    <span className="sr-only">
+                                                    {isCancelled
+                                                        ? 'Absage rückgängig'
+                                                        : 'Diesen Termin absagen'}
+                                                    </span>
+                                                </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    {' '}
+                                                    <AlertDialogTitle>
+                                                    {isCancelled
+                                                        ? 'Absage rückgängig machen?'
+                                                        : 'Nur diesen Termin absagen?'}
+                                                    </AlertDialogTitle>{' '}
+                                                    <AlertDialogDescription>
+                                                    {isCancelled
+                                                        ? `Soll der abgesagte Termin am ${format(
+                                                        app.startDate.toDate(),
+                                                        'dd.MM.yyyy'
+                                                        )} wiederhergestellt werden?`
+                                                        : `Möchten Sie nur den Termin am ${format(
+                                                        app.startDate.toDate(),
+                                                        'dd.MM.yyyy'
+                                                        )} absagen? Die Serie bleibt bestehen.`}
+                                                    </AlertDialogDescription>{' '}
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    {' '}
+                                                    <AlertDialogCancel>
+                                                    Abbrechen
+                                                    </AlertDialogCancel>{' '}
+                                                    <AlertDialogAction
+                                                    onClick={() =>
+                                                        handleCancelSingleInstance(app)
+                                                    }
+                                                    >
+                                                    {isCancelled
+                                                        ? 'Wiederherstellen'
+                                                        : 'Absagen'}
+                                                    </AlertDialogAction>{' '}
+                                                </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
 
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    {' '}
-                                    <Trash2 className="h-4 w-4 text-destructive" />{' '}
-                                    <span className="sr-only">
-                                      Serie löschen
-                                    </span>
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    {' '}
-                                    <AlertDialogTitle>
-                                      Ganze Serie löschen?
-                                    </AlertDialogTitle>{' '}
-                                    <AlertDialogDescription>
-                                      Diese Aktion kann nicht rückgängig gemacht
-                                      werden und löscht die gesamte Terminserie "
-                                      {displayTitle}". Alle zukünftigen Termine
-                                      dieser Serie werden entfernt.
-                                    </AlertDialogDescription>{' '}
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    {' '}
-                                    <AlertDialogCancel>
-                                      Abbrechen
-                                    </AlertDialogCancel>{' '}
-                                    <AlertDialogAction
-                                      onClick={() =>
-                                        handleDeleteAppointment(app.originalId)
-                                      }
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      Serie löschen
-                                    </AlertDialogAction>{' '}
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                      </React.Fragment>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon">
+                                                    {' '}
+                                                    <Trash2 className="h-4 w-4 text-destructive" />{' '}
+                                                    <span className="sr-only">
+                                                    Serie löschen
+                                                    </span>
+                                                </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    {' '}
+                                                    <AlertDialogTitle>
+                                                    Ganze Serie löschen?
+                                                    </AlertDialogTitle>{' '}
+                                                    <AlertDialogDescription>
+                                                    Diese Aktion kann nicht rückgängig gemacht
+                                                    werden und löscht die gesamte Terminserie "
+                                                    {displayTitle}". Alle zukünftigen Termine
+                                                    dieser Serie werden entfernt.
+                                                    </AlertDialogDescription>{' '}
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    {' '}
+                                                    <AlertDialogCancel>
+                                                    Abbrechen
+                                                    </AlertDialogCancel>{' '}
+                                                    <AlertDialogAction
+                                                    onClick={() =>
+                                                        handleDeleteAppointment(app.originalId)
+                                                    }
+                                                    className="bg-destructive hover:bg-destructive/90"
+                                                    >
+                                                    Serie löschen
+                                                    </AlertDialogAction>{' '}
+                                                </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                            </TableCell>
+                                        </TableRow>
+                                        );
+                                    })}
+                                    </TableBody>
+                                </Table>
+                            </AccordionContent>
+                        </AccordionItem>
                     ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center">
-                          Keine Termine entsprechen den aktuellen Filtern.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                 )
+                ) : (
+                    <div className="text-center py-10 text-muted-foreground">
+                        Keine Termine entsprechen den aktuellen Filtern.
+                    </div>
+                )}
             </div>
           )}
         </CardContent>
