@@ -38,13 +38,12 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   const callerUid = request.auth.uid;
   const isCallerAdmin = request.auth.token.admin === true;
-  const targetUid = request.data?.uid || callerUid; 
+  const targetUid = request.data?.uid || callerUid; // Fallback to the caller's UID
 
   if (typeof targetUid !== 'string' || targetUid.length === 0) {
     throw new HttpsError('invalid-argument', 'The function was called without a valid target UID.');
   }
 
-  // Prüfen, ob bereits Admins existieren
   let adminsExist = false;
   try {
       const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
@@ -54,16 +53,13 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
        throw new HttpsError('internal', 'Could not verify admin existence for promotion.', error.message);
   }
 
-  // Autorisierung: Erlaube, wenn der Aufrufer Admin ist ODER wenn kein Admin existiert und der Aufrufer sich selbst ernennt.
   if (!isCallerAdmin && !(adminsExist === false && targetUid === callerUid)) {
       throw new HttpsError('permission-denied', 'Only an admin can set other users as admins, or you must be the first user.');
   }
 
   try {
-    // 1. Custom Claim im Auth Token setzen
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
 
-    // 2. Firestore Dokumente (users und members) aktualisieren
     const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
     const memberDocRef = db.collection('members').doc(targetUid);
@@ -97,7 +93,6 @@ export const revokeAdminRole = onCall(async (request: CallableRequest) => {
         throw new HttpsError('invalid-argument', 'The function must be called with a valid "uid" argument.');
     }
 
-    // Prevent last admin from revoking themselves
     if (request.auth.uid === targetUid) {
         const adminSnapshot = await db.collection('users').where('role', '==', 'admin').get();
         if (adminSnapshot.size <= 1) {
@@ -165,7 +160,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
         throw new HttpsError('permission-denied', 'You do not have permission to send messages to this room.');
     }
 
-    // Benutzerprofildaten für den Anzeigenamen abrufen
     const userDoc = await db.collection('users').doc(userId).get();
     if (!userDoc.exists) {
         throw new HttpsError('not-found', 'User profile not found.');
@@ -173,7 +167,6 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
     const userData = userDoc.data();
     const userName = `${userData?.firstName || ''} ${userData?.lastName || ''}`.trim() || 'Unbekannt';
 
-    // Nachrichtendaten erstellen und in die Datenbank schreiben
     const messageData = {
         userId: userId,
         userName: userName,
@@ -302,7 +295,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
       }
       
-      // Compare with the start of the series, not the instance
       if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
@@ -384,5 +376,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
-    
