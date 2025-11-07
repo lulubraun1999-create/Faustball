@@ -29,7 +29,6 @@ import {
   where,
   writeBatch,
   getDocs,
-  getDoc,
   setDoc,
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -102,10 +101,8 @@ import {
   Loader2,
   Plus,
   Filter,
-  MapPin,
   CalendarPlus,
   CalendarX,
-  X,
   RefreshCw,
 } from 'lucide-react';
 import type {
@@ -118,16 +115,13 @@ import type {
 } from '@/lib/types';
 import {
   format,
-  formatISO,
   isValid as isDateValid,
   addDays,
   addWeeks,
   addMonths,
   differenceInMilliseconds,
   set,
-  isEqual,
   startOfDay,
-  parse,
   parseISO,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -324,6 +318,16 @@ export default function AdminTerminePage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
+  const isLoading =
+    isUserLoading ||
+    isLoadingAppointments ||
+    isLoadingTypes ||
+    isLoadingLocations ||
+    isLoadingGroups ||
+    isLoadingExceptions ||
+    isMemberProfileLoading;
+
+
   const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo(() => {
     if (!appointmentTypes || !locations || !groups) {
       return { typesMap: new Map(), locationsMap: new Map(), teams: [], teamsMap: new Map(), groupedTeams: [] };
@@ -394,15 +398,14 @@ export default function AdminTerminePage() {
     [appointmentTypes]
   );
 
-  const unrolledAppointments = useMemo(() => {
+ const unrolledAppointments = useMemo(() => {
+    // Wait until all required data is loaded to prevent crashes
     if (!appointments || !exceptions) return [];
 
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions.forEach((ex) => {
       if (ex.originalDate) {
-        const key = `${
-          ex.originalAppointmentId
-        }-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
+        const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
         exceptionsMap.set(key, ex);
       }
     });
@@ -424,15 +427,14 @@ export default function AdminTerminePage() {
           exception?.status === 'modified'
             ? { ...app, ...(exception.modifiedData || {}), isException: true }
             : app;
-        if (originalDateStartOfDay >= startOfDay(now) || isCancelled) {
-          allEvents.push({
-            ...modifiedApp,
-            originalId: app.id,
-            virtualId: app.id,
-            isCancelled,
-            originalDateISO: originalDateStartOfDayISO,
-          });
-        }
+        // Don't filter out past events, just sort them later
+        allEvents.push({
+          ...modifiedApp,
+          originalId: app.id,
+          virtualId: app.id,
+          isCancelled,
+          originalDateISO: originalDateStartOfDayISO,
+        });
       } else {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = app.recurrenceEndDate
@@ -454,52 +456,40 @@ export default function AdminTerminePage() {
           const instanceException = exceptionsMap.get(instanceKey);
           const instanceIsCancelled = instanceException?.status === 'cancelled';
 
-          if (currentDateStartOfDay >= startOfDay(now) || instanceIsCancelled) {
-            const newStartDate = Timestamp.fromDate(currentDate);
-            const newEndDate = app.endDate
-              ? Timestamp.fromMillis(currentDate.getTime() + duration)
-              : undefined;
+          const newStartDate = Timestamp.fromDate(currentDate);
+          const newEndDate = app.endDate
+            ? Timestamp.fromMillis(currentDate.getTime() + duration)
+            : undefined;
 
-            let instanceData: UnrolledAppointment = {
-              ...app,
-              id: `${app.id}-${currentDate.toISOString()}`,
-              virtualId: instanceKey,
-              originalId: app.id,
-              originalDateISO: currentDateStartOfDayISO,
-              startDate: newStartDate,
-              endDate: newEndDate,
-              isCancelled: instanceIsCancelled,
+          let instanceData: UnrolledAppointment = {
+            ...app,
+            id: `${app.id}-${currentDate.toISOString()}`,
+            virtualId: instanceKey,
+            originalId: app.id,
+            originalDateISO: currentDateStartOfDayISO,
+            startDate: newStartDate,
+            endDate: newEndDate,
+            isCancelled: instanceIsCancelled,
+          };
+
+          if (
+            instanceException?.status === 'modified' &&
+            instanceException.modifiedData
+          ) {
+            instanceData = {
+              ...instanceData,
+              ...instanceException.modifiedData,
+              isException: true,
             };
-
-            if (
-              instanceException?.status === 'modified' &&
-              instanceException.modifiedData
-            ) {
-              instanceData = {
-                ...instanceData,
-                ...instanceException.modifiedData,
-                isException: true,
-              };
-            }
-            allEvents.push(instanceData);
           }
-
+          allEvents.push(instanceData);
+          
           switch (app.recurrence) {
-            case 'daily':
-              currentDate = addDays(currentDate, 1);
-              break;
-            case 'weekly':
-              currentDate = addWeeks(currentDate, 1);
-              break;
-            case 'bi-weekly':
-              currentDate = addWeeks(currentDate, 2);
-              break;
-            case 'monthly':
-              currentDate = addMonths(currentDate, 1);
-              break;
-            default:
-              currentDate = addDays(recurrenceEndDate, 1);
-              break;
+            case 'daily': currentDate = addDays(currentDate, 1); break;
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = addMonths(currentDate, 1); break;
+            default: currentDate = addDays(recurrenceEndDate, 1); break;
           }
           iter++;
         }
@@ -509,28 +499,28 @@ export default function AdminTerminePage() {
   }, [appointments, exceptions]);
 
  const filteredAppointments = useMemo(() => {
-    if (!unrolledAppointments || !memberProfile) return [];
-  
-    let preFiltered = unrolledAppointments;
-    const userTeamIdsSet = new Set(memberProfile.teams || []);
-  
-    if (teamFilter === 'myTeams') {
-      preFiltered = unrolledAppointments.filter((app) => {
-        if (app.visibility.type === 'all') return true;
-        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
-      });
-    } else if (teamFilter !== 'all') {
-      preFiltered = unrolledAppointments.filter(
-        (app) => app.visibility.teamIds.includes(teamFilter)
-      );
-    }
-  
-    const finalFiltered = preFiltered.filter(
-      (app) => typeFilter === 'all' || app.appointmentTypeId === typeFilter
-    );
-  
-    return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
+    if (isLoading || !unrolledAppointments) return [];
+
+    const now = startOfDay(new Date());
+
+    return unrolledAppointments
+        .filter(app => {
+            const isVisibleByTeam = 
+                teamFilter === 'all' || 
+                app.visibility.type === 'all' || 
+                app.visibility.teamIds.includes(teamFilter);
+
+            const isVisibleByType = 
+                typeFilter === 'all' || 
+                app.appointmentTypeId === typeFilter;
+            
+            const isFutureOrCancelled = app.startDate.toDate() >= now || app.isCancelled;
+
+            return isVisibleByTeam && isVisibleByType && isFutureOrCancelled;
+        })
+        .sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
+
+  }, [unrolledAppointments, teamFilter, typeFilter, isLoading]);
 
   const groupedAppointments = useMemo(() => {
     if (!filteredAppointments) return {};
@@ -695,9 +685,10 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
+        // Pass the original ID and the updated data
         const payload = {
-          originalId: selectedInstanceToEdit.originalId,
           ...pendingUpdateData,
+          originalId: selectedInstanceToEdit.originalId,
         };
 
         await saveSingleException(payload);
@@ -732,8 +723,8 @@ export default function AdminTerminePage() {
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
       const payload = {
-        originalId: selectedInstanceToEdit.originalId,
         ...pendingUpdateData,
+        originalId: selectedInstanceToEdit.originalId,
       };
 
       await saveFutureInstancesFn(payload);
@@ -960,15 +951,6 @@ export default function AdminTerminePage() {
     }
   };
 
-  const isLoading =
-    isUserLoading ||
-    isLoadingAppointments ||
-    isLoadingTypes ||
-    isLoadingLocations ||
-    isLoadingGroups ||
-    isLoadingExceptions ||
-    isMemberProfileLoading;
-
   const customSort = (a: Group, b: Group) => {
     const regex = /^(U|u)(\d+)/;
     const matchA = a.name.match(regex);
@@ -997,7 +979,7 @@ export default function AdminTerminePage() {
     })).filter(c => c.teams.length > 0);
 }, [groups]);
 
-  if (isUserLoading) {
+  if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -2020,7 +2002,6 @@ export default function AdminTerminePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Alle Mannschaften</SelectItem>
-                    <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
                     <Separator />
                     {isLoadingGroups ? (
                       <SelectItem value="loading" disabled>
@@ -2122,14 +2103,24 @@ export default function AdminTerminePage() {
                                         const instanceRsvpMillis = instanceStartMillis - offset;
                                         rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
                                         }
-
-                                        const showBanner = index < appointmentsInMonth.length - 1 &&
-                                            appointmentsInMonth[index].startDate.toDate() < new Date('2024-12-01') &&
-                                            appointmentsInMonth[index + 1].startDate.toDate() >= new Date('2024-12-01');
+                                        
+                                        const showBanner = index > 0 &&
+                                            appointmentsInMonth[index-1].startDate.toDate().getMonth() === 10 && // Vormonat ist November
+                                            appointmentsInMonth[index].startDate.toDate().getMonth() === 11; // Aktueller Monat ist Dezember
 
 
                                         return (
                                           <React.Fragment key={app.virtualId}>
+                                            {showBanner && (
+                                              <TableRow>
+                                                <TableCell
+                                                  colSpan={9}
+                                                  className="bg-destructive/90 text-destructive-foreground text-center font-bold"
+                                                >
+                                                  Ab hier Doppelbuchungen möglich
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
                                             <TableRow
                                                 
                                                 className={cn(
@@ -2293,16 +2284,6 @@ export default function AdminTerminePage() {
                                                 </AlertDialog>
                                                 </TableCell>
                                             </TableRow>
-                                            {showBanner && (
-                                              <TableRow>
-                                                <TableCell
-                                                  colSpan={9}
-                                                  className="bg-destructive/90 text-destructive-foreground text-center font-bold"
-                                                >
-                                                  Ab hier Doppelbuchungen möglich
-                                                </TableCell>
-                                              </TableRow>
-                                            )}
                                           </React.Fragment>
                                         );
                                     })}
