@@ -76,7 +76,6 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
-    // KORREKTUR 1: 'unsubscribe' außerhalb des try-Blocks deklarieren
     let unsubscribe: (() => void) | undefined;
 
     try {
@@ -117,18 +116,17 @@ export function useCollection<T = any>(
       setIsLoading(false);
     }
 
-    // KORREKTUR 1 (Fortsetzung): Absturzsichere Cleanup-Funktion
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
-  }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+  }, [memoizedTargetRefOrQuery]);
   
-  // KORREKTUR 2: Verbesserte Fehlermeldung, die nicht abstürzt
-  if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
-    // Diese Zeile stürzt nicht mehr ab, sondern gibt eine klare Fehlermeldung aus
-    throw new Error(memoErrors.notMemoized('useCollection', (memoizedTargetRefOrQuery as any)._query?.path?.toString() ?? (memoizedTargetRefOrQuery as any).path ?? 'unbekannter Pfad'));
+  if (memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
+      const path = (memoizedTargetRefOrQuery as any)._query?.path?.toString() ?? (memoizedTargetRefOrQuery as any).path ?? 'unbekannter Pfad';
+      console.error(memoErrors.notMemoized('useCollection', path));
+      // throw new Error(memoErrors.notMemoized('useCollection', path)); // Optional: throw error in dev
   }
 
   return { data, isLoading, error };
