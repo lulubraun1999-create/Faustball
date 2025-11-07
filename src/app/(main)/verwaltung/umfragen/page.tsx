@@ -108,15 +108,16 @@ export default function UmfragenPage() {
     const expired: Poll[] = [];
     
     (visiblePolls || []).forEach(poll => {
-        if (isPast(poll.endDate.toDate())) {
+        const endDate = poll.endDate instanceof Timestamp ? poll.endDate.toDate() : poll.endDate;
+        if (isPast(endDate)) {
             expired.push(poll);
         } else {
             active.push(poll);
         }
     });
 
-    active.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-    expired.sort((a,b) => b.endDate.toMillis() - b.endDate.toMillis());
+    active.sort((a,b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
+    expired.sort((a,b) => (b.endDate as Timestamp).toMillis() - (a.endDate as Timestamp).toMillis());
 
     return { activePolls: active, expiredPolls: expired };
   }, [visiblePolls]);
@@ -194,7 +195,8 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
         return new Set(votes.filter(v => v.userId === user?.uid).map(v => v.optionId));
     }, [votes, user]);
     
-    const pollExpired = isPast(poll.endDate.toDate());
+    const endDate = poll.endDate instanceof Timestamp ? poll.endDate.toDate() : poll.endDate;
+    const pollExpired = isPast(endDate);
     
     const totalUniqueVoters = new Set(votes.map(v => v.userId)).size;
 
@@ -239,7 +241,7 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
             <CardHeader>
                 <CardTitle>{poll.title}</CardTitle>
                 <CardDescription>
-                    {pollExpired ? "Abstimmung beendet am" : "Endet am"}: {format(poll.endDate.toDate(), 'dd. MMMM yyyy', { locale: de })}
+                    {pollExpired ? "Abstimmung beendet am" : "Endet am"}: {format(endDate, 'dd. MMMM yyyy', { locale: de })}
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
