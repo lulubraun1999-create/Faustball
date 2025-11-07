@@ -719,9 +719,18 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
+      // Create a clean payload with only the necessary data
       const payload = {
-        ...pendingUpdateData,
         originalId: selectedInstanceToEdit.originalId,
+        originalDateISO: pendingUpdateData.originalDateISO,
+        startDate: pendingUpdateData.startDate,
+        endDate: pendingUpdateData.endDate,
+        isAllDay: pendingUpdateData.isAllDay,
+        title: pendingUpdateData.title,
+        locationId: pendingUpdateData.locationId,
+        description: pendingUpdateData.description,
+        meetingPoint: pendingUpdateData.meetingPoint,
+        meetingTime: pendingUpdateData.meetingTime,
       };
 
       await saveFutureInstancesFn(payload);
@@ -2093,4 +2102,5 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
 
