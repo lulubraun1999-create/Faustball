@@ -5,7 +5,7 @@ export interface Appointment {
   id: string;
   title: string;
   startDate: Timestamp;
-  endDate: Timestamp | null; // Explizit null erlauben
+  endDate: Timestamp | null;
   isAllDay?: boolean;
   appointmentTypeId: string;
   locationId?: string;
