@@ -1,7 +1,6 @@
 
-
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/httpsa';
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays, isValid, startOfDay } from 'date-fns';
@@ -202,6 +201,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
     }
     
+    // Parse ISO strings reliably
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
@@ -289,16 +289,20 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const batch = db.batch();
 
         const instanceDate = new Date(pendingUpdateData.originalDateISO);
+        if(!isValid(instanceDate)) {
+             throw new HttpsError('invalid-argument', 'Invalid original instance date provided.');
+        }
         const dayBefore = addDays(instanceDate, -1);
         
         const originalStartDate = (originalAppointmentData.startDate instanceof Timestamp) 
           ? originalAppointmentData.startDate.toDate() 
           : null;
 
-        if (!originalStartDate) {
+        if (!originalStartDate || !isValid(originalStartDate)) {
             throw new HttpsError('failed-precondition', 'Original appointment has no valid start date.');
         }
         
+        // Update old series: set recurrence end date or delete if new start is before old start
         if (dayBefore >= originalStartDate) {
             batch.update(originalAppointmentRef, {
                 recurrenceEndDate: Timestamp.fromDate(dayBefore),
@@ -308,7 +312,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             batch.delete(originalAppointmentRef);
         }
 
-        const newAppointmentRef = db.collection("appointments").doc();
+        // --- Create NEW Appointment from scratch ---
         
         const newStartDate = new Date(pendingUpdateData.startDate);
         const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
@@ -341,6 +345,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
                 : typeName;
         }
         
+        // Explicitly construct the new appointment object
         const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -348,6 +353,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
+            // Carry over the original recurrence end date
             recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
@@ -360,8 +366,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             lastUpdated: FieldValue.serverTimestamp(),
         };
 
+        const newAppointmentRef = db.collection("appointments").doc();
         batch.set(newAppointmentRef, newAppointmentData);
 
+        // Delete all future exceptions for the OLD series
         const instanceStartOfDay = startOfDay(instanceDate);
         const exceptionsQuery = db.collection('appointmentExceptions')
             .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
@@ -378,3 +386,5 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
+    

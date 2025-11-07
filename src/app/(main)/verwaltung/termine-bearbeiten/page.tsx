@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -155,9 +156,9 @@ type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
 const singleAppointmentInstanceSchema = z
   .object({
-    originalDateISO: z.string(),
-    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'),
-    endDate: z.string().optional(),
+    originalDateISO: z.string(), // Keep as ISO string for backend
+    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'), // Keep as string for form
+    endDate: z.string().optional(), // Keep as string for form
     isAllDay: z.boolean().default(false),
     title: z.string().optional(),
     locationId: z.string().optional(),
@@ -661,13 +662,15 @@ export default function AdminTerminePage() {
     data: SingleAppointmentInstanceFormValues
   ) => {
     if (!selectedInstanceToEdit) return;
-
-    const cleanData = {
-      ...data,
-      endDate: data.endDate || '', // Use empty string instead of null
+  
+    // Convert local datetime-local string to ISO string for the backend
+    const payload = {
+        ...data,
+        startDate: new Date(data.startDate).toISOString(),
+        endDate: data.endDate ? new Date(data.endDate).toISOString() : '',
     };
-
-    setPendingUpdateData(cleanData); 
+  
+    setPendingUpdateData(payload);
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -2095,3 +2098,5 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
+    
