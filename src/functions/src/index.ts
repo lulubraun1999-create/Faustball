@@ -194,6 +194,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
+    // Correctly access nested data if necessary, or directly if not.
+    // Based on frontend code, it's sent directly, not nested.
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
@@ -201,7 +203,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
     }
     
-    // Parse ISO strings reliably
     const originalDate = new Date(pendingUpdateData.originalDateISO);
     const newStartDate = new Date(pendingUpdateData.startDate);
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
@@ -302,7 +303,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             throw new HttpsError('failed-precondition', 'Original appointment has no valid start date.');
         }
         
-        // Update old series: set recurrence end date or delete if new start is before old start
         if (dayBefore >= originalStartDate) {
             batch.update(originalAppointmentRef, {
                 recurrenceEndDate: Timestamp.fromDate(dayBefore),
@@ -311,8 +311,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         } else {
             batch.delete(originalAppointmentRef);
         }
-
-        // --- Create NEW Appointment from scratch ---
         
         const newStartDate = new Date(pendingUpdateData.startDate);
         const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
@@ -345,7 +343,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
                 : typeName;
         }
         
-        // Explicitly construct the new appointment object
         const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -353,7 +350,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
-            // Carry over the original recurrence end date
             recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
@@ -369,7 +365,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const newAppointmentRef = db.collection("appointments").doc();
         batch.set(newAppointmentRef, newAppointmentData);
 
-        // Delete all future exceptions for the OLD series
         const instanceStartOfDay = startOfDay(instanceDate);
         const exceptionsQuery = db.collection('appointmentExceptions')
             .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
@@ -386,3 +381,4 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
