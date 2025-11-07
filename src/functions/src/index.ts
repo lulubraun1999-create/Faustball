@@ -338,7 +338,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
               : typeName;
       }
       
-      // Explicitly construct the new object to avoid prototype issues with Timestamps
       const newAppointmentData: Omit<Appointment, 'id'> = {
         title: finalTitle || 'Termin',
         appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -348,18 +347,16 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         recurrence: originalAppointmentData.recurrence,
-        // Carry over the original recurrence end date
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
         visibility: originalAppointmentData.visibility,
-        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Carry over RSVP deadline logic if any
+        rsvpDeadline: originalAppointmentData.rsvpDeadline,
         
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
         
-        // Set new creation/update metadata
         createdBy: userId,
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
