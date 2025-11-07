@@ -567,5 +567,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
-    
