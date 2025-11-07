@@ -215,9 +215,20 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
         }
       )
       .refine(
-        (data) => data.recurrence === 'none' || !!data.recurrenceEndDate,
+        (data) => {
+             if (data.recurrence === 'none') return true;
+             if (!data.recurrenceEndDate) return false;
+             if (!data.startDate) return true; // Let other validation handle this
+             try {
+                const start = new Date(data.startDate.split('T')[0]);
+                const end = new Date(data.recurrenceEndDate);
+                return end >= start;
+             } catch(e) {
+                 return false;
+             }
+        },
         {
-          message: 'Enddatum für Wiederholung ist erforderlich.',
+          message: 'Enddatum für Wiederholung muss nach oder am Startdatum liegen.',
           path: ['recurrenceEndDate'],
         }
       )
@@ -506,25 +517,6 @@ export default function AdminTerminePage() {
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
     
-    if (data.recurrence !== 'none') {
-        if (!data.recurrenceEndDate || !data.startDate) {
-            appointmentForm.setError('recurrenceEndDate', { message: 'Start- und Enddatum der Wiederholung sind erforderlich.' });
-            return;
-        }
-        try {
-            const start = new Date(data.startDate);
-            const end = new Date(data.recurrenceEndDate);
-            if (end < start) {
-                appointmentForm.setError('recurrenceEndDate', { message: 'Ende der Wiederholung muss nach dem Startdatum liegen.' });
-                return;
-            }
-        } catch (e) {
-            appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Datumsformat.' });
-            return;
-        }
-    }
-
-
     setIsSubmitting(true);
 
     const selectedTypeName = typesMap.get(data.appointmentTypeId);
@@ -658,15 +650,21 @@ export default function AdminTerminePage() {
     const { firebaseApp } = initializeFirebase();
     const functions = getFunctions(firebaseApp);
     const func = httpsCallable(functions, functionName);
-    await func(data);
+    return await func(data);
   };
 
   async function handleSaveSingleOnly() {
-    if (!pendingUpdateData) return;
+    if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
     
     try {
-      await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
+      const payload = {
+        ...pendingUpdateData,
+        // Pass originalId and originalDateISO from selectedInstanceToEdit to ensure they are correct
+        originalId: selectedInstanceToEdit.originalId,
+        originalDateISO: selectedInstanceToEdit.originalDateISO,
+      };
+      await callCloudFunction('saveSingleAppointmentException', payload);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) {
         toast({
@@ -681,7 +679,7 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!pendingUpdateData) return;
+    if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
 
     if (!isAdmin) {
@@ -691,7 +689,13 @@ export default function AdminTerminePage() {
     }
 
     try {
-      await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
+      const payload = {
+        ...pendingUpdateData,
+         // Pass originalId and originalDateISO from selectedInstanceToEdit
+        originalId: selectedInstanceToEdit.originalId,
+        originalDateISO: selectedInstanceToEdit.originalDateISO,
+      };
+      await callCloudFunction('saveFutureAppointmentInstances', payload);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
@@ -710,11 +714,10 @@ export default function AdminTerminePage() {
   const handleCancelSingleInstance = async (
     appointment: UnrolledAppointment
   ) => {
-    if (!firestore || !user || !appointment.originalId) return;
+    if (!firestore || !user || !appointment.originalId || !appointment.originalDateISO) return;
     setIsSubmitting(true);
 
-    const originalDate = appointment.startDate.toDate();
-    const originalDateStartOfDay = startOfDay(originalDate);
+    const originalDateStartOfDay = startOfDay(parseISO(appointment.originalDateISO));
 
     const exceptionsColRef = collection(firestore, 'appointmentExceptions');
     const q = query(
