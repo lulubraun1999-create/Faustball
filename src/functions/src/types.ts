@@ -1,4 +1,5 @@
 
+
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 export interface Appointment {
@@ -48,3 +49,4 @@ export interface AppointmentType {
     id: string;
     name: string;
 }
+

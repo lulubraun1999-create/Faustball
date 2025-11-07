@@ -1,4 +1,5 @@
 
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
@@ -381,4 +382,5 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
 
