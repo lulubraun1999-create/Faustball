@@ -234,7 +234,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     try {
         if (existingExceptionDoc) {
-            await existingExceptionDoc.ref.update({
+            const docRefToUpdate = db.collection('appointmentExceptions').doc(existingExceptionDoc.id);
+            await docRefToUpdate.update({
                  modifiedData: modifiedData,
                  status: 'modified',
                  userId: userId,
