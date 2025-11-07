@@ -1,7 +1,7 @@
 
 
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/httpsa';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays, isValid, startOfDay } from 'date-fns';
@@ -195,7 +195,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    // **FIX:** Correctly unpack the nested data object
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
@@ -271,7 +270,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    // **FIX:** Correctly unpack the nested data object
     const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
@@ -293,7 +291,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const instanceDate = new Date(pendingUpdateData.originalDateISO);
         const dayBefore = addDays(instanceDate, -1);
         
-        // **FIX:** Safely call .toDate() only if startDate exists and is a Timestamp
         const originalStartDate = (originalAppointmentData.startDate instanceof Timestamp) 
           ? originalAppointmentData.startDate.toDate() 
           : null;
@@ -344,7 +341,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
                 : typeName;
         }
         
-        // **FIX:** Explicitly construct the new object instead of spreading
         const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -352,7 +348,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
-            // **FIX:** Safely access recurrenceEndDate
             recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
