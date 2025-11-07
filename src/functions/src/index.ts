@@ -1,4 +1,5 @@
 
+
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
@@ -279,107 +280,108 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
     }
 
     try {
-      const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
-      const originalAppointmentSnap = await originalAppointmentRef.get();
+        const originalAppointmentRef = db.collection('appointments').doc(selectedInstanceToEdit.originalId);
+        const originalAppointmentSnap = await originalAppointmentRef.get();
 
-      if (!originalAppointmentSnap.exists) {
-        throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
-      }
+        if (!originalAppointmentSnap.exists) {
+            throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
+        }
 
-      const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-      const batch = db.batch();
+        const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
+        const batch = db.batch();
 
-      const instanceDate = new Date(pendingUpdateData.originalDateISO);
-      const dayBefore = addDays(instanceDate, -1);
-      
-      const originalStartDate = originalAppointmentData.startDate?.toDate();
-      if (!originalStartDate) {
-          throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
-      }
-      
-      // End the old series
-      if (dayBefore >= originalStartDate) {
-        batch.update(originalAppointmentRef, {
-          recurrenceEndDate: Timestamp.fromDate(dayBefore),
-        });
-      } else {
-        // If the edit is on the very first instance, the old series is no longer needed.
-        batch.delete(originalAppointmentRef);
-      }
-
-      const newAppointmentRef = db.collection("appointments").doc();
-      
-      // --- Start: Explicitly create new appointment data, DO NOT spread original object ---
-      const newStartDate = new Date(pendingUpdateData.startDate);
-      const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
-        ? new Date(pendingUpdateData.endDate) 
-        : null;
-
-      if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
-          throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
-      }
-      
-      let typeName = 'Termin'; 
-      let isSonstiges = false;
-      if (originalAppointmentData.appointmentTypeId) { 
-          const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
-          if (typeDoc.exists) {
-              const typeData = typeDoc.data() as AppointmentType; 
-              typeName = typeData.name;
-              isSonstiges = typeName === 'Sonstiges';
-          }
-      }
-
-      const originalTitle = originalAppointmentData.title || '';
-      const titleIsDefault = !isSonstiges && originalTitle === typeName;
-      const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
-
-      let finalTitle = originalTitle;
-      // Only change title if the new title is different from the original display title
-      if (pendingUpdateData.title !== originalDisplayTitle) {
-          finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
-              ? pendingUpdateData.title.trim() 
-              : typeName;
-      }
-      
-      const newAppointmentData: Omit<Appointment, 'id'> = {
-        title: finalTitle || 'Termin',
-        appointmentTypeId: originalAppointmentData.appointmentTypeId,
+        const instanceDate = new Date(pendingUpdateData.originalDateISO);
+        const dayBefore = addDays(instanceDate, -1);
         
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+        const originalStartDate = originalAppointmentData.startDate.toDate(); // Safe now, as it's required in the type
         
-        recurrence: originalAppointmentData.recurrence,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Keep original end date of the series
-        
-        visibility: originalAppointmentData.visibility, // Keep original visibility
-        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Keep original RSVP deadline logic
-        
-        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-        description: pendingUpdateData.description ?? originalAppointmentData.description,
-        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        
-        createdBy: userId, // New series created by the current admin
-        createdAt: FieldValue.serverTimestamp(),
-        lastUpdated: FieldValue.serverTimestamp(),
-      };
-      // --- End: Explicit creation ---
+        // End the old series
+        if (dayBefore >= originalStartDate) {
+            batch.update(originalAppointmentRef, {
+                recurrenceEndDate: Timestamp.fromDate(dayBefore),
+                lastUpdated: FieldValue.serverTimestamp()
+            });
+        } else {
+            // If the edit is on the very first instance, the old series is no longer needed.
+            batch.delete(originalAppointmentRef);
+        }
 
-      batch.set(newAppointmentRef, newAppointmentData);
-
-      const instanceStartOfDay = startOfDay(instanceDate);
-      
-      const exceptionsQuery = db.collection('appointmentExceptions')
-        .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
-        .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
+        const newAppointmentRef = db.collection("appointments").doc();
         
-      const exceptionsSnap = await exceptionsQuery.get();
-      exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
-      
-      await batch.commit();
-      return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
+        // --- Start: Radically different approach. Build new object from scratch. ---
+        const newStartDate = new Date(pendingUpdateData.startDate);
+        const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
+            ? new Date(pendingUpdateData.endDate) 
+            : null;
+
+        if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
+            throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
+        }
+        
+        let typeName = 'Termin'; 
+        let isSonstiges = false;
+        if (originalAppointmentData.appointmentTypeId) { 
+            const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
+            if (typeDoc.exists) {
+                const typeData = typeDoc.data() as AppointmentType; 
+                typeName = typeData.name;
+                isSonstiges = typeName === 'Sonstiges';
+            }
+        }
+
+        const originalTitle = originalAppointmentData.title || '';
+        const titleIsDefault = !isSonstiges && originalTitle === typeName;
+        const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
+
+        let finalTitle = originalTitle;
+        // Only change title if the new title is different from the original display title
+        if (pendingUpdateData.title !== originalDisplayTitle) {
+            finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
+                ? pendingUpdateData.title.trim() 
+                : typeName;
+        }
+        
+        const newAppointmentData: Appointment = {
+            id: newAppointmentRef.id, // ID is usually not stored in the doc, but good for type conformity
+            title: finalTitle || 'Termin',
+            appointmentTypeId: originalAppointmentData.appointmentTypeId,
+            
+            startDate: Timestamp.fromDate(newStartDate),
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+            isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+            
+            recurrence: originalAppointmentData.recurrence,
+            recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+            
+            visibility: originalAppointmentData.visibility,
+            rsvpDeadline: originalAppointmentData.rsvpDeadline,
+            
+            locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
+            description: pendingUpdateData.description ?? originalAppointmentData.description,
+            meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
+            meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+            
+            createdBy: userId,
+            createdAt: FieldValue.serverTimestamp(),
+            lastUpdated: FieldValue.serverTimestamp(),
+        };
+        // --- End: New explicit object creation ---
+
+        // Remove the 'id' field before setting the document
+        const { id, ...dataToSet } = newAppointmentData;
+        batch.set(newAppointmentRef, dataToSet);
+
+        // Delete all future exceptions for the old series
+        const instanceStartOfDay = startOfDay(instanceDate);
+        const exceptionsQuery = db.collection('appointmentExceptions')
+            .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
+            .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
+            
+        const exceptionsSnap = await exceptionsQuery.get();
+        exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
+        
+        await batch.commit();
+        return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
