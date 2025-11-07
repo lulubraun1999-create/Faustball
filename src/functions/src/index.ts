@@ -187,31 +187,38 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
 });
 
 
-// --- TERMIN-FUNKTIONEN ---
+// --- TERMIN-FUNKTIONEN (NEU GESCHRIEBEN) ---
 
 /**
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
 export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
     if (!request.auth || !request.auth.token.admin) {
-        throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
+        throw new HttpsError('permission-denied', 'Nur Administratoren können diese Aktion ausführen.');
     }
 
     const data = request.data;
     const userId = request.auth.uid;
 
+    // Strenge Validierung der Eingabedaten
     if (!data.originalId || !data.originalDateISO || !data.startDate) {
-        throw new HttpsError('invalid-argument', 'Missing required data for exception (originalId, originalDateISO, startDate).');
+        throw new HttpsError('invalid-argument', 'Fehlende Daten für die Ausnahme (originalId, originalDateISO, startDate).');
     }
 
-    const originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
-    const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
-    const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
-      ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
-      : null;
+    let originalDate: Date, newStartDate: Date, newEndDate: Date | null;
+    try {
+        originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+        newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
+          ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+          : null;
 
-    if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
-        throw new HttpsError('invalid-argument', 'Invalid date format provided.');
+        if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
+            throw new Error('Invalid date format provided.');
+        }
+    } catch (e: any) {
+        console.error("Date parsing error:", e);
+        throw new HttpsError('invalid-argument', 'Ungültiges Datumsformat übergeben.');
     }
 
     const originalDateStartOfDay = startOfDay(originalDate);
@@ -219,33 +226,35 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const exceptionsColRef = db.collection('appointmentExceptions');
     const q = exceptionsColRef.where('originalAppointmentId', '==', data.originalId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
-
-    const querySnapshot = await q.get();
-    const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
-
-    const modifiedData: AppointmentException['modifiedData'] = {
-        startDate: Timestamp.fromDate(newStartDate),
-        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-        title: data.title,
-        locationId: data.locationId,
-        description: data.description,
-        meetingPoint: data.meetingPoint,
-        meetingTime: data.meetingTime,
-        isAllDay: data.isAllDay,
-    };
-
     try {
+        const querySnapshot = await q.get();
+        const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
+
+        // Erstellt das Objekt mit den geänderten Daten, nur die Felder, die übergeben wurden.
+        const modifiedData: AppointmentException['modifiedData'] = {
+            startDate: Timestamp.fromDate(newStartDate),
+            endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+            title: data.title,
+            locationId: data.locationId,
+            description: data.description,
+            meetingPoint: data.meetingPoint,
+            meetingTime: data.meetingTime,
+            isAllDay: data.isAllDay,
+        };
+
         if (existingExceptionDoc) {
+            // Update eine bestehende Ausnahme
             const docRefToUpdate = db.collection('appointmentExceptions').doc(existingExceptionDoc.id);
             await docRefToUpdate.update({
                  modifiedData: modifiedData,
-                 status: 'modified',
+                 status: 'modified', // Stellt sicher, dass der Status 'modified' ist
                  userId: userId,
                  lastUpdated: FieldValue.serverTimestamp()
             });
-            return { status: 'success', message: 'Terminänderung aktualisiert.' };
+            return { status: 'success', message: 'Terminänderung erfolgreich aktualisiert.' };
         } else {
-             const newExceptionData: Omit<AppointmentException, 'id'> = {
+            // Erstelle eine neue Ausnahme
+            const newExceptionData: Omit<AppointmentException, 'id'> = {
                 originalAppointmentId: data.originalId,
                 originalDate: Timestamp.fromDate(originalDateStartOfDay),
                 status: 'modified',
@@ -256,11 +265,11 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             };
             const newDocRef = db.collection('appointmentExceptions').doc();
             await newDocRef.set(newExceptionData);
-            return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
+            return { status: 'success', message: 'Termin erfolgreich als Ausnahme gespeichert.' };
         }
     } catch (error: any) {
-        console.error("Error saving single instance:", error);
-        throw new HttpsError('internal', 'Änderung konnte nicht gespeichert werden.', error.message);
+        console.error("Error saving single instance exception:", error);
+        throw new HttpsError('internal', 'Fehler beim Speichern der Ausnahme.', error.message);
     }
 });
 
@@ -270,14 +279,14 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
  */
 export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest) => {
     if (!request.auth || !request.auth.token.admin) {
-        throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
+        throw new HttpsError('permission-denied', 'Nur Administratoren können diese Aktion ausführen.');
     }
     
     const data = request.data;
     const userId = request.auth.uid;
 
     if (!data.originalId || !data.originalDateISO || !data.startDate) {
-        throw new HttpsError('invalid-argument', 'Missing required data to split series.');
+        throw new HttpsError('invalid-argument', 'Fehlende Daten zum Aufteilen der Serie.');
     }
 
     try {
@@ -285,80 +294,63 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalAppointmentSnap = await originalAppointmentRef.get();
 
         if (!originalAppointmentSnap.exists) {
-            throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden');
+            throw new HttpsError('not-found', 'Original-Terminserie nicht gefunden.');
         }
 
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-        const batch = db.batch();
+        const batch = writeBatch(db);
 
+        // 1. Datum der aktuellen Instanz parsen
         const instanceDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
         if(!isValid(instanceDate)) {
-             throw new HttpsError('invalid-argument', `Invalid original instance date provided: ${data.originalDateISO}`);
+             throw new HttpsError('invalid-argument', `Ungültiges Datum der Instanz: ${data.originalDateISO}`);
         }
+        
+        // 2. Ende der alten Serie setzen
         const dayBefore = addDays(instanceDate, -1);
-        
-        const originalStartDate = (originalAppointmentData.startDate instanceof Timestamp) 
-          ? originalAppointmentData.startDate.toDate() 
-          : null;
+        const originalStartDate = (originalAppointmentData.startDate as Timestamp).toDate();
 
-        if (!originalStartDate || !isValid(originalStartDate)) {
-            throw new HttpsError('failed-precondition', 'Original appointment has no valid start date.');
-        }
-        
         if (dayBefore >= originalStartDate) {
             batch.update(originalAppointmentRef, {
                 recurrenceEndDate: Timestamp.fromDate(dayBefore),
                 lastUpdated: FieldValue.serverTimestamp()
             });
         } else {
+            // Wenn die erste Instanz geändert wird, wird die alte Serie komplett gelöscht
             batch.delete(originalAppointmentRef);
         }
         
+        // 3. Neue Serie erstellen
         const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
         const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
             ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
             : null;
 
         if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
-            throw new HttpsError('invalid-argument', `Invalid start or end date for new series. Start: ${data.startDate}, End: ${data.endDate}`);
+            throw new HttpsError('invalid-argument', `Ungültiges Start- oder Enddatum für neue Serie.`);
         }
         
+        // Titel bestimmen
         let typeName = 'Termin'; 
-        let isSonstiges = false;
         if (originalAppointmentData.appointmentTypeId) { 
             const typeDoc = await db.collection('appointmentTypes').doc(originalAppointmentData.appointmentTypeId).get();
             if (typeDoc.exists) {
-                const typeData = typeDoc.data() as AppointmentType; 
-                typeName = typeData.name;
-                isSonstiges = typeName === 'Sonstiges';
+                typeName = (typeDoc.data() as AppointmentType).name;
             }
         }
-
-        const originalTitle = originalAppointmentData.title || '';
-        const titleIsDefault = !isSonstiges && originalTitle === typeName;
-        const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
-
-        let finalTitle = originalTitle;
-        if (data.title !== originalDisplayTitle) {
-            finalTitle = (data.title && data.title.trim() !== '') 
-                ? data.title.trim() 
-                : typeName;
-        }
+        const finalTitle = (data.title && data.title.trim() !== '') ? data.title.trim() : typeName;
         
         const newAppointmentData: Omit<Appointment, 'id'> = {
-            title: finalTitle || 'Termin',
-            appointmentTypeId: originalAppointmentData.appointmentTypeId,
+            ...originalAppointmentData, // Übernimmt alle Felder der alten Serie
+            title: finalTitle,
             startDate: Timestamp.fromDate(newStartDate),
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
             isAllDay: data.isAllDay ?? originalAppointmentData.isAllDay,
-            recurrence: originalAppointmentData.recurrence,
-            recurrenceEndDate: originalAppointmentData.recurrenceEndDate ?? null,
-            visibility: originalAppointmentData.visibility,
-            rsvpDeadline: originalAppointmentData.rsvpDeadline ?? null,
             locationId: data.locationId ?? originalAppointmentData.locationId,
             description: data.description ?? originalAppointmentData.description,
             meetingPoint: data.meetingPoint ?? originalAppointmentData.meetingPoint,
             meetingTime: data.meetingTime ?? originalAppointmentData.meetingTime,
+            // Wichtige Felder neu setzen
             createdBy: userId,
             createdAt: FieldValue.serverTimestamp(),
             lastUpdated: FieldValue.serverTimestamp(),
@@ -367,6 +359,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const newAppointmentRef = db.collection("appointments").doc();
         batch.set(newAppointmentRef, newAppointmentData);
 
+        // 4. Alte Ausnahmen löschen, die nun zur neuen Serie gehören
         const instanceStartOfDay = startOfDay(instanceDate);
         const exceptionsQuery = db.collection('appointmentExceptions')
             .where('originalAppointmentId', '==', data.originalId)
@@ -376,12 +369,11 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
         
         await batch.commit();
-        return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert' };
+        return { status: 'success', message: 'Terminserie erfolgreich aufgeteilt und aktualisiert.' };
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
-
     

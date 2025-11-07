@@ -16,8 +16,8 @@ export interface Appointment {
       teamIds: string[];
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
-  recurrenceEndDate?: Timestamp | null;
-  rsvpDeadline?: Timestamp | null;
+  recurrenceEndDate?: Timestamp | null; // Explizit null erlauben
+  rsvpDeadline?: Timestamp | null; // Explizit null erlauben
   meetingPoint?: string;
   meetingTime?: string;
   createdAt?: Timestamp | FieldValue;
