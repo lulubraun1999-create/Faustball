@@ -1,7 +1,7 @@
 
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFirestore, Timestamp, FieldValue, WriteBatch, setDoc, updateDoc } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays } from 'date-fns';
 
@@ -241,7 +241,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     try {
         if (existingExceptionDoc) {
-            await updateDoc(existingExceptionDoc.ref, {
+            await existingExceptionDoc.ref.update({
                  modifiedData: modifiedData,
                  status: 'modified',
                  userId: userId,
@@ -259,7 +259,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
                 userId: userId,
             };
             const newDocRef = db.collection('appointmentExceptions').doc();
-            await setDoc(newDocRef, newExceptionData);
+            await newDocRef.set(newExceptionData);
             return { status: 'success', message: 'Termin erfolgreich geändert (Ausnahme erstellt).' };
         }
     } catch (error: any) {
@@ -302,14 +302,11 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
       }
       
-      // KORREKTE LOGIK: Vergleiche mit dem Start der gesamten Serie
       if (dayBefore >= originalStartDate) {
-        // Die alte Serie wird gekürzt
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
         });
       } else {
-        // Die Bearbeitung findet am/vor dem ersten Termin statt, also wird die alte Serie komplett ersetzt/gelöscht
         batch.delete(originalAppointmentRef);
       }
 
