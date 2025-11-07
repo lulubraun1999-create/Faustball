@@ -29,7 +29,6 @@ import {
   where,
   writeBatch,
   getDocs,
-  getDoc,
   setDoc,
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -104,7 +103,6 @@ import {
   MapPin,
   CalendarPlus,
   CalendarX,
-  X,
   RefreshCw,
 } from 'lucide-react';
 import type {
@@ -117,21 +115,17 @@ import type {
 } from '@/lib/types';
 import {
   format,
-  formatISO,
   isValid as isDateValid,
   addDays,
   addWeeks,
   addMonths,
   differenceInMilliseconds,
   set,
-  isEqual,
   startOfDay,
-  parse,
   parseISO,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 type GroupWithTeams = Group & { teams: Group[] };
@@ -156,10 +150,10 @@ type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
 const singleAppointmentInstanceSchema = z
   .object({
-    originalId: z.string(), // ID of the original recurring appointment
-    originalDateISO: z.string(), // Keep as ISO string for backend
-    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'), // Keep as string for form
-    endDate: z.string().optional(), // Keep as string for form
+    originalId: z.string(), 
+    originalDateISO: z.string(), 
+    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'), 
+    endDate: z.string().optional(), 
     isAllDay: z.boolean().default(false),
     title: z.string().optional(),
     locationId: z.string().optional(),
@@ -269,11 +263,11 @@ export default function AdminTerminePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
-  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [isUpdateTypeDialogOpen, setIsUpdateTypeDialogOpen] = useState(false);
   const [pendingUpdateData, setPendingUpdateData] =
     useState<SingleAppointmentInstanceFormValues | null>(null);
     
+  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
 
 
@@ -658,15 +652,11 @@ export default function AdminTerminePage() {
   };
 
   async function handleSaveSingleOnly() {
-    if (!pendingUpdateData || !selectedInstanceToEdit) return;
+    if (!pendingUpdateData) return;
     setIsSubmitting(true);
     
     try {
-      const payload = {
-        pendingUpdateData,
-        selectedInstanceToEdit,
-      };
-      await callCloudFunction('saveSingleAppointmentException', payload);
+      await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) {
         toast({
@@ -681,7 +671,7 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!pendingUpdateData || !selectedInstanceToEdit) return;
+    if (!pendingUpdateData) return;
     setIsSubmitting(true);
   
     if (!isAdmin) {
@@ -691,11 +681,7 @@ export default function AdminTerminePage() {
     }
   
     try {
-      const payload = {
-        pendingUpdateData,
-        selectedInstanceToEdit,
-      };
-      await callCloudFunction('saveFutureAppointmentInstances', payload);
+      await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
@@ -1660,56 +1646,23 @@ export default function AdminTerminePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Card>
+       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-3">
-              {' '}
-              <ListTodo className="h-6 w-6" /> <span>Terminverwaltung</span>{' '}
+              <ListTodo className="h-6 w-6" /> <span>Terminverwaltung</span>
             </CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-              <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
+               <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline">Arten & Orte verwalten</Button>
+                  <Button variant="outline">Arten verwalten</Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Terminarten & Orte</DialogTitle>
+                    <DialogTitle>Terminarten</DialogTitle>
                   </DialogHeader>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <h3 className="mb-2 font-semibold">Terminarten</h3>
-                      <Form {...typeForm}>
-                        <form
-                          onSubmit={typeForm.handleSubmit(
-                            onSubmitAppointmentType
-                          )}
-                          className="flex items-center gap-2"
-                        >
-                          <FormField
-                            control={typeForm.control}
-                            name="name"
-                            render={({ field }) => (
-                              <FormItem className="flex-grow">
-                                <FormControl>
-                                  <Input
-                                    placeholder="Neue Art..."
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <Button
-                            type="submit"
-                            size="icon"
-                            disabled={typeForm.formState.isSubmitting}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </form>
-                      </Form>
+                  <div>
+                      <h3 className="mb-2 font-semibold">Bestehende Arten</h3>
                       <ul className="mt-4 space-y-2">
                         {appointmentTypes?.map((type) => (
                           <li
@@ -1727,9 +1680,74 @@ export default function AdminTerminePage() {
                           </li>
                         ))}
                       </ul>
+                       <Separator className="my-4" />
+                      <h3 className="mb-2 font-semibold">Neue Art erstellen</h3>
+                      <Form {...typeForm}>
+                        <form
+                          onSubmit={typeForm.handleSubmit(
+                            onSubmitAppointmentType
+                          )}
+                          className="flex items-center gap-2"
+                        >
+                          <FormField
+                            control={typeForm.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem className="flex-grow">
+                                <FormControl>
+                                  <Input
+                                    placeholder="Name der neuen Art..."
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            disabled={typeForm.formState.isSubmitting}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </form>
+                      </Form>
                     </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
+                 <DialogTrigger asChild>
+                    <Button variant="outline">Orte verwalten</Button>
+                 </DialogTrigger>
+                 <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Orte</DialogTitle>
+                    </DialogHeader>
                     <div>
-                      <h3 className="mb-2 font-semibold">Orte</h3>
+                      <h3 className="mb-2 font-semibold">Bestehende Orte</h3>
+                      <ul className="mt-4 space-y-2">
+                        {locations?.map((loc) => (
+                          <li
+                            key={loc.id}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <div>
+                                <p>{loc.name}</p>
+                                <p className="text-xs text-muted-foreground">{loc.address}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onDeleteLocation(loc.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                      <Separator className="my-4" />
+                       <h3 className="mb-2 font-semibold">Neuen Ort erstellen</h3>
                       <Form {...locationForm}>
                         <form
                           onSubmit={locationForm.handleSubmit(onSubmitLocation)}
@@ -1741,7 +1759,7 @@ export default function AdminTerminePage() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormControl>
-                                  <Input placeholder="Neuer Ort..." {...field} />
+                                  <Input placeholder="Name des Ortes..." {...field} />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -1768,29 +1786,8 @@ export default function AdminTerminePage() {
                           </Button>
                         </form>
                       </Form>
-                      <ul className="mt-4 space-y-2">
-                        {locations?.map((loc) => (
-                          <li
-                            key={loc.id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <div>
-                                <p>{loc.name}</p>
-                                <p className="text-xs text-muted-foreground">{loc.address}</p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => onDeleteLocation(loc.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  </div>
-                </DialogContent>
+                 </DialogContent>
               </Dialog>
 
               <Button
@@ -1800,7 +1797,7 @@ export default function AdminTerminePage() {
                   setIsAppointmentDialogOpen(true);
                 }}
               >
-                <Plus className="mr-2 h-4 w-4" /> Termin hinzufügen
+                <Plus className="mr-2 h-4 w-4" /> Hinzufügen
               </Button>
             </div>
           </div>
@@ -1938,8 +1935,7 @@ export default function AdminTerminePage() {
             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
               <h3 className="text-lg font-semibold">Keine Termine gefunden</h3>
               <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">
-                Es wurden noch keine Termine erstellt. Klicken Sie auf "Termin
-                hinzufügen", um zu beginnen.
+                Es wurden noch keine Termine erstellt. Klicken Sie auf "Hinzufügen", um zu beginnen.
               </p>
             </div>
           )}
