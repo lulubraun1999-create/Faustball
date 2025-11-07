@@ -132,9 +132,6 @@ import {
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { dateFnsLocalizer } from 'react-big-calendar';
-
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -672,12 +669,8 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        const payload = {
-            ...pendingUpdateData,
-            originalId: selectedInstanceToEdit.originalId,
-        };
-        
-        await saveSingleException({ data: payload });
+        // Pass the raw form data directly
+        await saveSingleException(pendingUpdateData);
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -716,7 +709,7 @@ export default function AdminTerminePage() {
         },
       };
 
-      await saveFutureInstancesFn({ data: payload });
+      await saveFutureInstancesFn(payload);
       
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -978,8 +971,6 @@ export default function AdminTerminePage() {
       </div>
     );
   }
-
-  const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -2041,12 +2032,11 @@ export default function AdminTerminePage() {
                     </div>
                   </div>
                 )
-              )
-            ) : (
-              <div className="text-center p-8 text-muted-foreground">
-                Keine Termine gefunden.
-              </div>
-            )}
+              )}
+            </div>
+          ) : (
+            <div className="text-center p-8 text-muted-foreground">
+              Keine Termine gefunden.
             </div>
           )}
         </CardContent>
@@ -2054,10 +2044,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
-
-
-
-
-
-
