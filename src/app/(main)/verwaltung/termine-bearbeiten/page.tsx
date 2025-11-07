@@ -320,14 +320,14 @@ export default function AdminTerminePage() {
       .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
 
-    const grouped: GroupWithTeams[] = classes
+    const grouped = classes
       .map((c: Group) => ({
         ...c,
         teams: teams.filter((t: Group) => t.parentId === c.id),
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teamsMap, groupedTeams };
+    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -1289,7 +1289,7 @@ export default function AdminTerminePage() {
                               min={
                                 appointmentForm.getValues('startDate')
                                   ? appointmentForm
-                                      .getValues('startDate')!
+                                      .getValues('startDate')
                                       .split('T')[0]
                                   : undefined
                               }
