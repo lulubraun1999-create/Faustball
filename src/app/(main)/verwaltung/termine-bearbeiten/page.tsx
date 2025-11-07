@@ -719,8 +719,8 @@ export default function AdminTerminePage() {
 
       // Send raw form data along with the original appointment ID
       const payload = {
-        ...pendingUpdateData,
-        originalId: selectedInstanceToEdit.originalId,
+        pendingUpdateData: pendingUpdateData,
+        selectedInstanceToEdit: selectedInstanceToEdit,
       };
 
       const result = await saveFutureInstancesFn(payload);
@@ -956,31 +956,7 @@ export default function AdminTerminePage() {
     isLoadingExceptions ||
     isMemberProfileLoading;
 
-  const customSort = (a: Group, b: Group) => {
-    const regex = /^(U|u)(\d+)/;
-    const matchA = a.name.match(regex);
-    const matchB = b.name.match(regex);
   
-    if (matchA && matchB) {
-      return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
-    }
-    // Fallback for names that don't match the pattern
-    if (matchA) return -1;
-    if (matchB) return 1;
-    return a.name.localeCompare(b.name);
-  };
-  
-  const sortedGroupedTeams = useMemo(() => {
-    if (!groups) return [];
-    const classes = groups.filter(g => g.type === 'class').sort(customSort);
-    const teamlist = groups.filter(g => g.type === 'team');
-
-    return classes.map(c => ({
-        ...c,
-        teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
-    })).filter(c => c.teams.length > 0);
-}, [groups]);
-
   if (isUserLoading) {
     return (
       <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
@@ -1408,7 +1384,7 @@ export default function AdminTerminePage() {
                                   {isLoadingGroups ? (
                                     <div className="p-4 text-center text-sm">Lade...</div>
                                   ) : (
-                                    sortedGroupedTeams.map((group) => (
+                                    groupedTeams.map((group) => (
                                       <React.Fragment key={group.id}>
                                         <h4 className="font-semibold text-sm my-2 px-4">{group.name}</h4>
                                         {group.teams.map((team) => (
@@ -2092,6 +2068,7 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
 
 
 
