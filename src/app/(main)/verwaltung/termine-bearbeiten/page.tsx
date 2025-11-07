@@ -683,14 +683,12 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        const payload = {
-            ...pendingUpdateData,
-            originalId: selectedInstanceToEdit.originalId,
-        };
+        // Send raw form data to the function
+        const payload = { ...pendingUpdateData };
 
-        await saveSingleException(payload);
+        const result = await saveSingleException(payload);
 
-        toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
+        toast({ title: "Erfolg", description: (result.data as any)?.message || "Die Terminänderung wurde gespeichert." });
 
     } catch (error: any) {
         toast({
@@ -719,23 +717,15 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      // Create a clean payload with only the necessary data
+      // Send raw form data along with the original appointment ID
       const payload = {
+        ...pendingUpdateData,
         originalId: selectedInstanceToEdit.originalId,
-        originalDateISO: pendingUpdateData.originalDateISO,
-        startDate: pendingUpdateData.startDate,
-        endDate: pendingUpdateData.endDate,
-        isAllDay: pendingUpdateData.isAllDay,
-        title: pendingUpdateData.title,
-        locationId: pendingUpdateData.locationId,
-        description: pendingUpdateData.description,
-        meetingPoint: pendingUpdateData.meetingPoint,
-        meetingTime: pendingUpdateData.meetingTime,
       };
 
-      await saveFutureInstancesFn(payload);
+      const result = await saveFutureInstancesFn(payload);
       
-      toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+      toast({ title: 'Erfolg', description: (result.data as any)?.message ||'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         toast({
@@ -2102,5 +2092,6 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
 
 

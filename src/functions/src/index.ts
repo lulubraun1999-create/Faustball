@@ -4,7 +4,8 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid, startOfDay } from 'date-fns';
+import { addDays, isValid, startOfDay, parseISO } from 'date-fns';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 
 // Firebase Admin SDK initialisieren
@@ -12,6 +13,7 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 const db = getFirestore();
+const localTimeZone = 'Europe/Berlin';
 
 /**
  * Prüft, ob bereits ein Admin-Benutzer im System existiert.
@@ -195,27 +197,36 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
 
-    const { originalId, originalDateISO, startDate, endDate, isAllDay, title, locationId, description, meetingPoint, meetingTime } = request.data;
+    const { originalDateISO, startDate, ...rest } = request.data;
     const userId = request.auth.uid;
 
-    if (!originalId || !originalDateISO || !startDate) {
+    if (!originalDateISO || !startDate) {
         throw new HttpsError('invalid-argument', 'Missing required data for exception.');
     }
 
-    const originalDate = new Date(originalDateISO);
-    const newStartDate = new Date(startDate);
-    const newEndDate = (endDate && typeof endDate === 'string' && endDate.trim() !== '') 
-      ? new Date(endDate) 
+    const originalDate = zonedTimeToUtc(parseISO(originalDateISO), localTimeZone);
+    const newStartDate = zonedTimeToUtc(parseISO(startDate), localTimeZone);
+    const newEndDate = (rest.endDate && typeof rest.endDate === 'string' && rest.endDate.trim() !== '') 
+      ? zonedTimeToUtc(parseISO(rest.endDate), localTimeZone)
       : null;
 
     if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
         throw new HttpsError('invalid-argument', 'Invalid date format provided.');
     }
+    
+    // Find original appointment from the instance to get the original ID
+    const instanceKey = `${rest.originalId}-${originalDate.toISOString()}`;
+    const originalAppointmentRef = db.collection('appointments').doc(rest.originalId);
+    const originalAppointmentSnap = await originalAppointmentRef.get();
+    if (!originalAppointmentSnap.exists) {
+      throw new HttpsError('not-found', `Original appointment with ID ${rest.originalId} not found.`);
+    }
 
+    const originalAppointmentId = originalAppointmentSnap.id;
     const originalDateStartOfDay = startOfDay(originalDate);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
-    const q = exceptionsColRef.where('originalAppointmentId', '==', originalId)
+    const q = exceptionsColRef.where('originalAppointmentId', '==', originalAppointmentId)
                               .where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay));
 
     const querySnapshot = await q.get();
@@ -224,12 +235,12 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-        title: title,
-        locationId: locationId,
-        description: description,
-        meetingPoint: meetingPoint,
-        meetingTime: meetingTime,
-        isAllDay: isAllDay,
+        title: rest.title,
+        locationId: rest.locationId,
+        description: rest.description,
+        meetingPoint: rest.meetingPoint,
+        meetingTime: rest.meetingTime,
+        isAllDay: rest.isAllDay,
     };
 
     try {
@@ -244,7 +255,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
             return { status: 'success', message: 'Terminänderung aktualisiert.' };
         } else {
              const newExceptionData: Omit<AppointmentException, 'id'> = {
-                originalAppointmentId: originalId,
+                originalAppointmentId: originalAppointmentId,
                 originalDate: Timestamp.fromDate(originalDateStartOfDay),
                 status: 'modified',
                 modifiedData: modifiedData,
@@ -262,6 +273,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     }
 });
 
+
 /**
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
  */
@@ -270,7 +282,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { originalId, originalDateISO, startDate, endDate, isAllDay, title, locationId, description, meetingPoint, meetingTime } = request.data;
+    // The payload is the raw form data
+    const { originalId, originalDateISO, startDate, endDate, ...rest } = request.data;
     const userId = request.auth.uid;
 
     if (!originalId || !originalDateISO || !startDate) {
@@ -288,9 +301,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
         const batch = db.batch();
 
-        const instanceDate = new Date(originalDateISO);
+        const instanceDate = zonedTimeToUtc(parseISO(originalDateISO), localTimeZone);
         if(!isValid(instanceDate)) {
-             throw new HttpsError('invalid-argument', 'Invalid original instance date provided.');
+             throw new HttpsError('invalid-argument', `Invalid original instance date provided: ${originalDateISO}`);
         }
         const dayBefore = addDays(instanceDate, -1);
         
@@ -311,13 +324,13 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             batch.delete(originalAppointmentRef);
         }
         
-        const newStartDate = new Date(startDate);
+        const newStartDate = zonedTimeToUtc(parseISO(startDate), localTimeZone);
         const newEndDate = (endDate && typeof endDate === 'string' && endDate.trim() !== '') 
-            ? new Date(endDate) 
+            ? zonedTimeToUtc(parseISO(endDate), localTimeZone)
             : null;
 
         if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
-            throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
+            throw new HttpsError('invalid-argument', `Invalid start or end date for new series. Start: ${startDate}, End: ${endDate}`);
         }
         
         let typeName = 'Termin'; 
@@ -336,9 +349,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
 
         let finalTitle = originalTitle;
-        if (title !== originalDisplayTitle) {
-            finalTitle = (title && title.trim() !== '') 
-                ? title.trim() 
+        if (rest.title !== originalDisplayTitle) {
+            finalTitle = (rest.title && rest.title.trim() !== '') 
+                ? rest.title.trim() 
                 : typeName;
         }
         
@@ -347,15 +360,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
             appointmentTypeId: originalAppointmentData.appointmentTypeId,
             startDate: Timestamp.fromDate(newStartDate),
             endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-            isAllDay: isAllDay ?? originalAppointmentData.isAllDay,
+            isAllDay: rest.isAllDay ?? originalAppointmentData.isAllDay,
             recurrence: originalAppointmentData.recurrence,
             recurrenceEndDate: (originalAppointmentData.recurrenceEndDate instanceof Timestamp) ? originalAppointmentData.recurrenceEndDate : null,
             visibility: originalAppointmentData.visibility,
             rsvpDeadline: (originalAppointmentData.rsvpDeadline instanceof Timestamp) ? originalAppointmentData.rsvpDeadline : null,
-            locationId: locationId ?? originalAppointmentData.locationId,
-            description: description ?? originalAppointmentData.description,
-            meetingPoint: meetingPoint ?? originalAppointmentData.meetingPoint,
-            meetingTime: meetingTime ?? originalAppointmentData.meetingTime,
+            locationId: rest.locationId ?? originalAppointmentData.locationId,
+            description: rest.description ?? originalAppointmentData.description,
+            meetingPoint: rest.meetingPoint ?? originalAppointmentData.meetingPoint,
+            meetingTime: rest.meetingTime ?? originalAppointmentData.meetingTime,
             createdBy: userId,
             createdAt: FieldValue.serverTimestamp(),
             lastUpdated: FieldValue.serverTimestamp(),
@@ -380,6 +393,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
 
 
 
