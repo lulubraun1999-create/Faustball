@@ -689,7 +689,7 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        // Pass the data in the expected format { data: { ... } }
+        // Pass the data wrapped in a 'data' object
         await saveSingleException({ data: {
             pendingUpdateData,
             selectedInstanceToEdit,
@@ -724,7 +724,7 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      // Pass the data in the expected format { data: { ... } }
+      // Pass the data wrapped in a 'data' object
       await saveFutureInstancesFn({ data: {
         pendingUpdateData,
         selectedInstanceToEdit,

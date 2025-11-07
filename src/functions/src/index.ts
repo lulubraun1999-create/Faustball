@@ -194,7 +194,8 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    // Correctly unpack the nested data object
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -269,7 +270,8 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
+    // Correctly unpack the nested data object
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -336,28 +338,33 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
               : typeName;
       }
       
+      // Explicitly construct the new object to avoid prototype issues with Timestamps
       const newAppointmentData: Omit<Appointment, 'id'> = {
         title: finalTitle || 'Termin',
         appointmentTypeId: originalAppointmentData.appointmentTypeId,
+        
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         recurrence: originalAppointmentData.recurrence,
+        // Carry over the original recurrence end date
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         
         visibility: originalAppointmentData.visibility,
-        rsvpDeadline: originalAppointmentData.rsvpDeadline,
+        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Carry over RSVP deadline logic if any
         
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
         
+        // Set new creation/update metadata
         createdBy: userId,
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
       };
+
 
       batch.set(newAppointmentRef, newAppointmentData);
 
