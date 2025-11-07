@@ -690,7 +690,7 @@ export default function AdminTerminePage() {
           originalId: selectedInstanceToEdit.originalId,
         };
 
-        await saveSingleException({pendingUpdateData: pendingUpdateData, selectedInstanceToEdit: {originalId: selectedInstanceToEdit.originalId}});
+        await saveSingleException(payload);
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -721,7 +721,12 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      await saveFutureInstancesFn({pendingUpdateData, selectedInstanceToEdit: { originalId: selectedInstanceToEdit.originalId }});
+      const payload = {
+          ...pendingUpdateData,
+          originalId: selectedInstanceToEdit.originalId,
+      }
+
+      await saveFutureInstancesFn(payload);
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -1004,7 +1009,7 @@ export default function AdminTerminePage() {
 
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
   
-  let lastMonth = '';
+  let lastMonthKey = '';
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -2056,11 +2061,9 @@ export default function AdminTerminePage() {
                     {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => {
                          const currentMonthDate = appointmentsInMonth[0]?.startDate.toDate();
                          const monthKey = format(currentMonthDate, 'yyyy-MM');
-                         const prevMonthKey = lastMonth;
-                         lastMonth = monthKey;
-
-                         const showDoppelbuchungBanner = 
-                            prevMonthKey === '2024-11' && monthKey === '2024-12';
+                         
+                         const showDoppelbuchungBanner = lastMonthKey === '2024-11' && monthKey === '2024-12';
+                         lastMonthKey = monthKey;
                       
                       return (
                         <React.Fragment key={monthYear}>
