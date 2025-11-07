@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid as isDateValid, startOfDay } from 'date-fns';
+import { addDays, isValid as isDateValid } from 'date-fns';
 
 
 // Firebase Admin SDK initialisieren
@@ -210,27 +210,27 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('invalid-argument', 'Missing update data or instance data.');
     }
 
+    // --- Robust Date Parsing ---
     const originalDate = new Date(pendingUpdateData.originalDateISO);
+    if (!isDateValid(originalDate)) {
+      throw new HttpsError('invalid-argument', 'Invalid original date provided.');
+    }
     
-    // Robust date parsing for startDate
-    const newStartDate = pendingUpdateData.startDate ? new Date(pendingUpdateData.startDate) : null;
-    if (!newStartDate || !isDateValid(newStartDate)) {
+    const newStartDate = new Date(pendingUpdateData.startDate);
+    if (!isDateValid(newStartDate)) {
       throw new HttpsError('invalid-argument', 'Invalid start date provided.');
     }
 
-    // Robust date parsing for endDate
     const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
       ? new Date(pendingUpdateData.endDate) 
       : null;
     if (newEndDate && !isDateValid(newEndDate)) {
         throw new HttpsError('invalid-argument', 'Invalid end date provided.');
     }
-    
-    const originalDateStartOfDay = startOfDay(originalDate);
+    // --- End Robust Date Parsing ---
 
-    if (!isDateValid(originalDate)) {
-        throw new HttpsError('invalid-argument', 'Ungültige Datumsangaben.');
-    }
+    const originalDateStartOfDay = new Date(originalDate);
+    originalDateStartOfDay.setHours(0, 0, 0, 0);
 
     const exceptionsColRef = db.collection('appointmentExceptions');
     
@@ -319,7 +319,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const newAppointmentRef = db.collection("appointments").doc();
       
       const newStartDate = new Date(pendingUpdateData.startDate!);
-      // Robust date parsing for endDate
       const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
         : null;
@@ -327,6 +326,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       if (!isDateValid(newStartDate) || (newEndDate && !isDateValid(newEndDate))) {
           throw new HttpsError('invalid-argument', 'Invalid start or end date for new series.');
       }
+      
+      const instanceStartOfDay = new Date(instanceDate);
+      instanceStartOfDay.setHours(0,0,0,0);
 
       let typeName = 'Termin'; 
       let isSonstiges = false;
@@ -374,7 +376,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
       const exceptionsQuery = db.collection('appointmentExceptions')
         .where('originalAppointmentId', '==', selectedInstanceToEdit.originalId)
-        .where('originalDate', '>=', Timestamp.fromDate(startOfDay(instanceDate)));
+        .where('originalDate', '>=', Timestamp.fromDate(instanceStartOfDay));
         
       const exceptionsSnap = await exceptionsQuery.get();
       exceptionsSnap.forEach((doc) => batch.delete(doc.ref));
@@ -387,3 +389,5 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
+
+    
