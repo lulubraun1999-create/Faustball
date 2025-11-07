@@ -385,8 +385,7 @@ export default function AdminTerminePage() {
   );
   
   const groupedAppointments = useMemo(() => {
-    // Wait for all data to be loaded
-    if (!appointments || !exceptions || isLoading) {
+    if (isLoading || !appointments || !exceptions) {
       return {};
     }
   
@@ -418,10 +417,10 @@ export default function AdminTerminePage() {
         const exception = exceptionsMap.get(key);
         const isCancelled = exception?.status === 'cancelled';
         
-        let finalData: Appointment = app;
+        let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
-          finalData = { ...app, ...exception.modifiedData, isException: true } as Appointment;
+          finalData = { ...app, ...exception.modifiedData, id: app.id } as Appointment;
           isException = true;
         }
 
@@ -433,7 +432,7 @@ export default function AdminTerminePage() {
           isException,
           originalDateISO: originalDateStartOfDayISO,
         });
-      } else { // Recurring event
+      } else {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = app.recurrenceEndDate && (app.recurrenceEndDate instanceof Timestamp)
           ? addDays(app.recurrenceEndDate.toDate(), 1)
@@ -459,7 +458,7 @@ export default function AdminTerminePage() {
             let isException = false;
   
             if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-              instanceData = { ...instanceData, ...instanceException.modifiedData };
+              instanceData = { ...instanceData, ...instanceException.modifiedData, id: app.id };
               isException = true;
             }
   
@@ -494,18 +493,18 @@ export default function AdminTerminePage() {
         return dateA - dateB;
     });
 
-    const groups: Record<string, UnrolledAppointment[]> = {};
+    const groupsResult: Record<string, UnrolledAppointment[]> = {};
     sortedEvents.forEach(app => {
       if (app.startDate instanceof Timestamp) {
         const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
-        if (!groups[monthYear]) {
-          groups[monthYear] = [];
+        if (!groupsResult[monthYear]) {
+          groupsResult[monthYear] = [];
         }
-        groups[monthYear].push(app);
+        groupsResult[monthYear].push(app);
       }
     });
   
-    return groups;
+    return groupsResult;
   }, [appointments, exceptions, isLoading, teamFilter, typeFilter]);
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
@@ -694,15 +693,9 @@ export default function AdminTerminePage() {
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
       const payload = {
-          pendingUpdateData: {
-            ...pendingUpdateData,
-            startDate: pendingUpdateData.startDate,
-            endDate: pendingUpdateData.endDate,
-            originalDateISO: selectedInstanceToEdit.originalDateISO,
-          },
-          selectedInstanceToEdit: {
-            originalId: selectedInstanceToEdit.originalId,
-          }
+          originalId: selectedInstanceToEdit.originalId,
+          originalDateISO: selectedInstanceToEdit.originalDateISO,
+          ...pendingUpdateData
       }
 
       await saveFutureInstancesFn(payload);
@@ -990,7 +983,7 @@ export default function AdminTerminePage() {
 
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
   
-  let lastMonthKey = '';
+  const monthKeys = Object.keys(groupedAppointments);
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -2037,12 +2030,14 @@ export default function AdminTerminePage() {
             </div>
           ) : Object.keys(groupedAppointments).length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-              {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => {
-                const isDecember2024 = monthYear === 'Dezember 2024';
-                const lastWasNovember2024 = lastMonthKey === 'November 2024';
-                const showBanner = isDecember2024 && lastWasNovember2024;
-                lastMonthKey = monthYear;
-                
+              {monthKeys.map((monthYear, index) => {
+                const appointmentsInMonth = groupedAppointments[monthYear];
+                const prevMonthYear = index > 0 ? monthKeys[index - 1] : '';
+
+                const showBanner =
+                  monthYear === 'Dezember 2024' &&
+                  prevMonthYear === 'November 2024';
+
                 return (
                   <React.Fragment key={monthYear}>
                     {showBanner && (
@@ -2086,7 +2081,7 @@ export default function AdminTerminePage() {
 
                               const originalAppointment = appointments?.find(a => a.id === app.originalId);
                               let rsvpDeadlineString = '-';
-                              if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                              if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline && originalAppointment.startDate instanceof Timestamp && originalAppointment.rsvpDeadline instanceof Timestamp) {
                                 const startMillis = originalAppointment.startDate.toMillis();
                                 const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
                                 const offset = startMillis - rsvpMillis;
@@ -2274,6 +2269,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
-
-    
