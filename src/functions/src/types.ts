@@ -40,7 +40,7 @@ export interface AppointmentException {
     isAllDay?: boolean;
   };
   createdAt?: Timestamp | FieldValue;
-  lastUpdated: Timestamp | FieldValue; // Hinzugefügt für Konsistenz
+  lastUpdated: Timestamp | FieldValue;
   userId: string;
 }
 
