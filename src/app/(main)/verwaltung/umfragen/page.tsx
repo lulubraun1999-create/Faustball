@@ -51,7 +51,7 @@ export default function UmfragenPage() {
 
     try {
       // First, remove any existing votes from this user for this poll
-      const existingVotes = currentPoll.votes.filter(v => v.userId === user.uid);
+      const existingVotes = (currentPoll.votes || []).filter(v => v.userId === user.uid);
       if (existingVotes.length > 0) {
         await updateDoc(pollDocRef, { votes: arrayRemove(...existingVotes) });
       }
@@ -81,7 +81,7 @@ export default function UmfragenPage() {
       const pollDocRef = doc(firestore, 'polls', pollId);
 
       const currentPoll = visiblePolls?.find(p => p.id === pollId);
-      const userVotes = currentPoll?.votes.filter(v => v.userId === user.uid);
+      const userVotes = (currentPoll?.votes || []).filter(v => v.userId === user.uid);
 
       if (!userVotes || userVotes.length === 0) {
           setVotingStates((prev) => ({ ...prev, [`retract-${pollId}`]: false }));
@@ -188,13 +188,15 @@ interface PollCardProps {
 function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }: PollCardProps) {
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
     
+    const votes = poll.votes || [];
+
     const userVotedOptionIds = useMemo(() => {
-        return new Set(poll.votes.filter(v => v.userId === user?.uid).map(v => v.optionId));
-    }, [poll.votes, user]);
+        return new Set(votes.filter(v => v.userId === user?.uid).map(v => v.optionId));
+    }, [votes, user]);
     
     const pollExpired = isPast(poll.endDate.toDate());
-    // Correctly calculate total unique voters
-    const totalUniqueVoters = new Set(poll.votes.map(v => v.userId)).size;
+    
+    const totalUniqueVoters = new Set(votes.map(v => v.userId)).size;
 
     const canUserVote = useMemo(() => {
         if (!memberProfile) return false;
@@ -244,7 +246,7 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
                 {showResults ? (
                     <div className="space-y-4">
                         {poll.options.map(option => {
-                            const uniqueVotersForOption = new Set(poll.votes.filter(v => v.optionId === option.id).map(v => v.userId)).size;
+                            const uniqueVotersForOption = new Set(votes.filter(v => v.optionId === option.id).map(v => v.userId)).size;
                             const percentage = totalUniqueVoters > 0 ? (uniqueVotersForOption / totalUniqueVoters) * 100 : 0;
                             const userVotedForThis = userVotedOptionIds.has(option.id);
                             return (
