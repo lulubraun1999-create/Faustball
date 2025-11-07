@@ -383,3 +383,5 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
+
+    
