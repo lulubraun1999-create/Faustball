@@ -189,7 +189,7 @@ export const sendMessage = onCall(async (request: CallableRequest) => {
 /**
  * Speichert eine Änderung für EINEN einzelnen Termin einer Serie als Ausnahme.
  */
-export const saveSingleAppointmentException = onCall(async (request: CallableRequest<any>) => {
+export const saveSingleAppointmentException = onCall(async (request: CallableRequest) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
@@ -264,7 +264,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 /**
  * Teilt eine Terminserie auf und speichert Änderungen für alle zukünftigen Termine.
  */
-export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest<any>) => {
+export const saveFutureAppointmentInstances = onCall(async (request: CallableRequest) => {
     if (!request.auth || !request.auth.token.admin) {
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
@@ -336,23 +336,23 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
               : typeName;
       }
       
-      const newAppointmentData = {
-          title: finalTitle || 'Termin',
-          appointmentTypeId: originalAppointmentData.appointmentTypeId,
-          startDate: Timestamp.fromDate(newStartDate),
-          endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
-          isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
-          recurrence: originalAppointmentData.recurrence,
-          recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
-          visibility: originalAppointmentData.visibility,
-          rsvpDeadline: originalAppointmentData.rsvpDeadline,
-          locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
-          description: pendingUpdateData.description ?? originalAppointmentData.description,
-          meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
-          meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-          createdBy: userId,
-          createdAt: FieldValue.serverTimestamp(),
-          lastUpdated: FieldValue.serverTimestamp(),
+      const newAppointmentData: Omit<Appointment, 'id'> = {
+        title: finalTitle || 'Termin',
+        appointmentTypeId: originalAppointmentData.appointmentTypeId,
+        startDate: Timestamp.fromDate(newStartDate),
+        endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
+        isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+        recurrence: originalAppointmentData.recurrence,
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+        visibility: originalAppointmentData.visibility,
+        rsvpDeadline: originalAppointmentData.rsvpDeadline,
+        locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
+        description: pendingUpdateData.description ?? originalAppointmentData.description,
+        meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
+        meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+        createdBy: userId,
+        createdAt: FieldValue.serverTimestamp(),
+        lastUpdated: FieldValue.serverTimestamp(),
       };
 
       batch.set(newAppointmentRef, newAppointmentData);
@@ -374,4 +374,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
     }
 });
-
