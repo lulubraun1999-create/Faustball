@@ -134,6 +134,7 @@ type UnrolledAppointment = Appointment & {
   originalDateISO: string;
   isException: boolean;
   isCancelled: boolean;
+  instanceDate: Date;
 };
 
 // Form Schemas (no change)
@@ -251,32 +252,33 @@ export default function AdminTerminePage() {
     });
   
     const allEvents: UnrolledAppointment[] = [];
-    const now = new Date();
-    const today = startOfDay(now);
+    const today = startOfDay(new Date());
   
     appointments.forEach((app) => {
       if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
   
-      const originalRecurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
+      const recurrenceEndDate = app.recurrenceEndDate instanceof Timestamp ? app.recurrenceEndDate.toDate() : null;
   
-      if (app.recurrence === 'none' || !app.recurrence || !originalRecurrenceEndDate) {
+      if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
         const singleDate = app.startDate.toDate();
-        if (singleDate < today && !exceptionsMap.has(`${app.id}-${startOfDay(singleDate).toISOString()}`)) {
-          return; // Skip past single events unless they are an exception
+        if (isBefore(singleDate, today) && !exceptionsMap.has(`${app.id}-${startOfDay(singleDate).toISOString()}`)) {
+          return; 
         }
-  
+        
         const originalDateStartOfDayISO = startOfDay(singleDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
         let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
-          finalData = { ...app, ...exception.modifiedData, id: app.id } as Appointment;
+          const modData = exception.modifiedData;
+          finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === null ? undefined : modData.endDate, id: app.id };
           isException = true;
         }
   
         allEvents.push({
           ...finalData,
+          instanceDate: finalData.startDate.toDate(),
           originalId: app.id,
           virtualId: app.id,
           isCancelled: exception?.status === 'cancelled',
@@ -285,26 +287,27 @@ export default function AdminTerminePage() {
         });
       } else {
         let currentDate = app.startDate.toDate();
-        const recurrenceEnd = originalRecurrenceEndDate;
         const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         
         let iter = 0;
         const MAX_ITERATIONS = 500;
   
-        while (currentDate <= recurrenceEnd && iter < MAX_ITERATIONS) {
+        while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= today) {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
             const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
             const instanceException = exceptionsMap.get(instanceKey);
             
-            const newStartDate = Timestamp.fromDate(currentDate);
-            const newEndDate = duration > 0 ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
-  
-            let instanceData: Appointment = { ...app };
             let isException = false;
+            let instanceData = { ...app };
+            let instanceStartDate = currentDate;
+            let instanceEndDate: Date | null = duration > 0 ? new Date(currentDate.getTime() + duration) : null;
+
             if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-              instanceData = { ...instanceData, ...instanceException.modifiedData, id: app.id };
-              isException = true;
+                instanceData = { ...instanceData, ...instanceException.modifiedData };
+                instanceStartDate = instanceException.modifiedData.startDate?.toDate() ?? instanceStartDate;
+                instanceEndDate = instanceException.modifiedData.endDate?.toDate() ?? instanceEndDate;
+                isException = true;
             }
   
             allEvents.push({
@@ -313,8 +316,9 @@ export default function AdminTerminePage() {
               virtualId: instanceKey,
               originalId: app.id,
               originalDateISO: currentDateStartOfDayISO,
-              startDate: newStartDate,
-              endDate: newEndDate,
+              instanceDate: instanceStartDate,
+              startDate: Timestamp.fromDate(instanceStartDate),
+              endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
               isCancelled: instanceException?.status === 'cancelled',
               isException,
             });
@@ -333,6 +337,7 @@ export default function AdminTerminePage() {
     });
     return allEvents;
   }, [appointments, exceptions]);
+  
 
   const filteredAndGroupedAppointments = useMemo(() => {
     if (!unrolledAppointments) return {};
@@ -343,17 +348,15 @@ export default function AdminTerminePage() {
         return isVisibleByTeam && isVisibleByType;
     });
 
-    const sorted = filtered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
+    const sorted = filtered.sort((a, b) => a.instanceDate.getTime() - b.instanceDate.getTime());
 
     const groupsResult: Record<string, UnrolledAppointment[]> = {};
     sorted.forEach(app => {
-      if(app.startDate && app.startDate instanceof Timestamp){
-        const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
-        if (!groupsResult[monthYear]) {
-          groupsResult[monthYear] = [];
-        }
-        groupsResult[monthYear].push(app);
+      const monthYear = format(app.instanceDate, 'MMMM yyyy', { locale: de });
+      if (!groupsResult[monthYear]) {
+        groupsResult[monthYear] = [];
       }
+      groupsResult[monthYear].push(app);
     });
     return groupsResult;
   }, [unrolledAppointments, teamFilter, typeFilter]);
@@ -427,7 +430,7 @@ export default function AdminTerminePage() {
     const originalAppointment = appointments.find(app => app.id === appointment.originalId); if (!originalAppointment) return;
     setSelectedInstanceToEdit(appointment);
     const isAllDay = appointment.isAllDay ?? false;
-    const startDate = appointment.startDate?.toDate();
+    const startDate = appointment.instanceDate;
     const endDate = appointment.endDate?.toDate();
     const startDateString = formatDateForInput(startDate, isAllDay ? 'date' : 'datetime');
     const endDateString = formatDateForInput(endDate, isAllDay ? 'date' : 'datetime');
@@ -545,17 +548,17 @@ export default function AdminTerminePage() {
                               const titleIsDefault = !isSonstiges && app.title === typeName;
                               const showTitle = app.title && (!titleIsDefault || isSonstiges);
                               const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
-                              const startDate = app.startDate instanceof Timestamp ? app.startDate.toDate() : null;
+                              
                               return (
                                 <TableRow key={app.virtualId} className={cn(app.isCancelled && 'text-muted-foreground opacity-70')}>
                                   <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", app.isCancelled && "line-through")}>{displayTitle}</TableCell>
-                                  <TableCell>{app.isCancelled ? (<span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">ABGESAGT</span>) : (<>{startDate ? format(startDate, app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm', { locale: de }) : 'N/A'}{app.isException && !app.isCancelled && (<span className="ml-1 text-xs text-blue-600">(G)</span>)}</>)}</TableCell>
+                                  <TableCell>{app.isCancelled ? (<span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">ABGESAGT</span>) : (<>{app.instanceDate ? format(app.instanceDate, app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm', { locale: de }) : 'N/A'}{app.isException && !app.isCancelled && (<span className="ml-1 text-xs text-blue-600">(G)</span>)}</>)}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.visibility.type === 'all' ? 'Alle' : (app.visibility.teamIds || []).map((id) => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.locationId ? locationsMap.get(app.locationId)?.name || '-' : '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.recurrence && app.recurrence !== 'none' ? `bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : '...'}` : '-'}</TableCell>
                                   <TableCell className="text-right space-x-0">
                                     <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}><Edit className="h-4 w-4" /><span className="sr-only">Einzelnen Termin bearbeiten</span></Button>
-                                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={isSubmitting}>{app.isCancelled ? (<RefreshCw className="h-4 w-4 text-green-600" />) : (<CalendarX className="h-4 w-4 text-orange-600" />)}<span className="sr-only">{app.isCancelled ? 'Absage rückgängig' : 'Diesen Termin absagen'}</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{app.isCancelled ? 'Absage rückgängig machen?' : 'Nur diesen Termin absagen?'}</AlertDialogTitle><AlertDialogDescription>{app.isCancelled ? `Soll der abgesagte Termin am ${startDate ? format(startDate, 'dd.MM.yyyy') : ''} wiederhergestellt werden?` : `Möchten Sie nur den Termin am ${startDate ? format(startDate, 'dd.MM.yyyy') : ''} absagen? Die Serie bleibt bestehen.`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingleInstance(app)}>{app.isCancelled ? 'Wiederherstellen' : 'Absagen'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                                    <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={isSubmitting}>{app.isCancelled ? (<RefreshCw className="h-4 w-4 text-green-600" />) : (<CalendarX className="h-4 w-4 text-orange-600" />)}<span className="sr-only">{app.isCancelled ? 'Absage rückgängig' : 'Diesen Termin absagen'}</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{app.isCancelled ? 'Absage rückgängig machen?' : 'Nur diesen Termin absagen?'}</AlertDialogTitle><AlertDialogDescription>{app.isCancelled ? `Soll der abgesagte Termin am ${app.instanceDate ? format(app.instanceDate, 'dd.MM.yyyy') : ''} wiederhergestellt werden?` : `Möchten Sie nur den Termin am ${app.instanceDate ? format(app.instanceDate, 'dd.MM.yyyy') : ''} absagen? Die Serie bleibt bestehen.`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingleInstance(app)}>{app.isCancelled ? 'Wiederherstellen' : 'Absagen'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                                     <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /><span className="sr-only">Serie löschen</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Ganze Serie löschen?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden und löscht die gesamte Terminserie "{displayTitle}". Alle zukünftigen Termine dieser Serie werden entfernt.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteAppointment(app.originalId)} className="bg-destructive hover:bg-destructive/90">Serie löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                                   </TableCell>
                                 </TableRow>
@@ -575,5 +578,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
-    
