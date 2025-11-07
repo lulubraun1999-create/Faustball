@@ -15,8 +15,8 @@ export interface Appointment {
       teamIds: string[];
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
-  recurrenceEndDate?: Timestamp;
-  rsvpDeadline?: Timestamp;
+  recurrenceEndDate?: Timestamp | null;
+  rsvpDeadline?: Timestamp | null;
   meetingPoint?: string;
   meetingTime?: string;
   createdAt?: Timestamp | FieldValue;
@@ -40,7 +40,7 @@ export interface AppointmentException {
     isAllDay?: boolean;
   };
   createdAt?: Timestamp | FieldValue;
-  lastUpdated: Timestamp | FieldValue;
+  lastUpdated?: Timestamp | FieldValue;
   userId: string;
 }
 

@@ -336,7 +336,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
               : typeName;
       }
       
-      // Sichere Erstellung des neuen Terminobjekts
       const newAppointmentData: Omit<Appointment, 'id'> = {
         title: finalTitle || 'Termin',
         appointmentTypeId: originalAppointmentData.appointmentTypeId,
@@ -344,19 +343,16 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
-        // Felder aus der Originalserie übernehmen
         recurrence: originalAppointmentData.recurrence,
         recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         visibility: originalAppointmentData.visibility,
         
-        // Geänderte oder neue Felder
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
         rsvpDeadline: originalAppointmentData.rsvpDeadline, // Beibehaltung der ursprünglichen Logik
         
-        // Metadaten für die neue Serie
         createdBy: userId,
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
