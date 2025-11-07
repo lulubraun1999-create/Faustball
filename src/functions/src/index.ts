@@ -297,16 +297,19 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
           throw new HttpsError('failed-precondition', 'Original appointment has no start date.');
       }
       
+      // End the old series
       if (dayBefore >= originalStartDate) {
         batch.update(originalAppointmentRef, {
           recurrenceEndDate: Timestamp.fromDate(dayBefore),
         });
       } else {
+        // If the edit is on the very first instance, the old series is no longer needed.
         batch.delete(originalAppointmentRef);
       }
 
       const newAppointmentRef = db.collection("appointments").doc();
       
+      // --- Start: Explicitly create new appointment data, DO NOT spread original object ---
       const newStartDate = new Date(pendingUpdateData.startDate);
       const newEndDate = (pendingUpdateData.endDate && typeof pendingUpdateData.endDate === 'string' && pendingUpdateData.endDate.trim() !== '') 
         ? new Date(pendingUpdateData.endDate) 
@@ -332,6 +335,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
       const originalDisplayTitle = titleIsDefault ? '' : originalTitle;
 
       let finalTitle = originalTitle;
+      // Only change title if the new title is different from the original display title
       if (pendingUpdateData.title !== originalDisplayTitle) {
           finalTitle = (pendingUpdateData.title && pendingUpdateData.title.trim() !== '') 
               ? pendingUpdateData.title.trim() 
@@ -347,21 +351,21 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
         
         recurrence: originalAppointmentData.recurrence,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Keep original end date of the series
         
-        visibility: originalAppointmentData.visibility,
-        rsvpDeadline: originalAppointmentData.rsvpDeadline,
+        visibility: originalAppointmentData.visibility, // Keep original visibility
+        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Keep original RSVP deadline logic
         
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
         
-        createdBy: userId,
+        createdBy: userId, // New series created by the current admin
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
       };
-
+      // --- End: Explicit creation ---
 
       batch.set(newAppointmentRef, newAppointmentData);
 
@@ -379,6 +383,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
 
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
-        throw new HttpsError('internal', 'Terminserie konnte nicht aktualisiert werden.', error.message);
+        throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
