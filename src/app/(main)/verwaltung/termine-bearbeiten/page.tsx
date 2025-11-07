@@ -327,7 +327,7 @@ export default function AdminTerminePage() {
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
+    return { typesMap, locationsMap, teamsMap, groupedTeams };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -1289,7 +1289,7 @@ export default function AdminTerminePage() {
                               min={
                                 appointmentForm.getValues('startDate')
                                   ? appointmentForm
-                                      .getValues('startDate')
+                                      .getValues('startDate')!
                                       .split('T')[0]
                                   : undefined
                               }
