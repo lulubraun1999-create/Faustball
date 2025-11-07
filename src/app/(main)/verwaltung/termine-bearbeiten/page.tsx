@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -323,13 +324,15 @@ export default function AdminTerminePage() {
     useDoc<MemberProfile>(memberProfileRef);
 
   const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo(() => {
-    const allGroups = groups || [];
-    const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
-    const locationsMap = new Map(locations?.map((l) => [l.id, l]));
-    const classes = allGroups
+    if (!appointmentTypes || !locations || !groups) {
+      return { typesMap: new Map(), locationsMap: new Map(), teams: [], teamsMap: new Map(), groupedTeams: [] };
+    }
+    const typesMap = new Map(appointmentTypes.map((t) => [t.id, t.name]));
+    const locationsMap = new Map(locations.map((l) => [l.id, l]));
+    const classes = groups
       .filter((g) => g.type === 'class')
       .sort((a, b) => a.name.localeCompare(b.name));
-    const teams = allGroups
+    const teams = groups
       .filter((g) => g.type === 'team')
       .sort((a, b) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t) => [t.id, t.name]));
@@ -391,10 +394,10 @@ export default function AdminTerminePage() {
   );
 
   const unrolledAppointments = useMemo(() => {
-    if (!appointments || isLoadingExceptions) return [];
+    if (!appointments || !exceptions) return [];
 
     const exceptionsMap = new Map<string, AppointmentException>();
-    exceptions?.forEach((ex) => {
+    exceptions.forEach((ex) => {
       if (ex.originalDate) {
         const key = `${
           ex.originalAppointmentId
@@ -502,30 +505,23 @@ export default function AdminTerminePage() {
       }
     });
     return allEvents;
-  }, [appointments, exceptions, isLoadingExceptions]);
+  }, [appointments, exceptions]);
 
  const filteredAppointments = useMemo(() => {
-    // Wait until appointments are loaded
-    if (!unrolledAppointments) return [];
+    if (!unrolledAppointments || !memberProfile) return [];
   
     let preFiltered = unrolledAppointments;
+    const userTeamIdsSet = new Set(memberProfile.teams || []);
   
-    // Only apply team-based filtering if the member profile is loaded.
-    if (memberProfile) {
-        const userTeamIdsSet = new Set(memberProfile.teams || []);
-        if (teamFilter === 'myTeams') {
-            preFiltered = unrolledAppointments.filter((app) => {
-                if (app.visibility.type === 'all') return true;
-                return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
-            });
-        } else if (teamFilter !== 'all') {
-            preFiltered = unrolledAppointments.filter(
-                (app) => app.visibility.teamIds.includes(teamFilter)
-            );
-        }
+    if (teamFilter === 'myTeams') {
+      preFiltered = unrolledAppointments.filter((app) => {
+        if (app.visibility.type === 'all') return true;
+        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
+      });
     } else if (teamFilter !== 'all') {
-        // If profile is not loaded yet but a specific team is selected, return nothing to avoid showing wrong data.
-        return [];
+      preFiltered = unrolledAppointments.filter(
+        (app) => app.visibility.teamIds.includes(teamFilter)
+      );
     }
   
     const finalFiltered = preFiltered.filter(
@@ -536,6 +532,7 @@ export default function AdminTerminePage() {
   }, [unrolledAppointments, teamFilter, typeFilter, memberProfile]);
 
   const groupedAppointments = useMemo(() => {
+    if (!filteredAppointments) return {};
     const groups: Record<string, UnrolledAppointment[]> = {};
     filteredAppointments.forEach(app => {
       const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
@@ -698,9 +695,9 @@ export default function AdminTerminePage() {
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
         const payload = {
-            ...pendingUpdateData,
-            originalId: selectedInstanceToEdit.originalId,
-        }
+          originalId: selectedInstanceToEdit.originalId,
+          ...pendingUpdateData,
+        };
 
         await saveSingleException(payload);
 
@@ -734,9 +731,9 @@ export default function AdminTerminePage() {
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
       const payload = {
-            ...pendingUpdateData,
-            originalId: selectedInstanceToEdit.originalId,
-        }
+        originalId: selectedInstanceToEdit.originalId,
+        ...pendingUpdateData,
+      };
 
       await saveFutureInstancesFn(payload);
       
@@ -979,7 +976,6 @@ export default function AdminTerminePage() {
     if (matchA && matchB) {
       return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
     }
-    // Fallback for names that don't match the pattern
     if (matchA) return -1;
     if (matchB) return 1;
     return a.name.localeCompare(b.name);
@@ -2297,8 +2293,8 @@ export default function AdminTerminePage() {
                                 </Table>
                             </AccordionContent>
                         </AccordionItem>
-                    ))
-                 )
+                    ))}
+                 </Accordion>
                 ) : (
                     <div className="text-center py-10 text-muted-foreground">
                         Keine Termine entsprechen den aktuellen Filtern.
