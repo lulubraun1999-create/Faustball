@@ -197,7 +197,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
 
-    // Direkter Zugriff auf request.data
     const data = request.data;
     const userId = request.auth.uid;
 
@@ -205,7 +204,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('invalid-argument', 'Missing required data for exception (originalId, originalDateISO, startDate).');
     }
 
-    // Sicheres Parsen der Daten
     const originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
     const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
     const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
@@ -225,7 +223,6 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
     const querySnapshot = await q.get();
     const existingExceptionDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[0] : null;
 
-    // Explizites Erstellen des modifiedData-Objekts
     const modifiedData: AppointmentException['modifiedData'] = {
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
@@ -276,7 +273,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const data = request.data; // Direkter Zugriff auf request.data
+    const data = request.data;
     const userId = request.auth.uid;
 
     if (!data.originalId || !data.originalDateISO || !data.startDate) {
@@ -348,7 +345,6 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
                 : typeName;
         }
         
-        // Explizites Erstellen des neuen Appointment-Objekts, keine Kopie.
         const newAppointmentData: Omit<Appointment, 'id'> = {
             title: finalTitle || 'Termin',
             appointmentTypeId: originalAppointmentData.appointmentTypeId,

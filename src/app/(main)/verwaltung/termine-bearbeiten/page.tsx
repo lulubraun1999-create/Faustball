@@ -673,6 +673,7 @@ export default function AdminTerminePage() {
     setIsSubmitting(true);
     
     try {
+      // Sende die rohen Formulardaten an die Cloud Function
       await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) {
@@ -698,6 +699,7 @@ export default function AdminTerminePage() {
     }
 
     try {
+      // Sende die rohen Formulardaten an die Cloud Function
       await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -1815,7 +1817,7 @@ export default function AdminTerminePage() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+           {isLoading ? (
             <div className="flex justify-center p-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
