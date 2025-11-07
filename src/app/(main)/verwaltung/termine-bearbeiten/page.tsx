@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -111,7 +110,6 @@ import type {
   Location,
   Group,
   AppointmentException,
-  MemberProfile,
 } from '@/lib/types';
 import {
   format,
@@ -130,8 +128,6 @@ import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { zonedTimeToUtc } from 'date-fns-tz';
 
-
-type GroupWithTeams = Group & { teams: Group[] };
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -311,22 +307,13 @@ export default function AdminTerminePage() {
   const { data: groups, isLoading: isLoadingGroups } =
     useCollection<Group>(groupsRef);
     
-  const memberProfileRef = useMemoFirebase(
-    () => (user ? doc(firestore, 'members', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: memberProfile, isLoading: isMemberProfileLoading } =
-    useDoc<MemberProfile>(memberProfileRef);
-
   const isLoading =
     isUserLoading ||
     isLoadingAppointments ||
     isLoadingTypes ||
     isLoadingLocations ||
     isLoadingGroups ||
-    isLoadingExceptions ||
-    isMemberProfileLoading;
-
+    isLoadingExceptions;
 
   const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo(() => {
     if (!appointmentTypes || !locations || !groups) {
@@ -398,8 +385,8 @@ export default function AdminTerminePage() {
     [appointmentTypes]
   );
 
- const unrolledAppointments = useMemo(() => {
-    if (!appointments || !exceptions) return [];
+  const groupedAppointments = useMemo(() => {
+    if (isLoading || !appointments || !exceptions) return {};
 
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions.forEach((ex) => {
@@ -415,13 +402,20 @@ export default function AdminTerminePage() {
     appointments.forEach((app) => {
       if (!app.startDate) return;
 
+      const isVisibleByTeam = teamFilter === 'all' || app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter);
+      const isVisibleByType = typeFilter === 'all' || app.appointmentTypeId === typeFilter;
+      if (!isVisibleByTeam || !isVisibleByType) return;
+
       if (app.recurrence === 'none') {
-        const originalDateStartOfDay = startOfDay(app.startDate.toDate());
+        const originalDate = app.startDate.toDate();
+        if (originalDate < startOfDay(now) && !exceptionsMap.has(`${app.id}-${startOfDay(originalDate).toISOString()}`)) return;
+        
+        const originalDateStartOfDay = startOfDay(originalDate);
         const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
         const key = `${app.id}-${originalDateStartOfDayISO}`;
         const exception = exceptionsMap.get(key);
         const isCancelled = exception?.status === 'cancelled';
-
+        
         const modifiedApp =
           exception?.status === 'modified'
             ? { ...app, ...(exception.modifiedData || {}), isException: true }
@@ -433,6 +427,7 @@ export default function AdminTerminePage() {
           isCancelled,
           originalDateISO: originalDateStartOfDayISO,
         });
+
       } else {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = app.recurrenceEndDate
@@ -448,39 +443,41 @@ export default function AdminTerminePage() {
         const MAX_ITERATIONS = 500;
 
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          const currentDateStartOfDay = startOfDay(currentDate);
-          const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
-          const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
-          const instanceException = exceptionsMap.get(instanceKey);
-          const instanceIsCancelled = instanceException?.status === 'cancelled';
+          if (currentDate >= startOfDay(now)) {
+            const currentDateStartOfDay = startOfDay(currentDate);
+            const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
+            const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
+            const instanceException = exceptionsMap.get(instanceKey);
+            const instanceIsCancelled = instanceException?.status === 'cancelled';
 
-          const newStartDate = Timestamp.fromDate(currentDate);
-          const newEndDate = app.endDate
-            ? Timestamp.fromMillis(currentDate.getTime() + duration)
-            : undefined;
+            const newStartDate = Timestamp.fromDate(currentDate);
+            const newEndDate = app.endDate
+              ? Timestamp.fromMillis(currentDate.getTime() + duration)
+              : undefined;
 
-          let instanceData: UnrolledAppointment = {
-            ...app,
-            id: `${app.id}-${currentDate.toISOString()}`,
-            virtualId: instanceKey,
-            originalId: app.id,
-            originalDateISO: currentDateStartOfDayISO,
-            startDate: newStartDate,
-            endDate: newEndDate,
-            isCancelled: instanceIsCancelled,
-          };
-
-          if (
-            instanceException?.status === 'modified' &&
-            instanceException.modifiedData
-          ) {
-            instanceData = {
-              ...instanceData,
-              ...instanceException.modifiedData,
-              isException: true,
+            let instanceData: UnrolledAppointment = {
+              ...app,
+              id: `${app.id}-${currentDate.toISOString()}`,
+              virtualId: instanceKey,
+              originalId: app.id,
+              originalDateISO: currentDateStartOfDayISO,
+              startDate: newStartDate,
+              endDate: newEndDate,
+              isCancelled: instanceIsCancelled,
             };
+
+            if (
+              instanceException?.status === 'modified' &&
+              instanceException.modifiedData
+            ) {
+              instanceData = {
+                ...instanceData,
+                ...instanceException.modifiedData,
+                isException: true,
+              };
+            }
+            allEvents.push(instanceData);
           }
-          allEvents.push(instanceData);
           
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
@@ -493,46 +490,19 @@ export default function AdminTerminePage() {
         }
       }
     });
-    return allEvents;
-  }, [appointments, exceptions]);
 
- const filteredAppointments = useMemo(() => {
-    if (isLoading || !unrolledAppointments) return [];
-
-    const now = startOfDay(new Date());
-
-    return unrolledAppointments
-        .filter(app => {
-            const isVisibleByTeam = 
-                teamFilter === 'all' || 
-                app.visibility.type === 'all' || 
-                app.visibility.teamIds.includes(teamFilter);
-
-            const isVisibleByType = 
-                typeFilter === 'all' || 
-                app.appointmentTypeId === typeFilter;
-            
-            const isFutureOrCancelled = app.startDate.toDate() >= now || app.isCancelled;
-
-            return isVisibleByTeam && isVisibleByType && isFutureOrCancelled;
-        })
-        .sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-
-  }, [unrolledAppointments, teamFilter, typeFilter, isLoading]);
-
-  const groupedAppointments = useMemo(() => {
-    if (!filteredAppointments) return {};
+    const sortedEvents = allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
     const groups: Record<string, UnrolledAppointment[]> = {};
-    filteredAppointments.forEach(app => {
+    sortedEvents.forEach(app => {
       const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
       if (!groups[monthYear]) {
         groups[monthYear] = [];
       }
       groups[monthYear].push(app);
     });
-    return groups;
-  }, [filteredAppointments]);
 
+    return groups;
+  }, [appointments, exceptions, isLoading, teamFilter, typeFilter]);
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
@@ -720,8 +690,8 @@ export default function AdminTerminePage() {
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
       const payload = {
-          ...pendingUpdateData,
-          originalId: selectedInstanceToEdit.originalId,
+          pendingUpdateData,
+          selectedInstanceToEdit,
       }
 
       await saveFutureInstancesFn(payload);
@@ -828,7 +798,8 @@ export default function AdminTerminePage() {
   };
 
   const handleEditAppointment = (appointment: UnrolledAppointment) => {
-    const originalAppointment = appointments?.find(app => app.id === appointment.originalId);
+    if (!appointments) return;
+    const originalAppointment = appointments.find(app => app.id === appointment.originalId);
     if (!originalAppointment) return;
 
     setSelectedInstanceToEdit(appointment);
@@ -1779,6 +1750,7 @@ export default function AdminTerminePage() {
                         <Input
                           type="datetime-local"
                           {...field}
+                          value={field.value ?? ""}
                           min={instanceForm.getValues('startDate')}
                         />
                       </FormControl>
@@ -1831,7 +1803,7 @@ export default function AdminTerminePage() {
                               ? 'Titel ist erforderlich...'
                               : 'Optionaler Titel...'
                           }
-                          {...field}
+                           {...field} value={field.value ?? ""}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1882,7 +1854,7 @@ export default function AdminTerminePage() {
                     <FormControl>
                       <Input
                         placeholder="z.B. Eingang Halle"
-                        {...field}
+                         {...field} value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1898,7 +1870,7 @@ export default function AdminTerminePage() {
                     <FormControl>
                       <Input
                         placeholder="z.B. 18:45 Uhr"
-                        {...field}
+                         {...field} value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1914,7 +1886,7 @@ export default function AdminTerminePage() {
                     <FormControl>
                       <Textarea
                         placeholder="Weitere Details..."
-                        {...field}
+                         {...field} value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1990,8 +1962,7 @@ export default function AdminTerminePage() {
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-3">
-              {' '}
-              <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>{' '}
+              <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>
             </CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
@@ -2188,12 +2159,11 @@ export default function AdminTerminePage() {
                                                           size="icon"
                                                           disabled={isSubmitting}
                                                       >
-                                                          {' '}
                                                           {isCancelled ? (
                                                           <RefreshCw className="h-4 w-4 text-green-600" />
                                                           ) : (
                                                           <CalendarX className="h-4 w-4 text-orange-600" />
-                                                          )}{' '}
+                                                          )}
                                                           <span className="sr-only">
                                                           {isCancelled
                                                               ? 'Absage rückgängig'
@@ -2203,12 +2173,11 @@ export default function AdminTerminePage() {
                                                       </AlertDialogTrigger>
                                                       <AlertDialogContent>
                                                       <AlertDialogHeader>
-                                                          {' '}
                                                           <AlertDialogTitle>
                                                           {isCancelled
                                                               ? 'Absage rückgängig machen?'
                                                               : 'Nur diesen Termin absagen?'}
-                                                          </AlertDialogTitle>{' '}
+                                                          </AlertDialogTitle>
                                                           <AlertDialogDescription>
                                                           {isCancelled
                                                               ? `Soll der abgesagte Termin am ${format(
@@ -2219,13 +2188,12 @@ export default function AdminTerminePage() {
                                                               app.startDate.toDate(),
                                                               'dd.MM.yyyy'
                                                               )} absagen? Die Serie bleibt bestehen.`}
-                                                          </AlertDialogDescription>{' '}
+                                                          </AlertDialogDescription>
                                                       </AlertDialogHeader>
                                                       <AlertDialogFooter>
-                                                          {' '}
                                                           <AlertDialogCancel>
                                                           Abbrechen
-                                                          </AlertDialogCancel>{' '}
+                                                          </AlertDialogCancel>
                                                           <AlertDialogAction
                                                           onClick={() =>
                                                               handleCancelSingleInstance(app)
@@ -2234,7 +2202,7 @@ export default function AdminTerminePage() {
                                                           {isCancelled
                                                               ? 'Wiederherstellen'
                                                               : 'Absagen'}
-                                                          </AlertDialogAction>{' '}
+                                                          </AlertDialogAction>
                                                       </AlertDialogFooter>
                                                       </AlertDialogContent>
                                                   </AlertDialog>
@@ -2242,8 +2210,7 @@ export default function AdminTerminePage() {
                                                   <AlertDialog>
                                                       <AlertDialogTrigger asChild>
                                                       <Button variant="ghost" size="icon">
-                                                          {' '}
-                                                          <Trash2 className="h-4 w-4 text-destructive" />{' '}
+                                                          <Trash2 className="h-4 w-4 text-destructive" />
                                                           <span className="sr-only">
                                                           Serie löschen
                                                           </span>
@@ -2251,22 +2218,20 @@ export default function AdminTerminePage() {
                                                       </AlertDialogTrigger>
                                                       <AlertDialogContent>
                                                       <AlertDialogHeader>
-                                                          {' '}
                                                           <AlertDialogTitle>
                                                           Ganze Serie löschen?
-                                                          </AlertDialogTitle>{' '}
+                                                          </AlertDialogTitle>
                                                           <AlertDialogDescription>
                                                           Diese Aktion kann nicht rückgängig gemacht
                                                           werden und löscht die gesamte Terminserie "
                                                           {displayTitle}". Alle zukünftigen Termine
                                                           dieser Serie werden entfernt.
-                                                          </AlertDialogDescription>{' '}
+                                                          </AlertDialogDescription>
                                                       </AlertDialogHeader>
                                                       <AlertDialogFooter>
-                                                          {' '}
                                                           <AlertDialogCancel>
                                                           Abbrechen
-                                                          </AlertDialogCancel>{' '}
+                                                          </AlertDialogCancel>
                                                           <AlertDialogAction
                                                           onClick={() =>
                                                               handleDeleteAppointment(app.originalId)
@@ -2274,7 +2239,7 @@ export default function AdminTerminePage() {
                                                           className="bg-destructive hover:bg-destructive/90"
                                                           >
                                                           Serie löschen
-                                                          </AlertDialogAction>{' '}
+                                                          </AlertDialogAction>
                                                       </AlertDialogFooter>
                                                       </AlertDialogContent>
                                                   </AlertDialog>
