@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -29,6 +28,7 @@ import {
   where,
   writeBatch,
   getDocs,
+  getDoc,
   setDoc,
 } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -100,9 +100,11 @@ import {
   ListTodo,
   Loader2,
   Plus,
+  Filter,
   MapPin,
   CalendarPlus,
   CalendarX,
+  X,
   RefreshCw,
 } from 'lucide-react';
 import type {
@@ -115,18 +117,23 @@ import type {
 } from '@/lib/types';
 import {
   format,
+  formatISO,
   isValid as isDateValid,
   addDays,
   addWeeks,
   addMonths,
   differenceInMilliseconds,
   set,
+  isEqual,
   startOfDay,
+  parse,
   parseISO,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -150,10 +157,10 @@ type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 
 const singleAppointmentInstanceSchema = z
   .object({
-    originalId: z.string(), 
-    originalDateISO: z.string(), 
-    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'), 
-    endDate: z.string().optional(), 
+    originalDateISO: z.string(),
+    startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'),
+    // +++ KORRIGIERT: .nullable() hinzugefügt +++
+    endDate: z.string().optional().nullable(),
     isAllDay: z.boolean().default(false),
     title: z.string().optional(),
     locationId: z.string().optional(),
@@ -210,20 +217,9 @@ const useAppointmentSchema = (appointmentTypes: AppointmentType[] | null) => {
         }
       )
       .refine(
-        (data) => {
-             if (data.recurrence === 'none') return true;
-             if (!data.recurrenceEndDate) return false;
-             if (!data.startDate) return true; // Let other validation handle this
-             try {
-                const start = new Date(data.startDate.split('T')[0]);
-                const end = new Date(data.recurrenceEndDate);
-                return end >= start;
-             } catch(e) {
-                 return false;
-             }
-        },
+        (data) => data.recurrence === 'none' || !!data.recurrenceEndDate,
         {
-          message: 'Enddatum für Wiederholung muss nach oder am Startdatum liegen.',
+          message: 'Enddatum für Wiederholung ist erforderlich.',
           path: ['recurrenceEndDate'],
         }
       )
@@ -263,13 +259,14 @@ export default function AdminTerminePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
   const [isInstanceDialogOpen, setIsInstanceDialogOpen] = useState(false);
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
+  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [isUpdateTypeDialogOpen, setIsUpdateTypeDialogOpen] = useState(false);
   const [pendingUpdateData, setPendingUpdateData] =
     useState<SingleAppointmentInstanceFormValues | null>(null);
-    
-  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
-  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
 
+  const [teamFilter, setTeamFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const appointmentsRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'appointments') : null),
@@ -313,7 +310,13 @@ export default function AdminTerminePage() {
   const { data: memberProfile, isLoading: isMemberProfileLoading } =
     useDoc<MemberProfile>(memberProfileRef);
 
-  const { typesMap, locationsMap, teamsMap, groupedTeams } = useMemo(() => {
+  const { typesMap, locationsMap, teams, teamsMap, groupedTeams } = useMemo<{
+    typesMap: Map<string, string>;
+    locationsMap: Map<string, Location>;
+    teams: Group[];
+    teamsMap: Map<string, string>;
+    groupedTeams: GroupWithTeams[];
+  }>(() => {
     const allGroups: Group[] = groups || [];
     const typesMap = new Map(
       appointmentTypes?.map((t: AppointmentType) => [t.id, t.name])
@@ -329,14 +332,28 @@ export default function AdminTerminePage() {
       .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
 
-    const grouped = classes
+    const customSort = (a: Group, b: Group) => {
+      const regex = /^(U)(\d+)/i;
+      const matchA = a.name.match(regex);
+      const matchB = b.name.match(regex);
+
+      if (matchA && matchB) {
+        return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
+      }
+      return a.name.localeCompare(b.name);
+    };
+
+    const grouped: GroupWithTeams[] = classes
+      .sort(customSort)
       .map((c: Group) => ({
         ...c,
-        teams: teams.filter((t: Group) => t.parentId === c.id),
+        teams: teams
+          .filter((t: Group) => t.parentId === c.id)
+          .sort(customSort),
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
-    return { typesMap, locationsMap, teamsMap, groupedTeams: grouped };
+    return { typesMap, locationsMap, teams, teamsMap, groupedTeams };
   }, [appointmentTypes, locations, groups]);
 
   const appointmentSchema = useAppointmentSchema(appointmentTypes);
@@ -496,12 +513,38 @@ export default function AdminTerminePage() {
         }
       }
     });
-    return allEvents.sort((a,b) => a.startDate.toMillis() - b.startDate.toMillis());
+    return allEvents;
   }, [appointments, exceptions, isLoadingExceptions]);
+
+  const filteredAppointments = useMemo(() => {
+    if (isMemberProfileLoading) return [];
+    if (!memberProfile && !isMemberProfileLoading) return [];
+  
+    const userTeamIdsSet = new Set(memberProfile?.teams || []);
+  
+    let preFiltered = unrolledAppointments;
+  
+    if (teamFilter === 'myTeams') {
+      preFiltered = unrolledAppointments.filter((app) => {
+        if (app.visibility.type === 'all') return true;
+        return app.visibility.teamIds.some((teamId) => userTeamIdsSet.has(teamId));
+      });
+    } else if (teamFilter !== 'all') {
+      preFiltered = unrolledAppointments.filter(
+        (app) => app.visibility.teamIds.includes(teamFilter)
+      );
+    }
+  
+    const finalFiltered = preFiltered.filter(
+      (app) => typeFilter === 'all' || app.appointmentTypeId === typeFilter
+    );
+  
+    return finalFiltered.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
+  }, [unrolledAppointments, teamFilter, typeFilter, memberProfile, isMemberProfileLoading]);
 
   const groupedAppointments = useMemo(() => {
     const groups: Record<string, UnrolledAppointment[]> = {};
-    unrolledAppointments.forEach(app => {
+    filteredAppointments.forEach(app => {
       const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
       if (!groups[monthYear]) {
         groups[monthYear] = [];
@@ -509,12 +552,31 @@ export default function AdminTerminePage() {
       groups[monthYear].push(app);
     });
     return groups;
-  }, [unrolledAppointments]);
+  }, [filteredAppointments]);
 
 
   const onSubmitAppointment = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
     
+    if (data.recurrence !== 'none') {
+        if (!data.recurrenceEndDate || !data.startDate) {
+            appointmentForm.setError('recurrenceEndDate', { message: 'Start- und Enddatum der Wiederholung sind erforderlich.' });
+            return;
+        }
+        try {
+            const start = new Date(data.startDate);
+            const end = new Date(data.recurrenceEndDate);
+            if (end < start) {
+                appointmentForm.setError('recurrenceEndDate', { message: 'Ende der Wiederholung muss nach dem Startdatum liegen.' });
+                return;
+            }
+        } catch (e) {
+            appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Datumsformat.' });
+            return;
+        }
+    }
+
+
     setIsSubmitting(true);
 
     const selectedTypeName = typesMap.get(data.appointmentTypeId);
@@ -578,20 +640,23 @@ export default function AdminTerminePage() {
       title: finalTitle || '',
       appointmentTypeId: data.appointmentTypeId,
       startDate: startDateTimestamp,
-      endDate: (endDateTimestamp && !data.isAllDay) ? endDateTimestamp : null,
+      ...(endDateTimestamp && !data.isAllDay && { endDate: endDateTimestamp }),
       isAllDay: data.isAllDay,
       recurrence: data.recurrence,
-      recurrenceEndDate: (recurrenceEndDateTimestamp && data.recurrence !== 'none') ? recurrenceEndDateTimestamp : null,
+      ...(recurrenceEndDateTimestamp &&
+        data.recurrence !== 'none' && {
+          recurrenceEndDate: recurrenceEndDateTimestamp,
+        }),
       visibility: {
         type: data.visibilityType,
         teamIds:
           data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [],
       },
-      rsvpDeadline: rsvpDeadlineTimestamp,
-      locationId: data.locationId || undefined,
-      meetingPoint: data.meetingPoint || undefined,
-      meetingTime: data.meetingTime || undefined,
-      description: data.description || undefined,
+      ...(rsvpDeadlineTimestamp && { rsvpDeadline: rsvpDeadlineTimestamp }),
+      ...(data.locationId && { locationId: data.locationId }),
+      ...(data.meetingPoint && { meetingPoint: data.meetingPoint }),
+      ...(data.meetingTime && { meetingTime: data.meetingTime }),
+      ...(data.description && { description: data.description }),
       createdBy: selectedAppointment?.createdBy || user.uid,
       createdAt: selectedAppointment?.createdAt || serverTimestamp(),
     };
@@ -630,8 +695,17 @@ export default function AdminTerminePage() {
     data: SingleAppointmentInstanceFormValues
   ) => {
     if (!selectedInstanceToEdit) return;
-  
-    setPendingUpdateData(data);
+
+    // +++ KORRIGIERTER CODEBLOCK +++
+    const cleanData = {
+      ...data,
+      // Muss 'null' sein, damit es zum Backend (Korrektur 1 & 2) passt
+      endDate: data.endDate || null, 
+    };
+
+    setPendingUpdateData(cleanData); // Verwende die bereinigten Daten
+    // +++ ENDE KORREKTUR +++
+
     setIsInstanceDialogOpen(false);
     setIsUpdateTypeDialogOpen(true);
   };
@@ -644,20 +718,22 @@ export default function AdminTerminePage() {
     instanceForm.reset();
   };
 
-  const callCloudFunction = async (functionName: string, data: any) => {
-    const { firebaseApp } = initializeFirebase();
-    const functions = getFunctions(firebaseApp);
-    const func = httpsCallable(functions, functionName);
-    return await func(data);
-  };
-
   async function handleSaveSingleOnly() {
-    if (!pendingUpdateData) return;
+    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
     
     try {
-      await callCloudFunction('saveSingleAppointmentException', pendingUpdateData);
-      toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
+        const { firebaseApp } = initializeFirebase();
+        const functions = getFunctions(firebaseApp);
+        const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
+
+        await saveSingleException({
+            pendingUpdateData,
+            selectedInstanceToEdit,
+        });
+
+        toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
+
     } catch (error: any) {
         toast({
             variant: "destructive",
@@ -671,18 +747,26 @@ export default function AdminTerminePage() {
   }
   
   async function handleSaveForFuture() {
-    if (!pendingUpdateData) return;
+    if (!firestore || !pendingUpdateData || !selectedInstanceToEdit || !user) return;
     setIsSubmitting(true);
-  
+
     if (!isAdmin) {
         toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
         setIsSubmitting(false);
         return;
     }
-  
+
     try {
-      await callCloudFunction('saveFutureAppointmentInstances', pendingUpdateData);
-      toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+      const { firebaseApp } = initializeFirebase();
+      const functions = getFunctions(firebaseApp);
+      const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
+
+      await saveFutureInstancesFn({
+        pendingUpdateData,
+        selectedInstanceToEdit,
+      });
+      
+      toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         toast({
@@ -694,16 +778,17 @@ export default function AdminTerminePage() {
         setIsSubmitting(false);
         resetSingleInstanceDialogs();
     }
-  }
+}
 
 
   const handleCancelSingleInstance = async (
     appointment: UnrolledAppointment
   ) => {
-    if (!firestore || !user || !appointment.originalId || !appointment.originalDateISO) return;
+    if (!firestore || !user || !appointment.originalId) return;
     setIsSubmitting(true);
 
-    const originalDateStartOfDay = startOfDay(parseISO(appointment.originalDateISO));
+    const originalDate = appointment.startDate.toDate();
+    const originalDateStartOfDay = startOfDay(originalDate);
 
     const exceptionsColRef = collection(firestore, 'appointmentExceptions');
     const q = query(
@@ -800,7 +885,6 @@ export default function AdminTerminePage() {
     const titleIsDefault = !isSonstiges && appointment.title === typeName;
 
     instanceForm.reset({
-        originalId: appointment.originalId,
         originalDateISO: appointment.originalDateISO,
         startDate: startDateString,
         endDate: endDateString,
@@ -913,7 +997,35 @@ export default function AdminTerminePage() {
     isLoadingExceptions ||
     isMemberProfileLoading;
 
+  const customSort = (a: Group, b: Group) => {
+    const regex = /^(U|u)(\d+)/;
+    const matchA = a.name.match(regex);
+    const matchB = b.name.match(regex);
   
+    if (matchA && matchB) {
+      return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
+    }
+    // Fallback for names that don't match the pattern
+    if (matchA) return -1;
+    if (matchB) return 1;
+    return a.name.localeCompare(b.name);
+  };
+  const sortedTeamsForFilter = useMemo(() => {
+    if (!teams) return [];
+    return [...teams].sort(customSort)
+  }, [teams]);
+  
+  const sortedGroupedTeams = useMemo(() => {
+    if (!groups) return [];
+    const classes = groups.filter(g => g.type === 'class').sort(customSort);
+    const teamlist = groups.filter(g => g.type === 'team');
+
+    return classes.map(c => ({
+        ...c,
+        teams: teamlist.filter(t => t.parentId === c.id).sort(customSort),
+    })).filter(c => c.teams.length > 0);
+}, [groups]);
+
   if (isUserLoading) {
     return (
       <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
@@ -942,6 +1054,8 @@ export default function AdminTerminePage() {
       </div>
     );
   }
+
+  const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -978,6 +1092,135 @@ export default function AdminTerminePage() {
                     <FormItem>
                       <div className="flex items-center justify-between">
                         <FormLabel>Art des Termins</FormLabel>
+                        <Dialog
+                          open={isTypeDialogOpen}
+                          onOpenChange={setIsTypeDialogOpen}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                            >
+                              <Plus className="h-3 w-3 mr-1" /> Verwalten
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Termin-Arten verwalten</DialogTitle>
+                            </DialogHeader>
+                            <Form {...typeForm}>
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                              >
+                                <div className="space-y-4 py-4">
+                                  <FormField
+                                    control={typeForm.control}
+                                    name="name"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Neue Art hinzufügen</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="z.B. Turnier"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <Button
+                                    type="button"
+                                    className="w-full"
+                                    onClick={typeForm.handleSubmit(
+                                      onSubmitAppointmentType
+                                    )}
+                                    disabled={
+                                      typeForm.formState.isSubmitting
+                                    }
+                                  >
+                                    {typeForm.formState.isSubmitting && (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    )}
+                                    Typ Speichern
+                                  </Button>
+                                </div>
+                              </form>
+                            </Form>
+                            <Separator className="my-4" />
+                            <h4 className="text-sm font-medium mb-2">
+                              Bestehende Arten
+                            </h4>
+                            <ScrollArea className="h-40">
+                              <div className="space-y-2 pr-4">
+                                {appointmentTypes &&
+                                appointmentTypes.length > 0 ? (
+                                  appointmentTypes.map((type) => (
+                                    <div
+                                      key={type.id}
+                                      className="flex justify-between items-center p-2 hover:bg-accent rounded-md"
+                                    >
+                                      <span>{type.name}</span>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                          >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              Sind Sie sicher?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Möchten Sie "{type.name}"
+                                              wirklich löschen?
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              Abbrechen
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                onDeleteAppointmentType(
+                                                  type.id
+                                                )
+                                              }
+                                              className="bg-destructive hover:bg-destructive/90"
+                                            >
+                                              Löschen
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-sm text-muted-foreground text-center">
+                                    Keine Arten gefunden.
+                                  </p>
+                                )}
+                              </div>
+                            </ScrollArea>
+                            <DialogFooter className="mt-4">
+                              <DialogClose asChild>
+                                <Button type="button" variant="outline">
+                                  Schließen
+                                </Button>
+                              </DialogClose>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                       <Select
                         onValueChange={field.onChange}
@@ -1201,18 +1444,16 @@ export default function AdminTerminePage() {
                       <FormItem>
                         <FormLabel>Mannschaften auswählen</FormLabel>
                         <FormControl>
-                           <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full justify-start font-normal">
-                                    {field.value && field.value.length > 0 ? `${field.value.length} Mannschaft(en) ausgewählt` : "Mannschaften auswählen..."}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-full p-0">
+                           <Select>
+                            <SelectTrigger>
+                               <SelectValue placeholder="Mannschaften auswählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
                                 <ScrollArea className="h-48">
                                   {isLoadingGroups ? (
                                     <div className="p-4 text-center text-sm">Lade...</div>
                                   ) : (
-                                    groupedTeams.map((group) => (
+                                    sortedGroupedTeams.map((group) => (
                                       <React.Fragment key={group.id}>
                                         <h4 className="font-semibold text-sm my-2 px-4">{group.name}</h4>
                                         {group.teams.map((team) => (
@@ -1234,8 +1475,8 @@ export default function AdminTerminePage() {
                                     ))
                                   )}
                                 </ScrollArea>
-                            </PopoverContent>
-                          </Popover>
+                            </SelectContent>
+                          </Select>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1268,6 +1509,155 @@ export default function AdminTerminePage() {
                     <FormItem>
                       <div className="flex items-center justify-between">
                         <FormLabel>Ort</FormLabel>
+                        <Dialog
+                          open={isLocationDialogOpen}
+                          onOpenChange={setIsLocationDialogOpen}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                            >
+                              <Plus className="h-3 w-3 mr-1" /> Verwalten
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Orte verwalten</DialogTitle>
+                            </DialogHeader>
+                            <Form {...locationForm}>
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                              >
+                                <div className="space-y-4 py-4">
+                                  <FormField
+                                    control={locationForm.control}
+                                    name="name"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Name des Ortes</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="z.B. Fritz-Jacobi-Anlage"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={locationForm.control}
+                                    name="address"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          Adresse (optional)
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="Straße, PLZ Ort"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <Button
+                                    type="button"
+                                    className="w-full"
+                                    onClick={locationForm.handleSubmit(
+                                      onSubmitLocation
+                                    )}
+                                    disabled={
+                                      locationForm.formState.isSubmitting
+                                    }
+                                  >
+                                    {locationForm.formState.isSubmitting && (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    )}
+                                    Ort Speichern
+                                  </Button>
+                                </div>
+                              </form>
+                            </Form>
+                            <Separator className="my-4" />
+                            <h4 className="text-sm font-medium mb-2">
+                              Bestehende Orte
+                            </h4>
+                            <ScrollArea className="h-40">
+                              <div className="space-y-2 pr-4">
+                                {locations && locations.length > 0 ? (
+                                  locations.map((loc) => (
+                                    <div
+                                      key={loc.id}
+                                      className="flex justify-between items-center p-2 hover:bg-accent rounded-md"
+                                    >
+                                      <div>
+                                        <p>{loc.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {loc.address}
+                                        </p>
+                                      </div>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                          >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              Sind Sie sicher?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Möchten Sie "{loc.name}" wirklich
+                                              löschen?
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              Abbrechen
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                onDeleteLocation(loc.id)
+                                              }
+                                              className="bg-destructive hover:bg-destructive/90"
+                                            >
+                                              Löschen
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-sm text-muted-foreground text-center">
+                                    Keine Orte gefunden.
+                                  </p>
+                                )}
+                              </div>
+                            </ScrollArea>
+                            <DialogFooter className="mt-4">
+                              <DialogClose asChild>
+                                <Button type="button" variant="outline">
+                                  Schließen
+                                </Button>
+                              </DialogClose>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                       <Select
                         onValueChange={field.onChange}
@@ -1403,10 +1793,6 @@ export default function AdminTerminePage() {
               <input
                 type="hidden"
                 {...instanceForm.register('originalDateISO')}
-              />
-               <input
-                type="hidden"
-                {...instanceForm.register('originalId')}
               />
               <FormField
                 control={instanceForm.control}
@@ -1646,156 +2032,62 @@ export default function AdminTerminePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-       <Card>
+      <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-3">
-              <ListTodo className="h-6 w-6" /> <span>Terminverwaltung</span>
+              {' '}
+              <ListTodo className="h-6 w-6" /> <span>Alle Termine</span>{' '}
             </CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-               <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Arten verwalten</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Terminarten</DialogTitle>
-                  </DialogHeader>
-                  <div>
-                      <h3 className="mb-2 font-semibold">Bestehende Arten</h3>
-                      <ul className="mt-4 space-y-2">
-                        {appointmentTypes?.map((type) => (
-                          <li
-                            key={type.id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span>{type.name}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => onDeleteAppointmentType(type.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                       <Separator className="my-4" />
-                      <h3 className="mb-2 font-semibold">Neue Art erstellen</h3>
-                      <Form {...typeForm}>
-                        <form
-                          onSubmit={typeForm.handleSubmit(
-                            onSubmitAppointmentType
-                          )}
-                          className="flex items-center gap-2"
-                        >
-                          <FormField
-                            control={typeForm.control}
-                            name="name"
-                            render={({ field }) => (
-                              <FormItem className="flex-grow">
-                                <FormControl>
-                                  <Input
-                                    placeholder="Name der neuen Art..."
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <Button
-                            type="submit"
-                            size="icon"
-                            disabled={typeForm.formState.isSubmitting}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </form>
-                      </Form>
-                    </div>
-                </DialogContent>
-              </Dialog>
-              <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
-                 <DialogTrigger asChild>
-                    <Button variant="outline">Orte verwalten</Button>
-                 </DialogTrigger>
-                 <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Orte</DialogTitle>
-                    </DialogHeader>
-                    <div>
-                      <h3 className="mb-2 font-semibold">Bestehende Orte</h3>
-                      <ul className="mt-4 space-y-2">
-                        {locations?.map((loc) => (
-                          <li
-                            key={loc.id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <div>
-                                <p>{loc.name}</p>
-                                <p className="text-xs text-muted-foreground">{loc.address}</p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => onDeleteLocation(loc.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                      <Separator className="my-4" />
-                       <h3 className="mb-2 font-semibold">Neuen Ort erstellen</h3>
-                      <Form {...locationForm}>
-                        <form
-                          onSubmit={locationForm.handleSubmit(onSubmitLocation)}
-                          className="space-y-2"
-                        >
-                          <FormField
-                            control={locationForm.control}
-                            name="name"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input placeholder="Name des Ortes..." {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                           <FormField
-                            control={locationForm.control}
-                            name="address"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input placeholder="Adresse (optional)" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <Button
-                            type="submit"
-                            className="w-full"
-                            disabled={locationForm.formState.isSubmitting}
-                          >
-                            <Plus className="mr-2 h-4 w-4" /> Ort hinzufügen
-                          </Button>
-                        </form>
-                      </Form>
-                    </div>
-                 </DialogContent>
-              </Dialog>
-
+                <Filter className="h-4 w-4 text-muted-foreground sm:hidden" />
+                <Select value={teamFilter} onValueChange={setTeamFilter}>
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]">
+                    <SelectValue placeholder="Nach Mannschaft filtern..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Mannschaften</SelectItem>
+                    <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
+                    <Separator />
+                    {isLoadingGroups ? (
+                      <SelectItem value="loading" disabled>
+                        Lade...
+                      </SelectItem>
+                    ) : (
+                      sortedTeamsForFilter.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]">
+                    <SelectValue placeholder="Nach Typ filtern..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Typen</SelectItem>
+                    {isLoadingTypes ? (
+                      <SelectItem value="loading" disabled>
+                        Lade...
+                      </SelectItem>
+                    ) : (
+                      appointmentTypes?.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.name}
+                        </SelectItem>
+                      )) ?? []
+                    )}
+                  </SelectContent>
+                </Select>
               <Button
                 variant="default"
                 onClick={() => {
                   resetAppointmentForm();
                   setIsAppointmentDialogOpen(true);
                 }}
+                 className="mt-2 sm:mt-0"
               >
                 <Plus className="mr-2 h-4 w-4" /> Hinzufügen
               </Button>
@@ -1805,138 +2097,237 @@ export default function AdminTerminePage() {
         <CardContent>
           {isLoading ? (
             <div className="flex justify-center p-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : Object.keys(groupedAppointments).length > 0 ? (
-            <Accordion
-              type="multiple"
-              defaultValue={
-                Object.keys(groupedAppointments).length > 0
-                  ? [Object.keys(groupedAppointments)[0]]
-                  : []
-              }
-              className="w-full"
-            >
-              {Object.entries(groupedAppointments).map(
-                ([monthYear, appointmentsInMonth]) => (
-                  <AccordionItem value={monthYear} key={monthYear}>
-                    <AccordionTrigger className="text-lg font-semibold">
-                      {monthYear} ({appointmentsInMonth.length})
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Titel</TableHead>
-                              <TableHead>Datum & Uhrzeit</TableHead>
-                              <TableHead>Ort</TableHead>
-                              <TableHead>Mannschaft</TableHead>
-                              <TableHead className="text-right">Aktionen</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {appointmentsInMonth.map((app) => {
-                              const location = app.locationId
-                                ? locationsMap.get(app.locationId)
-                                : null;
-                              const typeName = typesMap.get(app.appointmentTypeId);
-                              const displayTitle = app.title || typeName || 'Termin';
-                              const isSeries = app.recurrence && app.recurrence !== 'none';
-                              
-                              return (
-                                <TableRow key={app.virtualId} className={cn(app.isCancelled && 'text-muted-foreground line-through')}>
-                                  <TableCell className="font-medium">
-                                    <div className="flex items-center gap-2">
-                                      {isSeries && <RefreshCw className={cn("h-4 w-4 text-muted-foreground", app.isException && "text-primary")} />}
-                                      <span>{displayTitle}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    {format(app.startDate.toDate(), 'eee, dd.MM.yyyy HH:mm', { locale: de })} Uhr
-                                  </TableCell>
-                                  <TableCell>{location?.name || 'N/A'}</TableCell>
-                                  <TableCell>
-                                    {app.visibility.type === 'all'
-                                      ? 'Alle'
-                                      : app.visibility.teamIds
-                                          .map((id) => teamsMap.get(id) || id)
-                                          .join(', ')}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleCancelSingleInstance(app)}
-                                        disabled={isSubmitting}
-                                      >
-                                        <CalendarX className={cn("h-4 w-4", app.isCancelled ? "text-primary" : "text-muted-foreground")} />
-                                        <span className="sr-only">Toggle Cancel</span>
-                                    </Button>
-
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleEditAppointment(app)}
-                                      disabled={isSubmitting}
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          disabled={isSubmitting}
-                                        >
-                                          <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>
-                                            Sind Sie sicher?
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Diese Aktion kann nicht rückgängig
-                                            gemacht werden. Dadurch wird die
-                                            gesamte Terminserie gelöscht.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>
-                                            Abbrechen
-                                          </AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() =>
-                                              handleDeleteAppointment(app.originalId)
-                                            }
-                                            className="bg-destructive hover:bg-destructive/90"
-                                          >
-                                            Löschen
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              )}
-            </Accordion>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
-              <h3 className="text-lg font-semibold">Keine Termine gefunden</h3>
-              <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">
-                Es wurden noch keine Termine erstellt. Klicken Sie auf "Hinzufügen", um zu beginnen.
-              </p>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Art (Titel)</TableHead>
+                    <TableHead>Datum/Zeit</TableHead>
+                    <TableHead>Sichtbarkeit</TableHead>
+                    <TableHead>Ort</TableHead>
+                    <TableHead>Treffpunkt</TableHead>
+                    <TableHead>Treffzeit</TableHead>
+                    <TableHead>Wiederholung</TableHead>
+                    <TableHead>Rückmeldung bis</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.keys(groupedAppointments).length > 0 ? (
+                    Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                      <React.Fragment key={monthYear}>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={9} className="py-2 px-4 text-sm font-semibold">
+                          {monthYear}
+                        </TableCell>
+                      </TableRow>
+                      {appointmentsInMonth.map((app) => {
+                        const typeName =
+                          typesMap.get(app.appointmentTypeId) ||
+                          app.appointmentTypeId;
+                        const isSonstiges = typeName === 'Sonstiges';
+                        const titleIsDefault =
+                          !isSonstiges && app.title === typeName;
+                        const showTitle =
+                          app.title && (!titleIsDefault || isSonstiges);
+                        const displayTitle = showTitle
+                          ? `${typeName} (${app.title})`
+                          : typeName;
+                        const isCancelled = app.isCancelled;
+
+                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
+                        let rsvpDeadlineString = '-';
+                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
+                          const startMillis = originalAppointment.startDate.toMillis();
+                          const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
+                          const offset = startMillis - rsvpMillis;
+
+                          const instanceStartMillis = app.startDate.toMillis();
+                          const instanceRsvpMillis = instanceStartMillis - offset;
+                          rsvpDeadlineString = format(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                        }
+
+
+                        return (
+                          <TableRow
+                            key={app.virtualId}
+                            className={cn(
+                              isCancelled &&
+                              'text-muted-foreground opacity-70'
+                            )}
+                          >
+                            <TableCell className={cn("font-medium max-w-[150px] sm:max-w-[200px] truncate", isCancelled && "line-through")}>
+                              {displayTitle}
+                            </TableCell>
+                             <TableCell>
+                              {isCancelled ? (
+                                <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
+                                  ABGESAGT
+                                </span>
+                              ) : (
+                                <>
+                                  {app.startDate
+                                    ? format(
+                                        app.startDate.toDate(),
+                                        app.isAllDay ? 'dd.MM.yy' : 'dd.MM.yy HH:mm',
+                                        { locale: de }
+                                      )
+                                    : 'N/A'}
+                                  {app.isException && !isCancelled && (
+                                    <span className="ml-1 text-xs text-blue-600">
+                                      (G)
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>
+                              {app.visibility.type === 'all'
+                                ? 'Alle'
+                                : app.visibility.teamIds
+                                  .map((id) => teamsMap.get(id) || id)
+                                  .join(', ') || '-'}
+                            </TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>
+                              {app.locationId
+                                ? locationsMap.get(app.locationId)?.name || '-'
+                                : '-'}
+                            </TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingPoint || '-'}</TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>{app.meetingTime || '-'}</TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>
+                              {app.recurrence && app.recurrence !== 'none'
+                                ? `bis ${app.recurrenceEndDate
+                                  ? format(
+                                    app.recurrenceEndDate.toDate(),
+                                    'dd.MM.yy',
+                                    { locale: de }
+                                  )
+                                  : '...'
+                                }`
+                                : '-'}
+                            </TableCell>
+                            <TableCell className={cn(isCancelled && "line-through")}>{rsvpDeadlineString}</TableCell>
+                            <TableCell className="text-right space-x-0">
+                              <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}>
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Einzelnen Termin bearbeiten</span>
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={isSubmitting}
+                                  >
+                                    {' '}
+                                    {isCancelled ? (
+                                      <RefreshCw className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <CalendarX className="h-4 w-4 text-orange-600" />
+                                    )}{' '}
+                                    <span className="sr-only">
+                                      {isCancelled
+                                        ? 'Absage rückgängig'
+                                        : 'Diesen Termin absagen'}
+                                    </span>
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    {' '}
+                                    <AlertDialogTitle>
+                                      {isCancelled
+                                        ? 'Absage rückgängig machen?'
+                                        : 'Nur diesen Termin absagen?'}
+                                    </AlertDialogTitle>{' '}
+                                    <AlertDialogDescription>
+                                      {isCancelled
+                                        ? `Soll der abgesagte Termin am ${format(
+                                          app.startDate.toDate(),
+                                          'dd.MM.yyyy'
+                                        )} wiederhergestellt werden?`
+                                        : `Möchten Sie nur den Termin am ${format(
+                                          app.startDate.toDate(),
+                                          'dd.MM.yyyy'
+                                        )} absagen? Die Serie bleibt bestehen.`}
+                                    </AlertDialogDescription>{' '}
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    {' '}
+                                    <AlertDialogCancel>
+                                      Abbrechen
+                                    </AlertDialogCancel>{' '}
+                                    <AlertDialogAction
+                                      onClick={() =>
+                                        handleCancelSingleInstance(app)
+                                      }
+                                    >
+                                      {isCancelled
+                                        ? 'Wiederherstellen'
+                                        : 'Absagen'}
+                                    </AlertDialogAction>{' '}
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    {' '}
+                                    <Trash2 className="h-4 w-4 text-destructive" />{' '}
+                                    <span className="sr-only">
+                                      Serie löschen
+                                    </span>
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    {' '}
+                                    <AlertDialogTitle>
+                                      Ganze Serie löschen?
+                                    </AlertDialogTitle>{' '}
+                                    <AlertDialogDescription>
+                                      Diese Aktion kann nicht rückgängig gemacht
+                                      werden und löscht die gesamte Terminserie "
+                                      {displayTitle}". Alle zukünftigen Termine
+                                      dieser Serie werden entfernt.
+                                    </AlertDialogDescription>{' '}
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    {' '}
+                                    <AlertDialogCancel>
+                                      Abbrechen
+                                    </AlertDialogCancel>{' '}
+                                    <AlertDialogAction
+                                      onClick={() =>
+                                        handleDeleteAppointment(app.originalId)
+                                      }
+                                      className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                      Serie löschen
+                                    </AlertDialogAction>{' '}
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="h-24 text-center">
+                          Keine Termine entsprechen den aktuellen Filtern.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

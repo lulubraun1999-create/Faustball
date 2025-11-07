@@ -1,11 +1,17 @@
-
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+
+// +++ HINZUGEFÜGT +++
+// Dieser Typ hat in deiner Backend-Typendefinition gefehlt
+export interface AppointmentType {
+  id: string;
+  name: string;
+}
 
 export interface Appointment {
   id: string;
   title: string;
   startDate: Timestamp;
-  endDate?: Timestamp | null;
+  endDate?: Timestamp | null; // <-- KORRIGIERT (erlaube | null)
   isAllDay?: boolean;
   appointmentTypeId: string;
   locationId?: string;
@@ -31,7 +37,7 @@ export interface AppointmentException {
   status: 'cancelled' | 'modified';
   modifiedData?: {
     startDate?: Timestamp;
-    endDate?: Timestamp | null;
+    endDate?: Timestamp | null; // <-- KORRIGIERT (erlaube | null)
     title?: string;
     locationId?: string;
     description?: string;
@@ -40,11 +46,5 @@ export interface AppointmentException {
     isAllDay?: boolean;
   };
   createdAt?: Timestamp | FieldValue;
-  lastUpdated?: Timestamp | FieldValue;
   userId: string;
-}
-
-export interface AppointmentType {
-    id: string;
-    name: string;
 }
