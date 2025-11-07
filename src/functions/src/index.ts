@@ -1,7 +1,7 @@
 
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/httpshttps';
-import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { getFirestore, Timestamp, FieldValue, WriteBatch, setDoc, updateDoc } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays } from 'date-fns';
 
