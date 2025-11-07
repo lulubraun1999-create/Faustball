@@ -346,15 +346,15 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         
         // Felder aus der Originalserie übernehmen
         recurrence: originalAppointmentData.recurrence,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Dieses wird für die neue Serie beibehalten
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
         visibility: originalAppointmentData.visibility,
-        rsvpDeadline: originalAppointmentData.rsvpDeadline,
-
+        
         // Geänderte oder neue Felder
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
+        rsvpDeadline: originalAppointmentData.rsvpDeadline, // Beibehaltung der ursprünglichen Logik
         
         // Metadaten für die neue Serie
         createdBy: userId,
