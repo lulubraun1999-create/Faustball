@@ -326,24 +326,12 @@ export default function AdminTerminePage() {
       .sort((a: Group, b: Group) => a.name.localeCompare(b.name));
     const teamsMap = new Map(teams.map((t: Group) => [t.id, t.name]));
 
-    const customSort = (a: Group, b: Group) => {
-      const regex = /^(U)(\d+)/i;
-      const matchA = a.name.match(regex);
-      const matchB = b.name.match(regex);
-
-      if (matchA && matchB) {
-        return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
-      }
-      return a.name.localeCompare(b.name);
-    };
 
     const grouped: GroupWithTeams[] = classes
-      .sort(customSort)
       .map((c: Group) => ({
         ...c,
         teams: teams
-          .filter((t: Group) => t.parentId === c.id)
-          .sort(customSort),
+          .filter((t: Group) => t.parentId === c.id),
       }))
       .filter((c: GroupWithTeams) => c.teams.length > 0);
 
@@ -683,8 +671,10 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        // Send raw form data to the function
-        const payload = { ...pendingUpdateData };
+        const payload = {
+            ...pendingUpdateData,
+            originalId: selectedInstanceToEdit.originalId,
+        };
 
         const result = await saveSingleException(payload);
 
@@ -716,11 +706,10 @@ export default function AdminTerminePage() {
       const { firebaseApp } = initializeFirebase();
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
-
-      // Send raw form data along with the original appointment ID
+      
       const payload = {
-        pendingUpdateData: pendingUpdateData,
-        selectedInstanceToEdit: selectedInstanceToEdit,
+        ...pendingUpdateData,
+        originalId: selectedInstanceToEdit.originalId,
       };
 
       const result = await saveFutureInstancesFn(payload);
@@ -2068,6 +2057,7 @@ export default function AdminTerminePage() {
     </div>
   );
 }
+
 
 
 

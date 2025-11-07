@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    allowedDevOrigins: [
+      "https://*.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
+    ],
+  },
   images: {
     remotePatterns: [
       {
