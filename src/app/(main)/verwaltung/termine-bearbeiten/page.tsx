@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -399,7 +399,6 @@ export default function AdminTerminePage() {
   );
 
  const unrolledAppointments = useMemo(() => {
-    // Wait until all required data is loaded to prevent crashes
     if (!appointments || !exceptions) return [];
 
     const exceptionsMap = new Map<string, AppointmentException>();
@@ -684,7 +683,6 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        // Pass the original ID and the updated data
         const payload = {
           ...pendingUpdateData,
           originalId: selectedInstanceToEdit.originalId,
@@ -2062,8 +2060,8 @@ export default function AdminTerminePage() {
                          const currentMonthDate = appointmentsInMonth[0]?.startDate.toDate();
                          const monthKey = format(currentMonthDate, 'yyyy-MM');
                          
-                         const showDoppelbuchungBanner = lastMonthKey === '2024-11' && monthKey === '2024-12';
-                         lastMonthKey = monthKey;
+                         const showDoppelbuchungBanner = lastMonthKey === 'November 2024' && monthYear === 'Dezember 2024';
+                         lastMonthKey = monthYear;
                       
                       return (
                         <React.Fragment key={monthYear}>
