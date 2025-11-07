@@ -524,7 +524,7 @@ export default function AdminTerminePage() {
                   <React.Fragment key={monthYear}>
                     {showBanner && (
                       <div className="my-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm font-semibold text-destructive">
-                        Ab hier Doppelbuchungen möglich (Info)
+                        Ab hier Doppelbuchungen möglich
                       </div>
                     )}
                     <AccordionItem value={monthYear}>
