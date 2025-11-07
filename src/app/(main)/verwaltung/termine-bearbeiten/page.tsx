@@ -675,10 +675,10 @@ export default function AdminTerminePage() {
             ...pendingUpdateData,
             originalId: selectedInstanceToEdit.originalId,
         };
+        
+        await saveSingleException(payload);
 
-        const result = await saveSingleException(payload);
-
-        toast({ title: "Erfolg", description: (result.data as any)?.message || "Die Terminänderung wurde gespeichert." });
+        toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
     } catch (error: any) {
         toast({
@@ -708,13 +708,16 @@ export default function AdminTerminePage() {
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
       
       const payload = {
-        ...pendingUpdateData,
-        originalId: selectedInstanceToEdit.originalId,
+        pendingUpdateData: pendingUpdateData,
+        selectedInstanceToEdit: {
+            originalId: selectedInstanceToEdit.originalId,
+            originalDateISO: selectedInstanceToEdit.originalDateISO,
+        },
       };
 
-      const result = await saveFutureInstancesFn(payload);
+      await saveFutureInstancesFn(payload);
       
-      toast({ title: 'Erfolg', description: (result.data as any)?.message ||'Terminserie erfolgreich aufgeteilt und aktualisiert' });
+      toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
         console.error('Error splitting and saving future instances: ', error);
         toast({
@@ -2062,3 +2065,6 @@ export default function AdminTerminePage() {
 
 
 
+
+
+    
