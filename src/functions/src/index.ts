@@ -194,7 +194,7 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -269,7 +269,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('permission-denied', 'Only an admin can perform this action.');
     }
     
-    const { pendingUpdateData, selectedInstanceToEdit } = request.data.data;
+    const { pendingUpdateData, selectedInstanceToEdit } = request.data;
     const userId = request.auth.uid;
 
     if (!pendingUpdateData || !selectedInstanceToEdit) {
@@ -336,21 +336,28 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
               : typeName;
       }
       
+      // Sichere Erstellung des neuen Terminobjekts
       const newAppointmentData: Omit<Appointment, 'id'> = {
         title: finalTitle || 'Termin',
         appointmentTypeId: originalAppointmentData.appointmentTypeId,
         startDate: Timestamp.fromDate(newStartDate),
         endDate: newEndDate ? Timestamp.fromDate(newEndDate) : null,
         isAllDay: pendingUpdateData.isAllDay ?? originalAppointmentData.isAllDay,
+        
+        // Felder aus der Originalserie übernehmen
         recurrence: originalAppointmentData.recurrence,
-        recurrenceEndDate: originalAppointmentData.recurrenceEndDate,
+        recurrenceEndDate: originalAppointmentData.recurrenceEndDate, // Dieses wird für die neue Serie beibehalten
         visibility: originalAppointmentData.visibility,
         rsvpDeadline: originalAppointmentData.rsvpDeadline,
+
+        // Geänderte oder neue Felder
         locationId: pendingUpdateData.locationId ?? originalAppointmentData.locationId,
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        createdBy: userId, // Set new creator for the new series
+        
+        // Metadaten für die neue Serie
+        createdBy: userId,
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
       };
