@@ -132,6 +132,7 @@ import {
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 type GroupWithTeams = Group & { teams: Group[] };
 
@@ -272,6 +273,9 @@ export default function AdminTerminePage() {
   const [isUpdateTypeDialogOpen, setIsUpdateTypeDialogOpen] = useState(false);
   const [pendingUpdateData, setPendingUpdateData] =
     useState<SingleAppointmentInstanceFormValues | null>(null);
+    
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
+
 
   const appointmentsRef = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'appointments') : null),
@@ -658,11 +662,9 @@ export default function AdminTerminePage() {
     setIsSubmitting(true);
     
     try {
+      // Create payload with raw form data. The function will parse ISO strings.
       const payload = {
         ...pendingUpdateData,
-        // Pass originalId and originalDateISO from selectedInstanceToEdit to ensure they are correct
-        originalId: selectedInstanceToEdit.originalId,
-        originalDateISO: selectedInstanceToEdit.originalDateISO,
       };
       await callCloudFunction('saveSingleAppointmentException', payload);
       toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
@@ -681,20 +683,16 @@ export default function AdminTerminePage() {
   async function handleSaveForFuture() {
     if (!pendingUpdateData || !selectedInstanceToEdit) return;
     setIsSubmitting(true);
-
+  
     if (!isAdmin) {
         toast({ variant: "destructive", title: "Fehler", description: "Nur Administratoren können diese Aktion ausführen." });
         setIsSubmitting(false);
         return;
     }
-
+  
     try {
-      const payload = {
-        ...pendingUpdateData,
-         // Pass originalId and originalDateISO from selectedInstanceToEdit
-        originalId: selectedInstanceToEdit.originalId,
-        originalDateISO: selectedInstanceToEdit.originalDateISO,
-      };
+      // Pass raw form data directly to the function
+      const payload = { ...pendingUpdateData };
       await callCloudFunction('saveFutureAppointmentInstances', payload);
       toast({ title: 'Erfolg', description: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -1668,25 +1666,283 @@ export default function AdminTerminePage() {
               <ListTodo className="h-6 w-6" /> <span>Terminverwaltung</span>{' '}
             </CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">Arten & Orte verwalten</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Terminarten & Orte</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <h3 className="mb-2 font-semibold">Terminarten</h3>
+                      <Form {...typeForm}>
+                        <form
+                          onSubmit={typeForm.handleSubmit(
+                            onSubmitAppointmentType
+                          )}
+                          className="flex items-center gap-2"
+                        >
+                          <FormField
+                            control={typeForm.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem className="flex-grow">
+                                <FormControl>
+                                  <Input
+                                    placeholder="Neue Art..."
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            disabled={typeForm.formState.isSubmitting}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </form>
+                      </Form>
+                      <ul className="mt-4 space-y-2">
+                        {appointmentTypes?.map((type) => (
+                          <li
+                            key={type.id}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <span>{type.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onDeleteAppointmentType(type.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h3 className="mb-2 font-semibold">Orte</h3>
+                      <Form {...locationForm}>
+                        <form
+                          onSubmit={locationForm.handleSubmit(onSubmitLocation)}
+                          className="space-y-2"
+                        >
+                          <FormField
+                            control={locationForm.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input placeholder="Neuer Ort..." {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                           <FormField
+                            control={locationForm.control}
+                            name="address"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input placeholder="Adresse (optional)" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={locationForm.formState.isSubmitting}
+                          >
+                            <Plus className="mr-2 h-4 w-4" /> Ort hinzufügen
+                          </Button>
+                        </form>
+                      </Form>
+                      <ul className="mt-4 space-y-2">
+                        {locations?.map((loc) => (
+                          <li
+                            key={loc.id}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <div>
+                                <p>{loc.name}</p>
+                                <p className="text-xs text-muted-foreground">{loc.address}</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onDeleteLocation(loc.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <Button
                 variant="default"
                 onClick={() => {
                   resetAppointmentForm();
                   setIsAppointmentDialogOpen(true);
                 }}
-                 className="mt-2 sm:mt-0"
               >
-                <Plus className="mr-2 h-4 w-4" /> Hinzufügen
+                <Plus className="mr-2 h-4 w-4" /> Termin hinzufügen
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {/* Content removed as requested */}
+          {isLoading ? (
+            <div className="flex justify-center p-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : Object.keys(groupedAppointments).length > 0 ? (
+            <Accordion
+              type="multiple"
+              defaultValue={
+                Object.keys(groupedAppointments).length > 0
+                  ? [Object.keys(groupedAppointments)[0]]
+                  : []
+              }
+              className="w-full"
+            >
+              {Object.entries(groupedAppointments).map(
+                ([monthYear, appointmentsInMonth]) => (
+                  <AccordionItem value={monthYear} key={monthYear}>
+                    <AccordionTrigger className="text-lg font-semibold">
+                      {monthYear} ({appointmentsInMonth.length})
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Titel</TableHead>
+                              <TableHead>Datum & Uhrzeit</TableHead>
+                              <TableHead>Ort</TableHead>
+                              <TableHead>Mannschaft</TableHead>
+                              <TableHead className="text-right">Aktionen</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {appointmentsInMonth.map((app) => {
+                              const location = app.locationId
+                                ? locationsMap.get(app.locationId)
+                                : null;
+                              const typeName = typesMap.get(app.appointmentTypeId);
+                              const displayTitle = app.title || typeName || 'Termin';
+                              const isSeries = app.recurrence && app.recurrence !== 'none';
+                              
+                              return (
+                                <TableRow key={app.virtualId} className={cn(app.isCancelled && 'text-muted-foreground line-through')}>
+                                  <TableCell className="font-medium">
+                                    <div className="flex items-center gap-2">
+                                      {isSeries && <RefreshCw className={cn("h-4 w-4 text-muted-foreground", app.isException && "text-primary")} />}
+                                      <span>{displayTitle}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    {format(app.startDate.toDate(), 'eee, dd.MM.yyyy HH:mm', { locale: de })} Uhr
+                                  </TableCell>
+                                  <TableCell>{location?.name || 'N/A'}</TableCell>
+                                  <TableCell>
+                                    {app.visibility.type === 'all'
+                                      ? 'Alle'
+                                      : app.visibility.teamIds
+                                          .map((id) => teamsMap.get(id) || id)
+                                          .join(', ')}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleCancelSingleInstance(app)}
+                                        disabled={isSubmitting}
+                                      >
+                                        <CalendarX className={cn("h-4 w-4", app.isCancelled ? "text-primary" : "text-muted-foreground")} />
+                                        <span className="sr-only">Toggle Cancel</span>
+                                    </Button>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleEditAppointment(app)}
+                                      disabled={isSubmitting}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          disabled={isSubmitting}
+                                        >
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>
+                                            Sind Sie sicher?
+                                          </AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            Diese Aktion kann nicht rückgängig
+                                            gemacht werden. Dadurch wird die
+                                            gesamte Terminserie gelöscht.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>
+                                            Abbrechen
+                                          </AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() =>
+                                              handleDeleteAppointment(app.originalId)
+                                            }
+                                            className="bg-destructive hover:bg-destructive/90"
+                                          >
+                                            Löschen
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              )}
+            </Accordion>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/50 p-12 text-center">
+              <h3 className="text-lg font-semibold">Keine Termine gefunden</h3>
+              <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">
+                Es wurden noch keine Termine erstellt. Klicken Sie auf "Termin
+                hinzufügen", um zu beginnen.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    

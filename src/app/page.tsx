@@ -13,7 +13,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
-      <p className="text-xl text-center text-red-500">I am a text with red color and I am a little bit longer</p>
       <Loader2 className="h-8 w-8 animate-spin text-primary mt-4" />
     </div>
   );
