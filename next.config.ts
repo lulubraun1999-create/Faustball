@@ -7,10 +7,11 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
-    allowedDevOrigins: [
-      "https://*.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
-    ],
+    // allowedDevOrigins is now a top-level property, not experimental
   },
+  allowedDevOrigins: [
+      "https://*.cluster-fbfjltn375c6wqxlhoehbz44sk.cloudworkstations.dev",
+  ],
   images: {
     remotePatterns: [
       {
