@@ -385,8 +385,11 @@ export default function AdminTerminePage() {
   );
   
   const groupedAppointments = useMemo(() => {
-    if (isLoading || !appointments || !exceptions) return {};
-
+    // Wait for all data to be loaded
+    if (!appointments || !exceptions || isLoading) {
+      return {};
+    }
+  
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions.forEach((ex) => {
       if (ex.originalDate) {
@@ -394,20 +397,19 @@ export default function AdminTerminePage() {
         exceptionsMap.set(key, ex);
       }
     });
-
+  
     const allEvents: UnrolledAppointment[] = [];
     const now = new Date();
-
+  
     appointments.forEach((app) => {
-      if (!app.startDate) return;
-
-      const isVisibleByTeam = teamFilter === 'all' || app.visibility.type === 'all' || app.visibility.teamIds.includes(teamFilter);
+      if (!app.startDate || !(app.startDate instanceof Timestamp)) return;
+  
+      const isVisibleByTeam = teamFilter === 'all' || app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.includes(teamFilter));
       const isVisibleByType = typeFilter === 'all' || app.appointmentTypeId === typeFilter;
       if (!isVisibleByTeam || !isVisibleByType) return;
-
+  
       if (app.recurrence === 'none') {
         const originalDate = app.startDate.toDate();
-        // Skip past single events unless they are an exception
         if (originalDate < startOfDay(now) && !exceptionsMap.has(`${app.id}-${startOfDay(originalDate).toISOString()}`)) return;
         
         const originalDateStartOfDay = startOfDay(originalDate);
@@ -431,21 +433,17 @@ export default function AdminTerminePage() {
           isException,
           originalDateISO: originalDateStartOfDayISO,
         });
-
-      } else { // It's a recurring event
+      } else { // Recurring event
         let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = app.recurrenceEndDate
+        const recurrenceEndDate = app.recurrenceEndDate && (app.recurrenceEndDate instanceof Timestamp)
           ? addDays(app.recurrenceEndDate.toDate(), 1)
           : addDays(now, 365);
-        const duration = app.endDate
-          ? differenceInMilliseconds(
-              app.endDate.toDate(),
-              app.startDate.toDate()
-            )
+        const duration = app.endDate && (app.endDate instanceof Timestamp)
+          ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate())
           : 0;
         let iter = 0;
         const MAX_ITERATIONS = 500;
-
+  
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= startOfDay(now)) {
             const currentDateStartOfDay = startOfDay(currentDate);
@@ -453,23 +451,18 @@ export default function AdminTerminePage() {
             const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
             const instanceException = exceptionsMap.get(instanceKey);
             const instanceIsCancelled = instanceException?.status === 'cancelled';
-
+  
             const newStartDate = Timestamp.fromDate(currentDate);
-            const newEndDate = app.endDate
-              ? Timestamp.fromMillis(currentDate.getTime() + duration)
-              : undefined;
-
+            const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
+  
             let instanceData: Appointment = { ...app };
             let isException = false;
-
-            if (
-              instanceException?.status === 'modified' &&
-              instanceException.modifiedData
-            ) {
+  
+            if (instanceException?.status === 'modified' && instanceException.modifiedData) {
               instanceData = { ...instanceData, ...instanceException.modifiedData };
               isException = true;
             }
-
+  
             allEvents.push({
               ...instanceData,
               id: `${app.id}-${currentDate.toISOString()}`,
@@ -494,17 +487,24 @@ export default function AdminTerminePage() {
         }
       }
     });
-
-    const sortedEvents = allEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
-    const groups: Record<string, UnrolledAppointment[]> = {};
-    sortedEvents.forEach(app => {
-      const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
-      if (!groups[monthYear]) {
-        groups[monthYear] = [];
-      }
-      groups[monthYear].push(app);
+  
+    const sortedEvents = allEvents.sort((a, b) => {
+        const dateA = a.startDate instanceof Timestamp ? a.startDate.toMillis() : 0;
+        const dateB = b.startDate instanceof Timestamp ? b.startDate.toMillis() : 0;
+        return dateA - dateB;
     });
 
+    const groups: Record<string, UnrolledAppointment[]> = {};
+    sortedEvents.forEach(app => {
+      if (app.startDate instanceof Timestamp) {
+        const monthYear = format(app.startDate.toDate(), 'MMMM yyyy', { locale: de });
+        if (!groups[monthYear]) {
+          groups[monthYear] = [];
+        }
+        groups[monthYear].push(app);
+      }
+    });
+  
     return groups;
   }, [appointments, exceptions, isLoading, teamFilter, typeFilter]);
 
@@ -2132,7 +2132,7 @@ export default function AdminTerminePage() {
                                   <TableCell className={cn(isCancelled && "line-through")}>
                                     {app.visibility.type === 'all'
                                       ? 'Alle'
-                                      : app.visibility.teamIds
+                                      : (app.visibility.teamIds || [])
                                         .map((id) => teamsMap.get(id) || id)
                                         .join(', ') || '-'}
                                   </TableCell>
@@ -2275,4 +2275,3 @@ export default function AdminTerminePage() {
   );
 }
 
-    
