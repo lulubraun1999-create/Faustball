@@ -193,7 +193,8 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
     }, [poll.votes, user]);
     
     const pollExpired = isPast(poll.endDate.toDate());
-    const totalVotes = new Set(poll.votes.map(v => v.userId)).size;
+    // Correctly calculate total unique voters
+    const totalUniqueVoters = new Set(poll.votes.map(v => v.userId)).size;
 
     const canUserVote = useMemo(() => {
         if (!memberProfile) return false;
@@ -244,7 +245,7 @@ function PollCard({ poll, user, memberProfile, onVote, onRetract, votingStates }
                     <div className="space-y-4">
                         {poll.options.map(option => {
                             const uniqueVotersForOption = new Set(poll.votes.filter(v => v.optionId === option.id).map(v => v.userId)).size;
-                            const percentage = totalVotes > 0 ? (uniqueVotersForOption / totalVotes) * 100 : 0;
+                            const percentage = totalUniqueVoters > 0 ? (uniqueVotersForOption / totalUniqueVoters) * 100 : 0;
                             const userVotedForThis = userVotedOptionIds.has(option.id);
                             return (
                                 <div key={option.id}>
