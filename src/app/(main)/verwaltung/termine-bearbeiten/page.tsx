@@ -689,10 +689,11 @@ export default function AdminTerminePage() {
         const functions = getFunctions(firebaseApp);
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException');
 
-        await saveSingleException({
+        // Pass the data in the expected format { data: { ... } }
+        await saveSingleException({ data: {
             pendingUpdateData,
             selectedInstanceToEdit,
-        });
+        }});
 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
 
@@ -723,10 +724,11 @@ export default function AdminTerminePage() {
       const functions = getFunctions(firebaseApp);
       const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
 
-      await saveFutureInstancesFn({
+      // Pass the data in the expected format { data: { ... } }
+      await saveFutureInstancesFn({ data: {
         pendingUpdateData,
         selectedInstanceToEdit,
-      });
+      }});
       
       toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) {
@@ -2095,4 +2097,3 @@ export default function AdminTerminePage() {
     </div>
   );
 }
-
