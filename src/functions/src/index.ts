@@ -350,7 +350,7 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         description: pendingUpdateData.description ?? originalAppointmentData.description,
         meetingPoint: pendingUpdateData.meetingPoint ?? originalAppointmentData.meetingPoint,
         meetingTime: pendingUpdateData.meetingTime ?? originalAppointmentData.meetingTime,
-        createdBy: userId,
+        createdBy: userId, // Set new creator for the new series
         createdAt: FieldValue.serverTimestamp(),
         lastUpdated: FieldValue.serverTimestamp(),
       };
