@@ -71,7 +71,6 @@ import {
 } from '@/components/ui/popover';
 import Link from 'next/link';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -144,7 +143,7 @@ export default function KalenderPage() {
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions?.forEach(ex => {
         if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-            const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+            const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
             exceptionsMap.set(key, ex);
         }
     });

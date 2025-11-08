@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -11,7 +12,6 @@ import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentE
 import Link from 'next/link';
 import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getMonth, getYear, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -86,7 +86,7 @@ export default function DashboardPage() {
         const exceptionsMap = new Map<string, AppointmentException>();
         exceptions?.forEach(ex => {
             if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-                const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+                const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
                 exceptionsMap.set(key, ex);
             }
         });
