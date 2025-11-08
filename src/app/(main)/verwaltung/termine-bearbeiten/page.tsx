@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -532,15 +531,18 @@ export default function AdminTerminePage() {
         <CardContent>
           {isLoading ? ( <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ) : monthKeys.length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-              {monthKeys.map((monthYear) => {
+              {monthKeys.map((monthYear, index) => {
                 const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-                const showBanner = monthYear === "Dezember 2024" && monthKeys.includes("November 2024");
+                const prevMonthYear = index > 0 ? monthKeys[index - 1] : null;
+
+                const showBanner = monthYear === "Dezember 2024" && prevMonthYear === "November 2024";
 
                 return (
                  <React.Fragment key={monthYear}>
                     {showBanner && (
-                      <div className="my-4 rounded-md border border-red-500/50 bg-red-50 p-3 text-center text-sm font-medium text-red-700 dark:bg-red-900/20 dark:text-red-300">
-                        Ab hier sind Doppelbuchungen in der Halle möglich! Bitte prüft eure Termine.
+                      <div className="my-4 rounded-md border border-red-500/50 bg-red-50 p-3 text-center text-sm dark:bg-red-900/20">
+                         <p className="font-bold text-red-700 dark:text-red-300">Informationen</p>
+                         <p className="text-red-600 dark:text-red-400">Ab hier sind Doppelbuchungen in der Halle möglich! Bitte prüft eure Termine.</p>
                       </div>
                     )}
                     <AccordionItem value={monthYear}>
