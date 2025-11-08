@@ -533,9 +533,8 @@ export default function AdminTerminePage() {
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {monthKeys.map((monthYear, index) => {
                 const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-                const prevMonthYear = index > 0 ? monthKeys[index - 1] : null;
-
-                const showBanner = monthYear === "Dezember 2024" && prevMonthYear === "November 2024";
+                
+                const showBanner = monthKeys.includes("November 2024") && monthKeys.includes("Dezember 2024") && monthYear === "Dezember 2024";
 
                 return (
                  <React.Fragment key={monthYear}>
