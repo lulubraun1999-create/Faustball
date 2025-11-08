@@ -553,6 +553,7 @@ export default function AdminTerminePage() {
                               const titleIsDefault = !isSonstiges && app.title === typeName;
                               const showTitle = app.title && (!titleIsDefault || isSonstiges);
                               const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
+                              const recurrenceEndDate = app.recurrenceEndDate?.toDate();
                               
                               return (
                                 <TableRow key={app.virtualId} className={cn(app.isCancelled && 'text-muted-foreground opacity-70')}>
@@ -561,7 +562,7 @@ export default function AdminTerminePage() {
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.visibility.type === 'all' ? 'Alle' : (app.visibility.teamIds || []).map((id) => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.locationId ? locationsMap.get(app.locationId)?.name || '-' : '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>
-                                    {app.recurrence && app.recurrence !== 'none' ? `bis ${app.recurrenceEndDate ? format(app.recurrenceEndDate.toDate(), 'dd.MM.yy', { locale: de }) : '...'}` : '-'}
+                                    {app.recurrence && app.recurrence !== 'none' ? `bis ${recurrenceEndDate ? format(recurrenceEndDate, 'dd.MM.yy', { locale: de }) : '...'}` : '-'}
                                   </TableCell>
                                   <TableCell className="text-right space-x-0">
                                     <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}><Edit className="h-4 w-4" /><span className="sr-only">Einzelnen Termin bearbeiten</span></Button>
