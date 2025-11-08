@@ -531,10 +531,9 @@ export default function AdminTerminePage() {
         <CardContent>
           {isLoading ? ( <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ) : monthKeys.length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-              {monthKeys.map((monthYear, index) => {
+              {monthKeys.map((monthYear) => {
                 const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-                
-                const showBanner = monthKeys.includes("November 2024") && monthKeys.includes("Dezember 2024") && monthYear === "Dezember 2024";
+                const showBanner = (monthYear === 'Dezember 2024') && monthKeys.includes('November 2024');
 
                 return (
                  <React.Fragment key={monthYear}>
