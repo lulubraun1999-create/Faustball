@@ -11,7 +11,7 @@ import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentE
 import Link from 'next/link';
 import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getMonth, getYear, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { utcToZonedTime } from 'date-fns-tz';
+import * as dateFnsTz from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -63,7 +63,7 @@ export default function DashboardPage() {
     const currentPolls = useMemo(() => {
         if (!allPolls) return [];
         const now = new Date();
-        const activePolls = allPolls.filter(poll => poll.endDate.toDate() >= now);
+        const activePolls = allPolls.filter(poll => poll.createdAt && poll.endDate && poll.endDate.toDate() >= now);
         return activePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
     }, [allPolls]);
 
@@ -82,7 +82,7 @@ export default function DashboardPage() {
         const exceptionsMap = new Map<string, AppointmentException>();
         exceptions?.forEach(ex => {
             if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-                const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+                const key = `${ex.originalAppointmentId}-${startOfDay(dateFnsTz.utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
                 exceptionsMap.set(key, ex);
             }
         });
@@ -299,7 +299,7 @@ export default function DashboardPage() {
                                             {news.title}
                                         </Link>
                                          <p className="text-xs text-muted-foreground">
-                                             {format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                             {news.createdAt && format(news.createdAt.toDate(), 'dd.MM.yyyy', { locale: de })}
                                          </p>
                                     </li>
                                 ))}
@@ -328,7 +328,7 @@ export default function DashboardPage() {
                                             {poll.title}
                                         </Link>
                                          <p className="text-xs text-muted-foreground">
-                                             Endet am: {format(poll.endDate.toDate(), 'dd.MM.yyyy', { locale: de })}
+                                             Endet am: {poll.endDate && format(poll.endDate.toDate(), 'dd.MM.yyyy', { locale: de })}
                                          </p>
                                     </li>
                                 ))}
