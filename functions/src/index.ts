@@ -4,7 +4,7 @@ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
 import { addDays, isValid, startOfDay, parseISO } from 'date-fns';
-import * as dateFnsTz from 'date-fns-tz';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 
 // Firebase Admin SDK initialisieren
@@ -206,10 +206,10 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     let originalDate: Date, newStartDate: Date, newEndDate: Date | null;
     try {
-        originalDate = dateFnsTz.zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
-        newStartDate = dateFnsTz.zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+        newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
         newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
-          ? dateFnsTz.zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+          ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
           : null;
 
         if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
@@ -297,10 +297,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         }
 
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-        const batch = db.batch();
+        const batch = writeBatch(db);
 
         // 1. Datum der aktuellen Instanz parsen
-        const instanceDate = dateFnsTz.zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+        const instanceDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
         if(!isValid(instanceDate)) {
              throw new HttpsError('invalid-argument', `Ungültiges Datum der Instanz: ${data.originalDateISO}`);
         }
@@ -320,9 +320,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         }
         
         // 3. Neue Serie erstellen
-        const newStartDate = dateFnsTz.zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
         const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
-            ? dateFnsTz.zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+            ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
             : null;
 
         if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {

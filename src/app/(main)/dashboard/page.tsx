@@ -11,7 +11,7 @@ import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentE
 import Link from 'next/link';
 import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getMonth, getYear, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import * as dateFnsTz from 'date-fns-tz';
+import { utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -64,7 +64,11 @@ export default function DashboardPage() {
         if (!allPolls) return [];
         const now = new Date();
         const activePolls = allPolls.filter(poll => poll.createdAt && poll.endDate && poll.endDate.toDate() >= now);
-        return activePolls.sort((a, b) => a.endDate.toMillis() - b.endDate.toMillis()).slice(0, 3);
+        return activePolls.sort((a, b) => {
+            const timeA = a.endDate instanceof Timestamp ? a.endDate.toMillis() : 0;
+            const timeB = b.endDate instanceof Timestamp ? b.endDate.toMillis() : 0;
+            return timeA - timeB;
+        }).slice(0, 3);
     }, [allPolls]);
 
     const myTeams = useMemo(() => {
@@ -82,7 +86,7 @@ export default function DashboardPage() {
         const exceptionsMap = new Map<string, AppointmentException>();
         exceptions?.forEach(ex => {
             if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-                const key = `${ex.originalAppointmentId}-${startOfDay(dateFnsTz.utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+                const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
                 exceptionsMap.set(key, ex);
             }
         });

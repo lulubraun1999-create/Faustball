@@ -77,7 +77,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import * as dateFnsTz from 'date-fns-tz';
+import { utcToZonedTime } from 'date-fns-tz';
 
 type UserResponseStatus = "zugesagt" | "abgesagt" | "unsicher";
 
@@ -168,7 +168,7 @@ export default function VerwaltungTerminePage() {
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions?.forEach(ex => {
         if (ex.originalDate && ex.originalDate instanceof Timestamp) {
-            const key = `${ex.originalAppointmentId}-${startOfDay(dateFnsTz.utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
+            const key = `${ex.originalAppointmentId}-${startOfDay(utcToZonedTime(ex.originalDate.toDate(), 'Europe/Berlin')).toISOString()}`;
             exceptionsMap.set(key, ex);
         }
     });
