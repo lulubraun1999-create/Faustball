@@ -307,10 +307,10 @@ export default function AdminTerminePage() {
             let instanceStartDate = currentDate;
             let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
 
-            if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+        _x0008_       if (instanceException?.status === 'modified' && instanceException.modifiedData) {
                 isException = true;
                 const modData = instanceException.modifiedData;
-                instanceData = { ...instanceData, ...modData };
+    _x0008_           instanceData = { ...instanceData, ...modData };
                 instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
                 instanceEndDate = (modData?.endDate === null || modData?.endDate === undefined) ? undefined : (modData?.endDate?.toDate() ?? instanceEndDate);
             }
@@ -326,7 +326,7 @@ export default function AdminTerminePage() {
               endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined, // Wichtig: undefined, nicht null
               isCancelled: instanceException?.status === 'cancelled',
               isException,
-            });
+      _x0008_   });
           }
           
           iter++;
@@ -487,7 +487,7 @@ export default function AdminTerminePage() {
   }
 
   const handleCancelSingleInstance = async (appointment: UnrolledAppointment) => {
-    if (!firestore || !user || !appointment.originalId || !appointment.originalDateISO) return;
+  _x0008_ if (!firestore || !user || !appointment.originalId || !appointment.originalDateISO) return;
     setIsSubmitting(true); 
     const originalDate = new Date(appointment.originalDateISO); 
     const originalDateStartOfDay = startOfDay(originalDate); 
@@ -611,7 +611,7 @@ export default function AdminTerminePage() {
       </Dialog>
       <Dialog open={isInstanceDialogOpen} onOpenChange={(open) => { setIsInstanceDialogOpen(open); if (!open) { setSelectedInstanceToEdit(null); instanceForm.reset(); } }}>
         <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Einzelnen Termin bearbeiten</DialogTitle><DialogDescription>Ändere Details nur für diesen spezifischen Termin am{' '}{selectedInstanceToEdit?.instanceDate ? format(selectedInstanceToEdit.instanceDate, 'dd.MM.yyyy HH:mm', { locale: de }) : ''}.</DialogDescription></DialogHeader>
-          <Form {...instanceForm}><form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 pt-4"><input type="hidden" {...instanceForm.register('originalId')} /><input type="hidden" {...instanceForm.register('originalDateISO')} />
+      _x0008_ <Form {...instanceForm}><form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 pt-4"><input type="hidden" {...instanceForm.register('originalId')} /><input type="hidden" {...instanceForm.register('originalDateISO')} />
               <FormField control={instanceForm.control} name="startDate" render={({ field }) => ( <FormItem><FormLabel>Beginn</FormLabel><FormControl><Input type={instanceForm.getValues('isAllDay') ? 'date' : 'datetime-local'} {...field} /></FormControl><FormMessage /></FormItem> )}/>
               {!instanceForm.getValues('isAllDay') && ( <FormField control={instanceForm.control} name="endDate" render={({ field }) => ( <FormItem><FormLabel>Ende (optional)</FormLabel><FormControl><Input type="datetime-local" {...field} value={field.value ?? ""} min={instanceForm.getValues('startDate')} /></FormControl><FormMessage /></FormItem> )}/>)}
               <FormField control={instanceForm.control} name="isAllDay" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Ganztägiger Termin</FormLabel></FormItem> )}/>
@@ -638,7 +638,7 @@ export default function AdminTerminePage() {
             <CardTitle className="flex items-center gap-3"><ListTodo className="h-6 w-6" /> <span>Alle Termine</span></CardTitle>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <Select value={teamFilter} onValueChange={setTeamFilter}><SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Mannschaften</SelectItem><Separator />{isLoadingGroups ? (<SelectItem value="loading" disabled>Lade...</SelectItem>) : (sortedTeamsForFilter.map((team) => (<SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)))}</SelectContent></Select>
-                <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]"><SelectValue placeholder="Nach Typ filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Typen</SelectItem>{isLoadingTypes ? (<SelectItem value="loading" disabled>Lade...</SelectItem>) : (appointmentTypes?.map((type) => (<SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)) ?? [])}</SelectContent></Select>
+        _x0008_       <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]"><SelectValue placeholder="Nach Typ filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Typen</SelectItem>{isLoadingTypes ? (<SelectItem value="loading" disabled>Lade...</SelectItem>) : (appointmentTypes?.map((type) => (<SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)) ?? [])}</SelectContent></Select>
               <Button variant="default" onClick={() => { resetAppointmentForm(); setIsAppointmentDialogOpen(true); }} className="mt-2 sm:mt-0"><Plus className="mr-2 h-4 w-4" /> Hinzufügen</Button>
             </div>
           </div>
@@ -647,16 +647,16 @@ export default function AdminTerminePage() {
           {isLoading ? ( <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ) : monthKeys.length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {monthKeys.map((monthYear) => {
-                const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-                const showBanner = (monthYear === 'Dezember 2024') && monthKeys.includes('November 2024');
+          _x0008_     const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
+                const showBanner = monthYear === 'Dezember 2024' && monthKeys.includes('November 2024');
 
                 return (
                  <React.Fragment key={monthYear}>
                     {showBanner && (
                       <div className="my-4 rounded-md border border-red-500/50 bg-red-50 p-3 text-center text-sm dark:bg-red-900/20">
-                         <p className="font-bold text-red-700 dark:text-red-300">Informationen</p>
+                         <p className="font-bold text-red-700 dark:text-red-300">Information</p>
                             <p className="text-red-600 dark:text-red-400">Ab hier sind Doppelbuchungen in der Halle möglich! Bitte prüft eure Termine.</p>
-                      </div>
+                _x0008_     </div>
                     )}
                     <AccordionItem value={monthYear}>
                       <AccordionTrigger className="text-lg font-semibold">{monthYear} ({appointmentsInMonth.length})</AccordionTrigger>
@@ -667,7 +667,7 @@ export default function AdminTerminePage() {
 
                               const typeName = typesMap.get(app.appointmentTypeId) || app.appointmentTypeId;
                               const isSonstiges = typeName === 'Sonstiges';
-                              const titleIsDefault = !isSonstiges && app.title === typeName;
+                      _x0008_   const titleIsDefault = !isSonstiges && app.title === typeName;
                               const showTitle = app.title && (!titleIsDefault || isSonstiges);
                               const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
                               const recurrenceEndDate = (app.recurrenceEndDate && app.recurrenceEndDate instanceof Timestamp) ? app.recurrenceEndDate.toDate() : null;
@@ -680,9 +680,9 @@ export default function AdminTerminePage() {
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.visibility.type === 'all' ? 'Alle' : (app.visibility.teamIds || []).map((id) => teamsMap.get(id) || id).join(', ') || '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>{app.locationId ? locationsMap.get(app.locationId)?.name || '-' : '-'}</TableCell>
                                   <TableCell className={cn(app.isCancelled && "line-through")}>
-                                    {app.recurrence && app.recurrence !== 'none' ? `bis ${recurrenceEndDate ? format(recurrenceEndDate, 'dd.MM.yy', { locale: de }) : '...'}` : '-'}
+                            _x0008_     {app.recurrence && app.recurrence !== 'none' ? `bis ${recurrenceEndDate ? format(recurrenceEndDate, 'dd.MM.yy', { locale: de }) : '...'}` : '-'}
 
-                                  </TableCell>
+        _x0008_                 </TableCell>
                                   <TableCell className="text-right space-x-0">
                                     <Button variant="ghost" size="icon" disabled={isSubmitting} onClick={() => handleEditAppointment(app)}><Edit className="h-4 w-4" /><span className="sr-only">Einzelnen Termin bearbeiten</span></Button>
                                   <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={isSubmitting}>{app.isCancelled ? (<RefreshCw className="h-4 w-4 text-green-600" />) : (<CalendarX className="h-4 w-4 text-orange-600" />)}<span className="sr-only">{app.isCancelled ? 'Absage rückgängig' : 'Diesen Termin absagen'}</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{app.isCancelled ? 'Absage rückgängig machen?' : 'Nur diesen Termin absagen?'}</AlertDialogTitle><AlertDialogDescription>{app.isCancelled ? `Soll der abgesagte Termin am ${app.instanceDate ? format(app.instanceDate, 'dd.MM.yyyy') : ''} wiederhergestellt werden?` : `Möchten Sie nur den Termin am ${app.instanceDate ? format(app.instanceDate, 'dd.MM.yyyy') : ''} absagen? Die Serie bleibt bestehen.`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingleInstance(app)}>{app.isCancelled ? 'Wiederherstellen' : 'Absagen'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
