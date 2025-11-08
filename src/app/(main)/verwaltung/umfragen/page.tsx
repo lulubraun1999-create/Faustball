@@ -108,16 +108,30 @@ export default function UmfragenPage() {
     const expired: Poll[] = [];
     
     (visiblePolls || []).forEach(poll => {
-        const endDate = poll.endDate instanceof Timestamp ? poll.endDate.toDate() : poll.endDate;
-        if (isPast(endDate)) {
-            expired.push(poll);
-        } else {
-            active.push(poll);
+        // Ensure endDate exists and is a Timestamp before proceeding
+        if (poll.endDate && poll.endDate instanceof Timestamp) {
+            const endDate = poll.endDate.toDate();
+            if (isPast(endDate)) {
+                expired.push(poll);
+            } else {
+                active.push(poll);
+            }
         }
     });
 
-    active.sort((a,b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
-    expired.sort((a,b) => (b.endDate as Timestamp).toMillis() - (a.endDate as Timestamp).toMillis());
+    // Sort active polls by creation date, descending. Handle cases where createdAt might be missing.
+    active.sort((a,b) => {
+        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+        return timeB - timeA;
+    });
+
+    // Sort expired polls by end date, descending.
+    expired.sort((a,b) => {
+        const timeA = a.endDate instanceof Timestamp ? a.endDate.toMillis() : 0;
+        const timeB = b.endDate instanceof Timestamp ? b.endDate.toMillis() : 0;
+        return timeB - timeA;
+    });
 
     return { activePolls: active, expiredPolls: expired };
   }, [visiblePolls]);
