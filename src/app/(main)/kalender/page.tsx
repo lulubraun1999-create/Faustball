@@ -71,7 +71,7 @@ import {
 } from '@/components/ui/popover';
 import Link from 'next/link';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;

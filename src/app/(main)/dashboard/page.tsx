@@ -11,7 +11,7 @@ import type { Appointment, NewsArticle, Poll, MemberProfile, Group, AppointmentE
 import Link from 'next/link';
 import { format, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getMonth, getYear, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { utcToZonedTime } from 'date-fns-tz';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
