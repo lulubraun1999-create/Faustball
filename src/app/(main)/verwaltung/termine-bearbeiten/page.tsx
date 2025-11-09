@@ -272,7 +272,7 @@ export default function AdminTerminePage() {
         
         let finalData: Appointment = { ...app };
         let isException = false;
-        if (exception?.status === 'modified' && exception.modifiedData) {
+  _x0008_        if (exception?.status === 'modified' && exception.modifiedData) {
           const modData = exception.modifiedData;
           finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
           isException = true;
@@ -282,7 +282,7 @@ export default function AdminTerminePage() {
           ...finalData,
           instanceDate: finalData.startDate.toDate(),
           originalId: app.id,
-          virtualId: app.id,
+      _x0008_    virtualId: app.id,
           isCancelled: exception?.status === 'cancelled',
           isException,
           originalDateISO: originalDateStartOfDayISO,
@@ -310,9 +310,9 @@ export default function AdminTerminePage() {
 
             if (instanceException?.status === 'modified' && instanceException.modifiedData) {
                 isException = true;
-                const modData = instanceException.modifiedData;
+              _x0008_    const modData = instanceException.modifiedData;
                 instanceData = { ...instanceData, ...modData };
-                instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
+        _x0008_          instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
                 instanceEndDate = (modData?.endDate === null || modData?.endDate === undefined) ? undefined : (modData?.endDate?.toDate() ?? instanceEndDate);
             }
   
@@ -332,7 +332,7 @@ export default function AdminTerminePage() {
           
           iter++;
           switch (app.recurrence) {
-            case 'daily': currentDate = addDays(currentDate, 1); break;
+            case 'daily': currentDate = addDays(currentDate, 1); T: break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
             case 'monthly':
@@ -496,7 +496,7 @@ export default function AdminTerminePage() {
     const q = query(exceptionsColRef, where('originalAppointmentId', '==', appointment.originalId), where('originalDate', '==', Timestamp.fromDate(originalDateStartOfDay)));
     try {
       const snapshot = await getDocs(q); const existingExceptionDoc = snapshot.docs[0];
-      if (appointment.isCancelled) { 
+    _x0008_  if (appointment.isCancelled) { 
         if (existingExceptionDoc) { 
             // KORREKTUR: Prüfe auf 'modifiedData', nicht nur ob es existiert
             const hasModifiedData = existingExceptionDoc.data().modifiedData && Object.keys(existingExceptionDoc.data().modifiedData).length > 0;
