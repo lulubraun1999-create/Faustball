@@ -128,6 +128,7 @@ import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -145,7 +146,6 @@ const appointmentTypeSchema = z.object({ name: z.string().min(1, 'Name des Typs 
 type AppointmentTypeFormValues = z.infer<typeof appointmentTypeSchema>;
 const singleAppointmentInstanceSchema = z
   .object({
-    // KORRIGIERT: originalId hinzugefügt
     originalId: z.string(), 
     originalDateISO: z.string(),
     startDate: z.string().min(1, 'Startdatum/-zeit ist erforderlich.'),
@@ -263,11 +263,9 @@ export default function AdminTerminePage() {
       const appStartDate = app.startDate.toDate();
   
       if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
-        // KORREKTUR: Zeige vergangene Termine nicht an, es sei denn, sie sind eine Ausnahme
         const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
-        // Nur anzeigen, wenn es heute oder in der Zukunft ist ODER wenn es eine Ausnahme ist (die storniert sein könnte)
         if (appStartDate < today && !exception) return; 
         
         let finalData: Appointment = { ...app };
@@ -291,14 +289,13 @@ export default function AdminTerminePage() {
         let currentDate = appStartDate;
         const duration = (app.endDate && app.endDate instanceof Timestamp) ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         let iter = 0;
-        const MAX_ITERATIONS = 500; // Sicherheits-Check
+        const MAX_ITERATIONS = 500;
 
         const startMonth = getMonth(currentDate);
         const startDayOfMonth = currentDate.getDate();
   
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
           const currentDateStartOfDay = startOfDay(currentDate);
-          // Nur Termine anzeigen, die heute oder in der Zukunft liegen
           if (currentDateStartOfDay >= today) {
             const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
             const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
@@ -324,7 +321,7 @@ export default function AdminTerminePage() {
               originalDateISO: currentDateStartOfDayISO,
               instanceDate: instanceStartDate,
               startDate: Timestamp.fromDate(instanceStartDate),
-              endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined, // Wichtig: undefined, nicht null
+              endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
               isCancelled: instanceException?.status === 'cancelled',
               isException,
             });
@@ -400,14 +397,13 @@ export default function AdminTerminePage() {
     if (recurrenceEndDate && !isDateValid(recurrenceEndDate)) { appointmentForm.setError('recurrenceEndDate', { message: 'Ungültiges Enddatum für Wiederholung.' }); setIsSubmitting(false); return; }
     const startDateTimestamp = Timestamp.fromDate(startDate); const endDateTimestamp = endDate ? Timestamp.fromDate(endDate) : null; const rsvpDeadlineTimestamp = rsvpDeadline ? Timestamp.fromDate(rsvpDeadline) : null; const recurrenceEndDateTimestamp = recurrenceEndDate ? Timestamp.fromDate(set(recurrenceEndDate, { hours: 23, minutes: 59, seconds: 59 })) : null;
     
-    // KORREKTUR: Stelle sicher, dass endDate null ist, wenn es leer ist oder isAllDay
     const finalEndDate = data.isAllDay ? null : endDateTimestamp;
 
     const appointmentData: Omit<Appointment, 'id' | 'lastUpdated'> = { 
         title: finalTitle || '', 
         appointmentTypeId: data.appointmentTypeId, 
         startDate: startDateTimestamp, 
-        endDate: finalEndDate, // KORRIGIERT
+        endDate: finalEndDate,
         isAllDay: data.isAllDay, 
         recurrence: data.recurrence, 
         ...(recurrenceEndDateTimestamp && data.recurrence !== 'none' && { recurrenceEndDate: recurrenceEndDateTimestamp }), 
@@ -431,7 +427,6 @@ export default function AdminTerminePage() {
     data: SingleAppointmentInstanceFormValues
   ) => {
     if (!selectedInstanceToEdit) return;
-    // KORREKTUR: Stelle sicher, dass leere Strings zu 'null' werden
     const cleanData = { 
         ...data, 
         endDate: data.endDate || null,
@@ -455,7 +450,6 @@ export default function AdminTerminePage() {
         const { firebaseApp } = initializeFirebase(); 
         const functions = getFunctions(firebaseApp); 
         const saveSingleException = httpsCallable(functions, 'saveSingleAppointmentException'); 
-        // KORREKTUR: Übergebe das gesamte 'pendingUpdateData'-Objekt
         await saveSingleException(pendingUpdateData); 
         toast({ title: "Erfolg", description: "Die Terminänderung wurde gespeichert." });
     } catch (error: any) { 
@@ -475,7 +469,6 @@ export default function AdminTerminePage() {
         const { firebaseApp } = initializeFirebase(); 
         const functions = getFunctions(firebaseApp); 
         const saveFutureInstancesFn = httpsCallable(functions, 'saveFutureAppointmentInstances'); 
-        // KORREKTUR: Übergebe das gesamte 'pendingUpdateData'-Objekt
         await saveFutureInstancesFn(pendingUpdateData); 
         toast({ title: 'Terminserie erfolgreich aufgeteilt und aktualisiert' });
     } catch (error: any) { 
@@ -498,7 +491,6 @@ export default function AdminTerminePage() {
       const snapshot = await getDocs(q); const existingExceptionDoc = snapshot.docs[0];
       if (appointment.isCancelled) { 
         if (existingExceptionDoc) { 
-            // KORREKTUR: Prüfe auf 'modifiedData', nicht nur ob es existiert
             const hasModifiedData = existingExceptionDoc.data().modifiedData && Object.keys(existingExceptionDoc.data().modifiedData).length > 0;
             if (hasModifiedData) { 
                 await updateDoc(existingExceptionDoc.ref, { status: 'modified', userId: user.uid, lastUpdated: serverTimestamp() }); 
@@ -537,7 +529,6 @@ export default function AdminTerminePage() {
     
     const isAllDay = appointment.isAllDay ?? false;
     const startDate = appointment.instanceDate;
-    // KORREKTUR: endDate kann undefined sein
     const endDate = (appointment.endDate && appointment.endDate instanceof Timestamp) ? appointment.endDate.toDate() : undefined;
   
     const startDateString = formatDateForInput(startDate, isAllDay ? 'date' : 'datetime');
@@ -549,7 +540,7 @@ export default function AdminTerminePage() {
         originalId: appointment.originalId, 
         originalDateISO: appointment.originalDateISO, 
         startDate: startDateString, 
-        endDate: endDateString || null, // KORREKTUR: Setze auf null statt ''
+        endDate: endDateString || null,
         isAllDay, 
         title: titleIsDefault ? '' : appointment.title, 
         locationId: appointment.locationId ?? '', 
@@ -588,6 +579,9 @@ export default function AdminTerminePage() {
 
   const monthKeys = Object.keys(filteredAndGroupedAppointments);
   const accordionDefaultValue = monthKeys.length > 0 ? [monthKeys[0]] : [];
+  
+  const hasNovember2024 = monthKeys.includes('November 2024');
+  const hasDecember2024 = monthKeys.includes('Dezember 2024');
   
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -647,11 +641,18 @@ export default function AdminTerminePage() {
         <CardContent>
           {isLoading ? ( <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ) : monthKeys.length > 0 ? (
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
-              {monthKeys.map((monthYear) => {
+              {monthKeys.map((monthYear, index) => {
                const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
+               const showBanner = monthYear === 'Dezember 2024' && hasNovember2024;
                
                return (
                 <React.Fragment key={monthYear}>
+                   {showBanner && (
+                    <Alert variant="destructive" className="my-4">
+                      <AlertTitle>Achtung!</AlertTitle>
+                      <AlertDescription>Doppelbuchungen möglich!</AlertDescription>
+                    </Alert>
+                  )}
                   <AccordionItem value={monthYear}>
                     <AccordionTrigger className="text-lg font-semibold">{monthYear} ({appointmentsInMonth.length})</AccordionTrigger>
                     <AccordionContent>
