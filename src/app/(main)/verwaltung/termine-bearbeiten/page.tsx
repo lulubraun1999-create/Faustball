@@ -649,16 +649,9 @@ export default function AdminTerminePage() {
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {monthKeys.map((monthYear) => {
                const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-                const showBanner = monthYear === 'Dezember 2024' && monthKeys.includes('November 2024');
-
+                
                 return (
                  <React.Fragment key={monthYear}>
-                    {showBanner && (
-                      <div className="my-4 rounded-md border border-red-500/50 bg-red-50 p-3 text-center text-sm dark:bg-red-900/20">
-                         <p className="font-bold text-red-700 dark:text-red-300">Information</p>
-                            <p className="text-red-600 dark:text-red-400">Ab hier sind Doppelbuchungen in der Halle möglich! Bitte prüft eure Termine.</p>
-                       </div>
-                    )}
                     <AccordionItem value={monthYear}>
                       <AccordionTrigger className="text-lg font-semibold">{monthYear} ({appointmentsInMonth.length})</AccordionTrigger>
                       <AccordionContent>
