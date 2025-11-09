@@ -580,9 +580,9 @@ export default function AdminTerminePage() {
   const monthKeys = Object.keys(filteredAndGroupedAppointments);
   const accordionDefaultValue = monthKeys.length > 0 ? [monthKeys[0]] : [];
   
-  const hasNovember2024 = monthKeys.includes('November 2024');
   const hasDecember2024 = monthKeys.includes('Dezember 2024');
-  
+  const hasJanuary2025 = monthKeys.includes('Januar 2025');
+
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       {/* DIALOGS */}
@@ -643,16 +643,11 @@ export default function AdminTerminePage() {
             <Accordion type="multiple" defaultValue={accordionDefaultValue} className="w-full">
               {monthKeys.map((monthYear, index) => {
                const appointmentsInMonth = filteredAndGroupedAppointments[monthYear];
-               const showBanner = monthYear === 'Dezember 2024' && hasNovember2024;
+               const nextMonthYear = index + 1 < monthKeys.length ? monthKeys[index + 1] : null;
+               const showBanner = monthYear === 'Dezember 2024' && nextMonthYear === 'Januar 2025';
                
                return (
                 <React.Fragment key={monthYear}>
-                   {showBanner && (
-                    <Alert variant="destructive" className="my-4">
-                      <AlertTitle>Achtung!</AlertTitle>
-                      <AlertDescription>Doppelbuchungen möglich!</AlertDescription>
-                    </Alert>
-                  )}
                   <AccordionItem value={monthYear}>
                     <AccordionTrigger className="text-lg font-semibold">{monthYear} ({appointmentsInMonth.length})</AccordionTrigger>
                     <AccordionContent>
@@ -689,6 +684,12 @@ export default function AdminTerminePage() {
                         </TableBody>
                       </Table></AccordionContent>
                   </AccordionItem>
+                   {showBanner && (
+                    <Alert variant="destructive" className="my-4">
+                      <AlertTitle>Achtung!</AlertTitle>
+                      <AlertDescription>Doppelbuchungen möglich!</AlertDescription>
+                    </Alert>
+                  )}
                 </React.Fragment>
                )
               })}
