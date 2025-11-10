@@ -605,18 +605,33 @@ export default function AdminTerminePage() {
         </DialogContent>
       </Dialog>
       <Dialog open={isInstanceDialogOpen} onOpenChange={(open) => { setIsInstanceDialogOpen(open); if (!open) { setSelectedInstanceToEdit(null); instanceForm.reset(); } }}>
-        <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Einzelnen Termin bearbeiten</DialogTitle><DialogDescription>Ändere Details nur für diesen spezifischen Termin am{' '}{selectedInstanceToEdit?.instanceDate ? format(selectedInstanceToEdit.instanceDate, 'dd.MM.yyyy HH:mm', { locale: de }) : ''}.</DialogDescription></DialogHeader>
-         <Form {...instanceForm}><form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 pt-4"><input type="hidden" {...instanceForm.register('originalId')} /><input type="hidden" {...instanceForm.register('originalDateISO')} />
-           <FormField control={instanceForm.control} name="startDate" render={({ field }) => ( <FormItem><FormLabel>Beginn</FormLabel><FormControl><Input type={instanceForm.getValues('isAllDay') ? 'date' : 'datetime-local'} {...field} /></FormControl><FormMessage /></FormItem> )}/>
-           {!instanceForm.getValues('isAllDay') && ( <FormField control={instanceForm.control} name="endDate" render={({ field }) => ( <FormItem><FormLabel>Ende (optional)</FormLabel><FormControl><Input type="datetime-local" {...field} value={field.value ?? ""} min={instanceForm.getValues('startDate')} /></FormControl><FormMessage /></FormItem> )}/>)}
-           <FormField control={instanceForm.control} name="isAllDay" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Ganztägiger Termin</FormLabel></FormItem> )}/>
-               <FormField control={instanceForm.control} name="title" render={({ field }) => { const typeName = selectedInstanceToEdit ? typesMap.get(selectedInstanceToEdit.appointmentTypeId) : ''; const isSonstiges = typeName === 'Sonstiges'; return ( <FormItem><FormLabel>Titel{' '}{isSonstiges ? ('') : (<span className="text-xs text-muted-foreground">(Optional)</span>)}</FormLabel><FormControl><Input placeholder={isSonstiges ? 'Titel ist erforderlich...' : 'Optionaler Titel...'} {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> ); }}/>
-           <FormField control={instanceForm.control} name="locationId" render={({ field }) => ( <FormItem><FormLabel>Ort</FormLabel>{' '}<Select onValueChange={field.onChange} value={field.value ?? ''}>{' '}<FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl>{' '}<SelectContent>{isLoadingLocations ? ( <SelectItem value="loading" disabled>Lade...</SelectItem> ) : ( locations?.map((loc) => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)) )}</SelectContent>{' '}</Select>{' '}<FormMessage />{' '}</FormItem> )}/>
-           <FormField control={instanceForm.control} name="meetingPoint" render={({ field }) => ( <FormItem><FormLabel>Treffpunkt (optional)</FormLabel><FormControl><Input placeholder="z.B. Eingang Halle" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
-           <FormField control={instanceForm.control} name="meetingTime" render={({ field }) => ( <FormItem><FormLabel>Treffzeit (optional)</FormLabel><FormControl><Input placeholder="z.B. 18:45 Uhr" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
-           <FormField control={instanceForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details..." {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
-           <DialogFooter className="pt-4"><DialogClose asChild><Button type="button" variant="ghost">Abbrechen</Button></DialogClose><Button type="button" onClick={instanceForm.handleSubmit(onSubmitSingleInstance)} disabled={isSubmitting}>{isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}Speichern</Button></DialogFooter>
-         </form></Form>
+        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Einzelnen Termin bearbeiten</DialogTitle>
+            <DialogDescription>Ändere Details nur für diesen spezifischen Termin am{' '}{selectedInstanceToEdit?.instanceDate ? format(selectedInstanceToEdit.instanceDate, 'dd.MM.yyyy HH:mm', { locale: de }) : ''}.</DialogDescription>
+          </DialogHeader>
+          <Form {...instanceForm}>
+            <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 pt-4 flex-grow overflow-hidden flex flex-col">
+              <ScrollArea className="flex-grow pr-6 -mr-6">
+                <div className="space-y-4">
+                  <input type="hidden" {...instanceForm.register('originalId')} />
+                  <input type="hidden" {...instanceForm.register('originalDateISO')} />
+                  <FormField control={instanceForm.control} name="startDate" render={({ field }) => ( <FormItem><FormLabel>Beginn</FormLabel><FormControl><Input type={instanceForm.getValues('isAllDay') ? 'date' : 'datetime-local'} {...field} /></FormControl><FormMessage /></FormItem> )}/>
+                  {!instanceForm.getValues('isAllDay') && ( <FormField control={instanceForm.control} name="endDate" render={({ field }) => ( <FormItem><FormLabel>Ende (optional)</FormLabel><FormControl><Input type="datetime-local" {...field} value={field.value ?? ""} min={instanceForm.getValues('startDate')} /></FormControl><FormMessage /></FormItem> )}/>)}
+                  <FormField control={instanceForm.control} name="isAllDay" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-2 space-y-0 pt-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Ganztägiger Termin</FormLabel></FormItem> )}/>
+                  <FormField control={instanceForm.control} name="title" render={({ field }) => { const typeName = selectedInstanceToEdit ? typesMap.get(selectedInstanceToEdit.appointmentTypeId) : ''; const isSonstiges = typeName === 'Sonstiges'; return ( <FormItem><FormLabel>Titel{' '}{isSonstiges ? ('') : (<span className="text-xs text-muted-foreground">(Optional)</span>)}</FormLabel><FormControl><Input placeholder={isSonstiges ? 'Titel ist erforderlich...' : 'Optionaler Titel...'} {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> ); }}/>
+                  <FormField control={instanceForm.control} name="locationId" render={({ field }) => ( <FormItem><FormLabel>Ort</FormLabel>{' '}<Select onValueChange={field.onChange} value={field.value ?? ''}>{' '}<FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl>{' '}<SelectContent>{isLoadingLocations ? ( <SelectItem value="loading" disabled>Lade...</SelectItem> ) : ( locations?.map((loc) => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)) )}</SelectContent>{' '}</Select>{' '}<FormMessage />{' '}</FormItem> )}/>
+                  <FormField control={instanceForm.control} name="meetingPoint" render={({ field }) => ( <FormItem><FormLabel>Treffpunkt (optional)</FormLabel><FormControl><Input placeholder="z.B. Eingang Halle" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
+                  <FormField control={instanceForm.control} name="meetingTime" render={({ field }) => ( <FormItem><FormLabel>Treffzeit (optional)</FormLabel><FormControl><Input placeholder="z.B. 18:45 Uhr" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
+                  <FormField control={instanceForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details..." {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
+                </div>
+              </ScrollArea>
+              <DialogFooter className="pt-4 border-t shrink-0">
+                <DialogClose asChild><Button type="button" variant="ghost">Abbrechen</Button></DialogClose>
+                <Button type="button" onClick={instanceForm.handleSubmit(onSubmitSingleInstance)} disabled={isSubmitting}>{isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}Speichern</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
       <AlertDialog open={isUpdateTypeDialogOpen} onOpenChange={(open) => { if (!open) resetSingleInstanceDialogs(); setIsUpdateTypeDialogOpen(open); }}>
