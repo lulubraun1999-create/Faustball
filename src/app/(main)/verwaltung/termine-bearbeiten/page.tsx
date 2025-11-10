@@ -78,6 +78,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Table,
@@ -817,4 +818,3 @@ export default function AppointmentManagementPage() {
     </div>
   );
 }
-
