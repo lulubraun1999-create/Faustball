@@ -56,7 +56,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException, MemberProfile, AppointmentResponse } from '@/lib/types';
-import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, Plus, Users, MapPin, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
@@ -68,7 +68,6 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -79,7 +78,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Table,
@@ -146,8 +144,6 @@ export default function AppointmentManagementPage() {
   const firestore = useFirestore();
   const { isAdmin, isUserLoading, user } = useUser();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<UnrolledAppointment | null>(null);
-  const [editMode, setEditMode] = useState<'single' | 'future' | null>(null);
   
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
@@ -284,87 +280,45 @@ export default function AppointmentManagementPage() {
   }, [filteredAppointments]);
 
 
-  const formatToDateTimeLocal = (date?: Date) => date ? new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : '';
-  const formatToDate = (date?: Date) => date ? date.toISOString().split('T')[0] : '';
-
   const handleAddNew = () => {
-    setSelectedAppointment(null);
-    setEditMode(null);
     form.reset({ title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '', visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadline: '' });
     setIsDialogOpen(true);
   };
 
-  const handleEdit = (app: UnrolledAppointment) => {
-    setSelectedAppointment(app);
-    const originalApp = appointments?.find(a => a.id === app.originalId);
-
-    if (originalApp?.recurrence !== 'none') {
-        setEditMode(null); 
-    } else {
-        setEditMode('single'); 
+  const handleCancelSingle = async (appToCancel: UnrolledAppointment) => {
+    if (!firestore || !user) return;
+    const exceptionsColRef = collection(firestore, 'appointmentExceptions');
+    const newException = {
+        originalAppointmentId: appToCancel.originalId,
+        originalDate: Timestamp.fromDate(startOfDay(appToCancel.instanceDate)),
+        status: 'cancelled',
+        userId: user!.uid,
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+    };
+    try {
+        await addDoc(exceptionsColRef, newException);
+        toast({ title: "Termin abgesagt", description: "Der einzelne Termin wurde als abgesagt markiert."});
+    } catch(e: any) {
+        console.error("Error cancelling single appointment:", e);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'appointmentExceptions', operation: 'create', requestResourceData: newException }));
     }
-    
-    let rsvpDeadlineString = '';
-    if (originalApp?.rsvpDeadline && originalApp?.startDate) {
-        const offset = originalApp.startDate.toMillis() - originalApp.rsvpDeadline.toMillis();
-        const totalHours = Math.floor(offset / 3600000);
-        rsvpDeadlineString = `${Math.floor(totalHours/24)}:${totalHours%24}`;
-    }
-
-    form.reset({
-      id: app.originalId, title: app.title, appointmentTypeId: app.appointmentTypeId,
-      startDate: formatToDateTimeLocal(app.instanceDate), endDate: formatToDateTimeLocal(app.endDate?.toDate()),
-      isAllDay: app.isAllDay ?? false, locationId: app.locationId, description: app.description,
-      meetingPoint: app.meetingPoint, meetingTime: app.meetingTime,
-      visibilityType: app.visibility.type, visibleTeamIds: app.visibility.teamIds || [],
-      recurrence: originalApp?.recurrence || 'none',
-      recurrenceEndDate: formatToDate(originalApp?.recurrenceEndDate?.toDate()),
-      rsvpDeadline: rsvpDeadlineString, originalDateISO: app.instanceDate.toISOString(),
-    });
-    setIsDialogOpen(true);
   };
 
-  const handleDelete = async (appToDelete: UnrolledAppointment, mode: 'single' | 'future' | 'all') => {
+  const handleDeleteEntirely = async (appToDelete: UnrolledAppointment) => {
     if (!firestore) return;
-
-    if (mode === 'single' || (appToDelete.recurrence === 'none' && mode === 'all')) {
-        const exceptionsColRef = collection(firestore, 'appointmentExceptions');
-        const newException = {
-            originalAppointmentId: appToDelete.originalId,
-            originalDate: Timestamp.fromDate(startOfDay(appToDelete.instanceDate)),
-            status: 'cancelled',
-            userId: user!.uid,
-            createdAt: serverTimestamp(),
-            lastUpdated: serverTimestamp()
-        };
-        try {
-            await addDoc(exceptionsColRef, newException);
-            toast({ title: "Termin abgesagt", description: "Der einzelne Termin wurde als abgesagt markiert."});
-        } catch(e: any) {
-            console.error("Error cancelling single appointment:", e);
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'appointmentExceptions', operation: 'create', requestResourceData: newException }));
-        }
-    } else if (mode === 'future') {
-        const originalAppointmentRef = doc(firestore, 'appointments', appToDelete.originalId);
-        const newRecurrenceEndDate = addDays(appToDelete.instanceDate, -1);
-        try {
-            await updateDoc(originalAppointmentRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
-            toast({ title: "Zukünftige Termine gelöscht", description: "Alle zukünftigen Termine wurden entfernt."});
-        } catch(e: any) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: originalAppointmentRef.path, operation: 'update', requestResourceData: { recurrenceEndDate: newRecurrenceEndDate } }));
-        }
-    } else if (mode === 'all') {
-      try {
-        const batch = writeBatch(firestore);
-        const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
-        const exceptionSnapshot = await getDocs(q);
-        exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
-        batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
-        await batch.commit();
-        toast({ title: "Serie gelöscht", description: "Die gesamte Terminserie wurde gelöscht."});
-      } catch (e: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointments/${appToDelete.originalId}`, operation: 'delete' }));
-      }
+    try {
+      const batch = writeBatch(firestore);
+      // Delete all exceptions related to the series
+      const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
+      const exceptionSnapshot = await getDocs(q);
+      exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
+      // Delete the main appointment document
+      batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
+      await batch.commit();
+      toast({ title: "Termin/Serie gelöscht", description: "Der Termin oder die Serie wurde vollständig gelöscht."});
+    } catch (e: any) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointments/${appToDelete.originalId}`, operation: 'delete' }));
     }
   };
 
@@ -372,46 +326,31 @@ export default function AppointmentManagementPage() {
     if (!firestore || !user) return;
     
     try {
-        if (selectedAppointment && data.id && data.originalDateISO) {
-             const functions = getFunctions();
-            if (editMode === 'single') {
-                 const saveSingleFn = httpsCallable(functions, 'saveSingleAppointmentException');
-                 await saveSingleFn({ ...data, originalId: data.id });
-                 toast({ title: 'Änderung gespeichert' });
-            } else if (editMode === 'future') {
-                 const saveFutureFn = httpsCallable(functions, 'saveFutureAppointmentInstances');
-                 await saveFutureFn({ ...data, originalId: data.id });
-                 toast({ title: 'Serie aktualisiert' });
-            }
-        } else {
-            const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
-            let rsvpTimestamp: Timestamp | null = null;
-            if (data.rsvpDeadline) {
-                const [days, hours] = data.rsvpDeadline.split(':').map(Number);
-                const totalMillis = ((days * 24) + (hours || 0)) * 3600000;
-                rsvpTimestamp = Timestamp.fromMillis(new Date(data.startDate).getTime() - totalMillis);
-            }
-
-            const newAppointmentData = {
-                title: (data.title || '').trim() === '' ? typeName : data.title,
-                startDate: Timestamp.fromDate(new Date(data.startDate)),
-                endDate: data.endDate ? Timestamp.fromDate(new Date(data.endDate)) : null,
-                isAllDay: data.isAllDay, appointmentTypeId: data.appointmentTypeId, locationId: data.locationId || null,
-                description: data.description || null, meetingPoint: data.meetingPoint || null, meetingTime: data.meetingTime || null,
-                recurrence: data.recurrence, recurrenceEndDate: data.recurrenceEndDate ? Timestamp.fromDate(new Date(data.recurrenceEndDate)) : null,
-                rsvpDeadline: rsvpTimestamp,
-                visibility: { type: data.visibilityType, teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [] },
-                createdBy: user.uid, createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
-            };
-
-            await addDoc(collection(firestore, 'appointments'), newAppointmentData);
-            toast({ title: 'Erfolg', description: `Der Termin "${newAppointmentData.title}" wurde erstellt.` });
+        const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
+        let rsvpTimestamp: Timestamp | null = null;
+        if (data.rsvpDeadline) {
+            const [days, hours] = data.rsvpDeadline.split(':').map(Number);
+            const totalMillis = ((days * 24) + (hours || 0)) * 3600000;
+            rsvpTimestamp = Timestamp.fromMillis(new Date(data.startDate).getTime() - totalMillis);
         }
+
+        const newAppointmentData = {
+            title: (data.title || '').trim() === '' ? typeName : data.title,
+            startDate: Timestamp.fromDate(new Date(data.startDate)),
+            endDate: data.endDate ? Timestamp.fromDate(new Date(data.endDate)) : null,
+            isAllDay: data.isAllDay, appointmentTypeId: data.appointmentTypeId, locationId: data.locationId || null,
+            description: data.description || null, meetingPoint: data.meetingPoint || null, meetingTime: data.meetingTime || null,
+            recurrence: data.recurrence, recurrenceEndDate: data.recurrenceEndDate ? Timestamp.fromDate(new Date(data.recurrenceEndDate)) : null,
+            rsvpDeadline: rsvpTimestamp,
+            visibility: { type: data.visibilityType, teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [] },
+            createdBy: user.uid, createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
+        };
+
+        await addDoc(collection(firestore, 'appointments'), newAppointmentData);
+        toast({ title: 'Erfolg', description: `Der Termin "${newAppointmentData.title}" wurde erstellt.` });
         
         form.reset();
         setIsDialogOpen(false);
-        setSelectedAppointment(null);
-        setEditMode(null);
 
     } catch (e: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointments`, operation: 'write', requestResourceData: data }));
@@ -433,68 +372,57 @@ export default function AppointmentManagementPage() {
     );
   }
 
-  const renderEditModeSelection = () => (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6">
-        <DialogHeader><DialogTitle className="text-center text-2xl">Was möchten Sie bearbeiten?</DialogTitle><DialogDescription className="text-center">Dies ist ein Serientermin. Sie können nur diese eine Instanz oder alle zukünftigen Instanzen bearbeiten.</DialogDescription></DialogHeader>
-        <div className="flex w-full gap-4">
-            <Button className="w-1/2" variant="outline" size="lg" onClick={() => setEditMode('single')}>Nur diesen Termin</Button>
-            <Button className="w-1/2" size="lg" onClick={() => setEditMode('future')}>Alle zukünftigen Termine</Button>
-        </div>
-    </div>
-  );
-
-  const renderForm = () => (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-         <DialogHeader><DialogTitle>{selectedAppointment ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle></DialogHeader>
-         <div className="py-4 max-h-[70vh] overflow-y-auto px-1">
-            <div className="space-y-6 p-4">
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <FormField control={form.control} name="appointmentTypeId" render={({ field }) => (<FormItem><FormLabel>Art des Termins*</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Terminart auswählen..." /></SelectTrigger></FormControl><SelectContent>{appointmentTypes?.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
-                    <FormField control={form.control} name="title" render={({ field }) => (<FormItem><FormLabel>Titel (optional)</FormLabel><FormControl><Input placeholder="Wird automatisch gesetzt" {...field} /></FormControl><FormDescription>Wenn leer, wird der Name der Terminart verwendet.</FormDescription><FormMessage /></FormItem>)}/>
-                    <FormField control={form.control} name="locationId" render={({ field }) => (<FormItem><FormLabel>Ort</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl><SelectContent>{locations?.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select></FormItem>)}/>
-                    <FormField control={form.control} name="startDate" render={({ field }) => (<FormItem><FormLabel>Startdatum & Uhrzeit*</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={form.control} name="endDate" render={({ field }) => (<FormItem><FormLabel>Enddatum & Uhrzeit</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={form.control} name="isAllDay" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm h-full"><div className="space-y-0.5"><FormLabel>Ganztägig</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)}/>
-                </div>
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                     <FormField control={form.control} name="recurrence" render={({ field }) => (<FormItem><FormLabel>Wiederholung</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={!!selectedAppointment}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Keine</SelectItem><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="bi-weekly">Alle 2 Wochen</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select>{selectedAppointment && <FormDescription>Wiederholungen können nicht nachträglich geändert werden.</FormDescription>}</FormItem>)}/>
-                    <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (<FormItem><FormLabel>Ende der Wiederholung</FormLabel><FormControl><Input type="date" {...field} disabled={form.watch('recurrence') === 'none' || !!selectedAppointment} /></FormControl><FormMessage /></FormItem>)}/>
-                    <FormField control={form.control} name="rsvpDeadline" render={({ field }) => (<FormItem><FormLabel>Rückmeldefrist</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Frist für Rückmeldung" /></SelectTrigger></FormControl><SelectContent><SelectItem value="0:12">12 Stunden vorher</SelectItem><SelectItem value="1:0">1 Tag vorher</SelectItem><SelectItem value="2:0">2 Tage vorher</SelectItem><SelectItem value="3:0">3 Tage vorher</SelectItem></SelectContent></Select></FormItem>)}/>
-                </div>
-                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <FormField control={form.control} name="meetingPoint" render={({ field }) => (<FormItem><FormLabel>Treffpunkt</FormLabel><FormControl><Input placeholder="z.B. Vor der Halle" {...field} /></FormControl></FormItem>)}/>
-                    <FormField control={form.control} name="meetingTime" render={({ field }) => (<FormItem><FormLabel>Treffzeit</FormLabel><FormControl><Input placeholder="z.B. 1h vor Beginn" {...field} /></FormControl></FormItem>)}/>
-                    <div className="md:col-span-2"><FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Beschreibung</FormLabel><FormControl><Textarea placeholder="Zusätzliche Informationen" {...field} /></FormControl></FormItem>)}/></div>
-                </div>
-                 <div>
-                    <FormField control={form.control} name="visibilityType" render={({ field }) => (<FormItem className="space-y-3"><FormLabel>Sichtbarkeit</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="all">Alle</SelectItem><SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem></SelectContent></Select></FormItem>)}/>
-                    {watchVisibilityType === 'specificTeams' && (<div className="pt-4"><FormField control={form.control} name="visibleTeamIds" render={() => (<FormItem><FormLabel>Mannschaften auswählen</FormLabel><ScrollArea className="h-32 rounded-md border p-4"><div className="grid grid-cols-2 gap-2">{teams.map(team => (<FormField key={team.id} control={form.control} name="visibleTeamIds" render={({ field }) => (<FormItem className="flex items-center space-x-3"><FormControl><Checkbox checked={field.value?.includes(team.id)} onCheckedChange={checked => field.onChange(checked ? [...field.value || [], team.id] : field.value?.filter(id => id !== team.id))} /></FormControl><FormLabel className="font-normal">{team.name}</FormLabel></FormItem>)} />))}</div></ScrollArea></FormItem>)}/></div>)}
-                 </div>
-              </div>
-          </div>
-          <DialogFooter className="pt-4 border-t"><Button type="button" variant="ghost" onClick={() => { setIsDialogOpen(false); setEditMode(null); }}>Abbrechen</Button><Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{selectedAppointment ? 'Änderungen speichern' : 'Termin erstellen'}</Button></DialogFooter>
-      </form>
-    </Form>
-  );
-
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
        <div className="flex items-center justify-between mb-6">
             <h1 className="flex items-center gap-3 text-3xl font-bold">
                 <CalendarIcon className="h-8 w-8 text-primary" />
-                <span className="font-headline">Alle Termine</span>
+                <span className="font-headline">Termine verwalten</span>
             </h1>
             <div className="flex items-center gap-2">
               <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter}><SelectTrigger className="w-auto min-w-[160px]"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Mannschaften</SelectItem>{teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}</SelectContent></Select>
               <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}><SelectTrigger className="w-auto min-w-[160px]"><SelectValue placeholder="Nach Art filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Typen</SelectItem>{appointmentTypes?.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select>
-              <Button onClick={handleAddNew}><Plus className="mr-2 h-4 w-4" />Termin hinzufügen</Button>
+              <Button onClick={handleAddNew}>
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                Termin hinzufügen
+              </Button>
             </div>
         </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setEditMode(null); }}>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl">
-          {(selectedAppointment && selectedAppointment.recurrence !== 'none' && !editMode) ? renderEditModeSelection() : renderForm()}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)}>
+              <DialogHeader><DialogTitle>Neuen Termin erstellen</DialogTitle></DialogHeader>
+              <div className="py-4 max-h-[70vh] overflow-y-auto px-1">
+                  <div className="space-y-6 p-4">
+                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                          <FormField control={form.control} name="appointmentTypeId" render={({ field }) => (<FormItem><FormLabel>Art des Termins*</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Terminart auswählen..." /></SelectTrigger></FormControl><SelectContent>{appointmentTypes?.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                          <FormField control={form.control} name="title" render={({ field }) => (<FormItem><FormLabel>Titel (optional)</FormLabel><FormControl><Input placeholder="Wird automatisch gesetzt" {...field} /></FormControl><FormDescription>Wenn leer, wird der Name der Terminart verwendet.</FormDescription><FormMessage /></FormItem>)}/>
+                          <FormField control={form.control} name="locationId" render={({ field }) => (<FormItem><FormLabel>Ort</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ort auswählen..." /></SelectTrigger></FormControl><SelectContent>{locations?.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select></FormItem>)}/>
+                          <FormField control={form.control} name="startDate" render={({ field }) => (<FormItem><FormLabel>Startdatum & Uhrzeit*</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                          <FormField control={form.control} name="endDate" render={({ field }) => (<FormItem><FormLabel>Enddatum & Uhrzeit</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                          <FormField control={form.control} name="isAllDay" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm h-full"><div className="space-y-0.5"><FormLabel>Ganztägig</FormLabel></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)}/>
+                      </div>
+                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                          <FormField control={form.control} name="recurrence" render={({ field }) => (<FormItem><FormLabel>Wiederholung</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Keine</SelectItem><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="bi-weekly">Alle 2 Wochen</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select></FormItem>)}/>
+                          <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (<FormItem><FormLabel>Ende der Wiederholung</FormLabel><FormControl><Input type="date" {...field} disabled={form.watch('recurrence') === 'none'} /></FormControl><FormMessage /></FormItem>)}/>
+                          <FormField control={form.control} name="rsvpDeadline" render={({ field }) => (<FormItem><FormLabel>Rückmeldefrist</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Frist für Rückmeldung" /></SelectTrigger></FormControl><SelectContent><SelectItem value="0:12">12 Stunden vorher</SelectItem><SelectItem value="1:0">1 Tag vorher</SelectItem><SelectItem value="2:0">2 Tage vorher</SelectItem><SelectItem value="3:0">3 Tage vorher</SelectItem></SelectContent></Select></FormItem>)}/>
+                      </div>
+                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                          <FormField control={form.control} name="meetingPoint" render={({ field }) => (<FormItem><FormLabel>Treffpunkt</FormLabel><FormControl><Input placeholder="z.B. Vor der Halle" {...field} /></FormControl></FormItem>)}/>
+                          <FormField control={form.control} name="meetingTime" render={({ field }) => (<FormItem><FormLabel>Treffzeit</FormLabel><FormControl><Input placeholder="z.B. 1h vor Beginn" {...field} /></FormControl></FormItem>)}/>
+                          <div className="md:col-span-2"><FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Beschreibung</FormLabel><FormControl><Textarea placeholder="Zusätzliche Informationen" {...field} /></FormControl></FormItem>)}/></div>
+                      </div>
+                      <div>
+                          <FormField control={form.control} name="visibilityType" render={({ field }) => (<FormItem className="space-y-3"><FormLabel>Sichtbarkeit</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="all">Alle</SelectItem><SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem></SelectContent></Select></FormItem>)}/>
+                          {watchVisibilityType === 'specificTeams' && (<div className="pt-4"><FormField control={form.control} name="visibleTeamIds" render={() => (<FormItem><FormLabel>Mannschaften auswählen</FormLabel><ScrollArea className="h-32 rounded-md border p-4"><div className="grid grid-cols-2 gap-2">{teams.map(team => (<FormField key={team.id} control={form.control} name="visibleTeamIds" render={({ field }) => (<FormItem className="flex items-center space-x-3"><FormControl><Checkbox checked={field.value?.includes(team.id)} onCheckedChange={checked => field.onChange(checked ? [...field.value || [], team.id] : field.value?.filter(id => id !== team.id))} /></FormControl><FormLabel className="font-normal">{team.name}</FormLabel></FormItem>)} />))}</div></ScrollArea></FormItem>)}/></div>)}
+                      </div>
+                    </div>
+                </div>
+                <DialogFooter className="pt-4 border-t"><Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>Abbrechen</Button><Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Termin erstellen</Button></DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
       
@@ -516,7 +444,7 @@ export default function AppointmentManagementPage() {
                                         if (rsvpDeadline) {
                                             const startMillis = app.startDate.toMillis();
                                             const rsvpMillis = rsvpDeadline.toMillis();
-                                            const offset = startMillis - rsvpMillis; // This is wrong for series, but best guess
+                                            const offset = startMillis - rsvpMillis;
                                             const instanceStartMillis = app.instanceDate.getTime();
                                             const instanceRsvpMillis = instanceStartMillis - offset;
                                             rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
@@ -534,8 +462,26 @@ export default function AppointmentManagementPage() {
                                               <TableCell>{rsvpDeadlineString}</TableCell>
                                               <TableCell className="text-right">
                                                   <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
-                                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(app)}><Edit className="h-4 w-4" /></Button>
-                                                  <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Termin löschen</AlertDialogTitle><AlertDialogDescription>{app.recurrence !== 'none' ? "Dies ist ein Serientermin. Was möchten Sie löschen?" : "Möchten Sie diesen Termin wirklich löschen?"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter>{app.recurrence !== 'none' ? (<><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(app, 'single')}>Nur diesen</AlertDialogAction><AlertDialogAction onClick={() => handleDelete(app, 'future')}>Diesen & zukünftige</AlertDialogAction><AlertDialogAction onClick={() => handleDelete(app, 'all')}>Ganze Serie</AlertDialogAction></>) : (<><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(app, 'all')}>Endgültig löschen</AlertDialogAction></>)}</AlertDialogFooter></AlertDialogContent></AlertDialog>
+                                                  <AlertDialog>
+                                                      <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><X className="h-4 w-4 text-orange-600" /></Button></AlertDialogTrigger>
+                                                      <AlertDialogContent>
+                                                          <AlertDialogHeader><AlertDialogTitle>Diesen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie wirklich nur diesen einen Termin absagen? Er wird für alle als "abgesagt" markiert. Dies kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader>
+                                                          <AlertDialogFooter>
+                                                              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                              <AlertDialogAction onClick={() => handleCancelSingle(app)}>Ja, nur diesen Termin absagen</AlertDialogAction>
+                                                          </AlertDialogFooter>
+                                                      </AlertDialogContent>
+                                                  </AlertDialog>
+                                                  <AlertDialog>
+                                                      <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                                                      <AlertDialogContent>
+                                                          <AlertDialogHeader><AlertDialogTitle>Termin löschen?</AlertDialogTitle><AlertDialogDescription>{app.recurrence !== 'none' ? "Dies ist ein Serientermin. Das Löschen entfernt die GESAMTE Serie für alle Benutzer endgültig." : "Möchten Sie diesen Termin wirklich endgültig löschen?"}</AlertDialogDescription></AlertDialogHeader>
+                                                          <AlertDialogFooter>
+                                                              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                              <AlertDialogAction onClick={() => handleDeleteEntirely(app)} className="bg-destructive hover:bg-destructive/90">Ja, endgültig löschen</AlertDialogAction>
+                                                          </AlertDialogFooter>
+                                                      </AlertDialogContent>
+                                                  </AlertDialog>
                                               </TableCell>
                                           </TableRow>
                                         );
@@ -590,7 +536,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
 
   return (
     <Dialog>
-      <DialogTrigger asChild><Button variant="ghost" size="icon"><CalendarIcon className="h-4 w-4" /></Button></DialogTrigger>
+      <DialogTrigger asChild><Button variant="ghost" size="icon"><Users className="h-4 w-4" /></Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Teilnehmerliste für "{appointment.title}"</DialogTitle><DialogDescription>{formatDate(appointment.instanceDate, "eeee, dd. MMMM yyyy 'um' HH:mm 'Uhr'", { locale: de })}</DialogDescription></DialogHeader>
         <ScrollArea className="max-h-[60vh]"><div className="space-y-4 p-4">
@@ -603,6 +549,5 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
-
 
     
