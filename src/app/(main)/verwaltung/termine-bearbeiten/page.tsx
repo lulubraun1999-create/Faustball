@@ -56,7 +56,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException, MemberProfile, AppointmentResponse } from '@/lib/types';
-import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon } from 'lucide-react';
+import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon, Users } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
@@ -68,6 +68,7 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -78,6 +79,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Table,
@@ -305,22 +307,29 @@ export default function AppointmentManagementPage() {
     }
   };
 
-  const handleDeleteEntirely = async (appToDelete: UnrolledAppointment) => {
+  const handleDelete = async (appToDelete: UnrolledAppointment) => {
     if (!firestore) return;
     try {
-      const batch = writeBatch(firestore);
-      // Delete all exceptions related to the series
-      const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
-      const exceptionSnapshot = await getDocs(q);
-      exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
-      // Delete the main appointment document
-      batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
-      await batch.commit();
-      toast({ title: "Termin/Serie gelöscht", description: "Der Termin oder die Serie wurde vollständig gelöscht."});
+        const batch = writeBatch(firestore);
+        
+        if (appToDelete.recurrence === 'none') {
+            // Einzeltermin löschen
+            batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
+        } else {
+            // Komplette Serie löschen
+            const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
+            const exceptionSnapshot = await getDocs(q);
+            exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
+            batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
+        }
+        
+        await batch.commit();
+        toast({ title: "Termin/Serie gelöscht", description: "Der Termin oder die Serie wurde vollständig gelöscht."});
     } catch (e: any) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointments/${appToDelete.originalId}`, operation: 'delete' }));
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointments/${appToDelete.originalId}`, operation: 'delete' }));
     }
   };
+
 
   const onSubmit = async (data: AppointmentFormValues) => {
     if (!firestore || !user) return;
@@ -478,7 +487,7 @@ export default function AppointmentManagementPage() {
                                                           <AlertDialogHeader><AlertDialogTitle>Termin löschen?</AlertDialogTitle><AlertDialogDescription>{app.recurrence !== 'none' ? "Dies ist ein Serientermin. Das Löschen entfernt die GESAMTE Serie für alle Benutzer endgültig." : "Möchten Sie diesen Termin wirklich endgültig löschen?"}</AlertDialogDescription></AlertDialogHeader>
                                                           <AlertDialogFooter>
                                                               <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                                              <AlertDialogAction onClick={() => handleDeleteEntirely(app)} className="bg-destructive hover:bg-destructive/90">Ja, endgültig löschen</AlertDialogAction>
+                                                              <AlertDialogAction onClick={() => handleDelete(app)} className="bg-destructive hover:bg-destructive/90">Ja, endgültig löschen</AlertDialogAction>
                                                           </AlertDialogFooter>
                                                       </AlertDialogContent>
                                                   </AlertDialog>
@@ -550,4 +559,3 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
   );
 }
 
-    
