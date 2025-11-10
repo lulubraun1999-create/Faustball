@@ -587,10 +587,11 @@ export default function AdminTerminePage() {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       {/* DIALOGS */}
       <Dialog open={isAppointmentDialogOpen} onOpenChange={(open) => { setIsAppointmentDialogOpen(open); if (!open) resetAppointmentForm(); }}>
-        <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-2xl flex flex-col h-full max-h-[95vh] sm:h-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><CalendarPlus className="h-5 w-5" />{selectedAppointment ? 'Termin bearbeiten' : 'Termin hinzufügen'}</DialogTitle><DialogDescription>{selectedAppointment ? 'Details des Termins ändern.' : 'Neuen Termin oder Serie hinzufügen.'}</DialogDescription></DialogHeader>
-          <div className="flex-grow overflow-hidden relative">
-            <ScrollArea className="absolute inset-0">
+          <div className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <div className="pr-6">
               <Form {...appointmentForm}><form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 px-1 py-4">
                 <FormField control={appointmentForm.control} name="appointmentTypeId" render={({ field }) => ( <FormItem> <div className="flex items-center justify-between"><FormLabel>Art des Termins</FormLabel><Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}><DialogTrigger asChild><Button type="button" variant="outline" size="sm" className="h-7"><Plus className="h-3 w-3 mr-1" /> Verwalten</Button></DialogTrigger><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Termin-Arten verwalten</DialogTitle></DialogHeader><Form {...typeForm}><form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}><div className="space-y-4 py-4"><FormField control={typeForm.control} name="name" render={({ field }) => ( <FormItem><FormLabel>Neue Art hinzufügen</FormLabel><FormControl><Input placeholder="z.B. Turnier" {...field} /></FormControl><FormMessage /></FormItem> )}/><Button type="button" className="w-full" onClick={typeForm.handleSubmit(onSubmitAppointmentType)} disabled={typeForm.formState.isSubmitting}>{typeForm.formState.isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}Typ Speichern</Button></div></form></Form><Separator className="my-4" /><h4 className="text-sm font-medium mb-2">Bestehende Arten</h4><ScrollArea className="h-40"><div className="space-y-2 pr-4">{appointmentTypes && appointmentTypes.length > 0 ? ( appointmentTypes.map((type) => ( <div key={type.id} className="flex justify-between items-center p-2 hover:bg-accent rounded-md"><span>{type.name}</span><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle><AlertDialogDescription>Möchten Sie "{type.name}" wirklich löschen?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => onDeleteAppointmentType(type.id)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div> )) ) : ( <p className="text-sm text-muted-foreground text-center">Keine Arten gefunden.</p> )}</div></ScrollArea><DialogFooter className="mt-4"><DialogClose asChild><Button type="button" variant="outline">Schließen</Button></DialogClose></DialogFooter></DialogContent></Dialog></div><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Art auswählen..." /></SelectTrigger></FormControl><SelectContent>{isLoadingTypes ? (<SelectItem value="loading" disabled>Lade...</SelectItem>) : ( appointmentTypes?.map((type) => (<SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)) )}</SelectContent></Select><FormMessage /></FormItem> )}/>
                 <FormField control={appointmentForm.control} name="title" render={({ field }) => { const isSonstigesSelected = sonstigeTypeId === watchAppointmentTypeId; return ( <FormItem><FormLabel>Titel{' '}{isSonstigesSelected ? ('') : (<span className="text-xs text-muted-foreground">(Optional, Standard: Art)</span>)}</FormLabel><FormControl><Input placeholder={isSonstigesSelected ? 'Titel ist erforderlich...' : 'Optionaler Titel...'} {...field} /></FormControl><FormMessage /></FormItem> ); }}/>
@@ -604,19 +605,21 @@ export default function AdminTerminePage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><FormField control={appointmentForm.control} name="meetingPoint" render={({ field }) => ( <FormItem><FormLabel>Treffpunkt (optional)</FormLabel><FormControl><Input placeholder="z.B. Eingang Halle" {...field} /></FormControl><FormMessage /></FormItem> )}/><FormField control={appointmentForm.control} name="meetingTime" render={({ field }) => ( <FormItem><FormLabel>Treffzeit (optional)</FormLabel><FormControl><Input placeholder="z.B. 18:45 Uhr" {...field} /></FormControl><FormMessage /></FormItem> )}/></div>
                 <FormField control={appointmentForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details..." {...field} /></FormControl><FormMessage /></FormItem> )}/>
               </form></Form>
+              </div>
             </ScrollArea>
           </div>
-          <DialogFooter className="pt-4 border-t shrink-0"><DialogClose asChild><Button type="button" variant="ghost" onClick={resetAppointmentForm}>Abbrechen</Button></DialogClose><Button type="button" variant="default" onClick={appointmentForm.handleSubmit(onSubmitAppointment)} disabled={isSubmitting}>{isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}{selectedAppointment ? 'Termin speichern' : 'Termin hinzufügen'}</Button></DialogFooter>
+          <DialogFooter className="flex-shrink-0 pt-4 border-t"><DialogClose asChild><Button type="button" variant="ghost" onClick={resetAppointmentForm}>Abbrechen</Button></DialogClose><Button type="button" variant="default" onClick={appointmentForm.handleSubmit(onSubmitAppointment)} disabled={isSubmitting}>{isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}{selectedAppointment ? 'Termin speichern' : 'Termin hinzufügen'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={isInstanceDialogOpen} onOpenChange={(open) => { setIsInstanceDialogOpen(open); if (!open) { setSelectedInstanceToEdit(null); instanceForm.reset(); } }}>
-        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-lg flex flex-col h-full max-h-[95vh] sm:h-auto">
           <DialogHeader>
             <DialogTitle>Einzelnen Termin bearbeiten</DialogTitle>
             <DialogDescription>Ändere Details nur für diesen spezifischen Termin am{' '}{selectedInstanceToEdit?.instanceDate ? format(selectedInstanceToEdit.instanceDate, 'dd.MM.yyyy HH:mm', { locale: de }) : ''}.</DialogDescription>
           </DialogHeader>
-          <div className="flex-grow overflow-hidden relative">
-            <ScrollArea className="absolute inset-0">
+          <div className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <div className="pr-6">
               <Form {...instanceForm}>
                 <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }} className="space-y-4 pt-4 px-1">
                     <input type="hidden" {...instanceForm.register('originalId')} />
@@ -631,9 +634,10 @@ export default function AdminTerminePage() {
                     <FormField control={instanceForm.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Beschreibung (optional)</FormLabel><FormControl><Textarea placeholder="Weitere Details..." {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem> )}/>
                 </form>
               </Form>
+              </div>
             </ScrollArea>
           </div>
-          <DialogFooter className="pt-4 border-t shrink-0">
+          <DialogFooter className="flex-shrink-0 pt-4 border-t">
             <DialogClose asChild><Button type="button" variant="ghost">Abbrechen</Button></DialogClose>
             <Button type="button" onClick={instanceForm.handleSubmit(onSubmitSingleInstance)} disabled={isSubmitting}>{isSubmitting && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}Speichern</Button>
           </DialogFooter>
