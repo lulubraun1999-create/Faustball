@@ -56,7 +56,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException } from '@/lib/types';
-import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, Plus } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
