@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -77,7 +78,6 @@ export function MobileNav() {
                 ) : isAdmin ? (
                      <div className="flex flex-col space-y-3 pt-6">
                         <h4 className="font-medium">Admin</h4>
-                        <Link href="/verwaltung/termine-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Termine bearbeiten</Link>
                         <Link href="/verwaltung/gruppen-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaften bearbeiten</Link>
                         <Link href="/verwaltung/mitglieder-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mitglieder bearbeiten</Link>
                         <Link href="/verwaltung/umfragen-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Umfragen bearbeiten</Link>

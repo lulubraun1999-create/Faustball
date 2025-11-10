@@ -86,9 +86,6 @@ export function VerwaltungDropdown() {
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem asChild>
-                  <Link href="/verwaltung/termine-bearbeiten">Termine bearbeiten</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link href="/verwaltung/gruppen-bearbeiten">Mannschaften bearbeiten</Link>
                 </DropdownMenuItem>
                  <DropdownMenuItem asChild>
