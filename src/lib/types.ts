@@ -130,7 +130,7 @@ export interface AppointmentException {
   status: 'cancelled' | 'modified'; // Art der Ausnahme
   modifiedData?: { // Nur relevant, wenn status 'modified' ist
     startDate?: Timestamp; // Die neue Startzeit für diesen Tag
-    endDate?: Timestamp; // Die neue Endzeit für diesen Tag
+    endDate?: Timestamp | null; // Die neue Endzeit für diesen Tag
     title?: string; // Der neue Titel für diesen Tag
     locationId?: string; // Der neue Ort für diesen Tag
     description?: string; // Die neue Beschreibung für diesen Tag
@@ -139,6 +139,7 @@ export interface AppointmentException {
     isAllDay?: boolean; // Das neue isAllDay für diesen Tag
   };
   createdAt?: Timestamp | FieldValue; // Wann wurde die Ausnahme erstellt
+  lastUpdated?: Timestamp | FieldValue;
   userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
 }
 
@@ -214,3 +215,5 @@ export interface Absence {
   reason: string;
   createdAt: Timestamp | FieldValue;
 }
+
+    

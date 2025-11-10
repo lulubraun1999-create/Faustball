@@ -56,7 +56,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException, MemberProfile, AppointmentResponse } from '@/lib/types';
-import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon, Users } from 'lucide-react';
+import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon, Users, Undo2 } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
@@ -172,11 +172,8 @@ export default function AppointmentManagementPage() {
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
-      title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false,
-      locationId: '', description: '', meetingPoint: '', meetingTime: '',
-      visibilityType: 'all', visibleTeamIds: [], recurrence: 'none',
-      recurrenceEndDate: '', rsvpDeadline: '',
-    },
+      title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '',
+      visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadline: '' },
   });
 
   const watchVisibilityType = form.watch('visibilityType');
@@ -205,8 +202,7 @@ export default function AppointmentManagementPage() {
 
         const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
-        if (exception?.status === 'cancelled') return;
-
+        
         let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
@@ -215,7 +211,7 @@ export default function AppointmentManagementPage() {
           isException = true;
         }
 
-        allEvents.push({ ...finalData, instanceDate: finalData.startDate.toDate(), originalId: app.id, virtualId: app.id, isCancelled: false, isException });
+        allEvents.push({ ...finalData, instanceDate: finalData.startDate.toDate(), originalId: app.id, virtualId: app.id, isCancelled: exception?.status === 'cancelled', isException });
       } else {
         let currentDate = appStartDate;
         const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
@@ -225,7 +221,7 @@ export default function AppointmentManagementPage() {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
             const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-            if (instanceException?.status !== 'cancelled') {
+            
               let isException = false;
               let instanceData: Appointment = { ...app };
               let instanceStartDate = currentDate;
@@ -243,9 +239,9 @@ export default function AppointmentManagementPage() {
                 ...instanceData,
                 id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
                 instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
-                isCancelled: false, isException,
+                isCancelled: instanceException?.status === 'cancelled', isException,
               });
-            }
+            
           }
           
           switch (app.recurrence) {
@@ -306,22 +302,42 @@ export default function AppointmentManagementPage() {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'appointmentExceptions', operation: 'create', requestResourceData: newException }));
     }
   };
+  
+  const handleRestoreSingle = async (appToRestore: UnrolledAppointment) => {
+    if (!firestore) return;
+    const q = query(collection(firestore, 'appointmentExceptions'), 
+        where('originalAppointmentId', '==', appToRestore.originalId),
+        where('originalDate', '==', Timestamp.fromDate(startOfDay(appToRestore.instanceDate))),
+        where('status', '==', 'cancelled')
+    );
+    try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            toast({ variant: "destructive", title: "Fehler", description: "Keine passende Ausnahme zum Wiederherstellen gefunden."});
+            return;
+        }
+        const batch = writeBatch(firestore);
+        querySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        toast({ title: "Termin wiederhergestellt" });
+    } catch(e: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `appointmentExceptions`, operation: 'delete' }));
+    }
+};
 
   const handleDelete = async (appToDelete: UnrolledAppointment) => {
     if (!firestore) return;
     try {
         const batch = writeBatch(firestore);
         
-        if (appToDelete.recurrence === 'none') {
-            // Einzeltermin löschen
-            batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
-        } else {
-            // Komplette Serie löschen
-            const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
-            const exceptionSnapshot = await getDocs(q);
-            exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
-            batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
-        }
+        // Immer die ganze Serie löschen, egal ob Einzel- oder Serientermin
+        const q = query(collection(firestore, 'appointmentExceptions'), where('originalAppointmentId', '==', appToDelete.originalId));
+        const exceptionSnapshot = await getDocs(q);
+        exceptionSnapshot.forEach(doc => batch.delete(doc.ref));
+        
+        batch.delete(doc(firestore, 'appointments', appToDelete.originalId));
         
         await batch.commit();
         toast({ title: "Termin/Serie gelöscht", description: "Der Termin oder die Serie wurde vollständig gelöscht."});
@@ -393,7 +409,7 @@ export default function AppointmentManagementPage() {
               <Select value={selectedTypeFilter} onValueChange={setSelectedTypeFilter}><SelectTrigger className="w-auto min-w-[160px]"><SelectValue placeholder="Nach Art filtern..." /></SelectTrigger><SelectContent><SelectItem value="all">Alle Typen</SelectItem>{appointmentTypes?.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select>
               <Button onClick={handleAddNew}>
                 <CalendarPlus className="mr-2 h-4 w-4" />
-                Termin hinzufügen
+                Termin erstellen
               </Button>
             </div>
         </div>
@@ -460,7 +476,7 @@ export default function AppointmentManagementPage() {
                                         }
 
                                         return (
-                                          <TableRow key={app.virtualId}>
+                                          <TableRow key={app.virtualId} className={cn(app.isCancelled && 'bg-red-50/50 text-muted-foreground line-through dark:bg-red-900/20')}>
                                               <TableCell><div className="font-medium">{typeName}</div>{app.title !== typeName && <div className="text-xs text-muted-foreground">({app.title})</div>}</TableCell>
                                               <TableCell>{formatDate(app.instanceDate, 'dd.MM.yy')}<br/>{formatDate(app.instanceDate, 'HH:mm')}</TableCell>
                                               <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</TableCell>
@@ -471,16 +487,25 @@ export default function AppointmentManagementPage() {
                                               <TableCell>{rsvpDeadlineString}</TableCell>
                                               <TableCell className="text-right">
                                                   <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
-                                                  <AlertDialog>
+                                                  
+                                                  {app.isCancelled ? (
+                                                    <AlertDialog>
+                                                      <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Undo2 className="h-4 w-4 text-green-600" /></Button></AlertDialogTrigger>
+                                                      <AlertDialogContent>
+                                                        <AlertDialogHeader><AlertDialogTitle>Termin wiederherstellen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie diesen Termin wieder aktivieren? Er wird danach wieder für alle sichtbar und gültig sein.</AlertDialogDescription></AlertDialogHeader>
+                                                        <AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleRestoreSingle(app)}>Ja, wiederherstellen</AlertDialogAction></AlertDialogFooter>
+                                                      </AlertDialogContent>
+                                                    </AlertDialog>
+                                                  ) : (
+                                                    <AlertDialog>
                                                       <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><X className="h-4 w-4 text-orange-600" /></Button></AlertDialogTrigger>
                                                       <AlertDialogContent>
-                                                          <AlertDialogHeader><AlertDialogTitle>Diesen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie wirklich nur diesen einen Termin absagen? Er wird für alle als "abgesagt" markiert. Dies kann nicht rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader>
-                                                          <AlertDialogFooter>
-                                                              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                                              <AlertDialogAction onClick={() => handleCancelSingle(app)}>Ja, nur diesen Termin absagen</AlertDialogAction>
-                                                          </AlertDialogFooter>
+                                                          <AlertDialogHeader><AlertDialogTitle>Diesen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie wirklich nur diesen einen Termin absagen? Er wird für alle als "abgesagt" markiert. Dies kann rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader>
+                                                          <AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingle(app)}>Ja, nur diesen Termin absagen</AlertDialogAction></AlertDialogFooter>
                                                       </AlertDialogContent>
-                                                  </AlertDialog>
+                                                    </AlertDialog>
+                                                  )}
+
                                                   <AlertDialog>
                                                       <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                                                       <AlertDialogContent>
@@ -559,3 +584,4 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
   );
 }
 
+    

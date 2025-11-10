@@ -186,8 +186,7 @@ export default function VerwaltungTerminePage() {
 
         const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
-        if (exception?.status === 'cancelled') return;
-
+        
         let finalData: Appointment = { ...app };
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
@@ -195,15 +194,16 @@ export default function VerwaltungTerminePage() {
             finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
             isException = true;
         }
-
+        
         allEvents.push({
           ...finalData,
           instanceDate: finalData.startDate.toDate(),
           originalId: app.id,
           virtualId: app.id,
-          isCancelled: false,
+          isCancelled: exception?.status === 'cancelled',
           isException,
         });
+
       } else {
         let currentDate = appStartDate;
         const duration = app.endDate instanceof Timestamp ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
@@ -213,38 +213,36 @@ export default function VerwaltungTerminePage() {
         const startMonth = getMonth(currentDate);
         const startDayOfMonth = currentDate.getDate();
         const startDayOfWeek = currentDate.getDay();
-  
+
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
           if (currentDate >= today) {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
             const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-            if (instanceException?.status !== 'cancelled') {
-                let isException = false;
-                let instanceData = { ...app };
-                let instanceStartDate = currentDate;
-                let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
+            let isException = false;
+            let instanceData = { ...app };
+            let instanceStartDate = currentDate;
+            let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
 
-                if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                    isException = true;
-                    const modData = instanceException.modifiedData;
-                    instanceData = { ...instanceData, ...modData };
-                    instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
-                    instanceEndDate = modData?.endDate?.toDate() ?? instanceEndDate;
-                }
-                
-                allEvents.push({
-                    ...instanceData,
-                    id: `${app.id}-${currentDate.toISOString()}`,
-                    virtualId: `${app.id}-${currentDateStartOfDayISO}`,
-                    originalId: app.id,
-                    instanceDate: instanceStartDate,
-                    startDate: Timestamp.fromDate(instanceStartDate),
-                    endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
-                    isCancelled: false,
-                    isException,
-                });
+            if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                isException = true;
+                const modData = instanceException.modifiedData;
+                instanceData = { ...instanceData, ...modData };
+                instanceStartDate = modData?.startDate?.toDate() ?? instanceStartDate;
+                instanceEndDate = modData?.endDate?.toDate() ?? instanceEndDate;
             }
+            
+            allEvents.push({
+                ...instanceData,
+                id: `${app.id}-${currentDate.toISOString()}`,
+                virtualId: `${app.id}-${currentDateStartOfDayISO}`,
+                originalId: app.id,
+                instanceDate: instanceStartDate,
+                startDate: Timestamp.fromDate(instanceStartDate),
+                endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+                isCancelled: instanceException?.status === 'cancelled',
+                isException,
+            });
           }
           
           iter++;
@@ -541,7 +539,7 @@ export default function VerwaltungTerminePage() {
                                     </TableHeader>
                                     <TableBody>
                                         {appointmentsInMonth.map((app) => {
-                                        const canRespond = isUserRelevantForAppointment(app, profile) && !app.isCancelled;
+                                        const canRespond = isUserRelevantForAppointment(app, profile);
                                         const dateString = formatDate(app.instanceDate, 'yyyy-MM-dd');
                                         const userResponse = allResponses?.find(r => r.id === `${app.originalId}_${dateString}_${auth.user?.uid}`);
 
@@ -822,5 +820,7 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
+
+    
 
     
