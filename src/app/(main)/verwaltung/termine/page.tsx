@@ -118,8 +118,21 @@ export default function VerwaltungTerminePage() {
   );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
-  const allResponsesRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentResponses') : null), [firestore, auth.user]);
-  const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
+    // Admins fetch all responses, users fetch only their own.
+  const allResponsesQuery = useMemoFirebase(
+    () => (firestore && auth.isAdmin ? collection(firestore, 'appointmentResponses') : null),
+    [firestore, auth.isAdmin]
+  );
+  const { data: allResponsesForAdmin, isLoading: isLoadingAllResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
+
+  const userResponsesQuery = useMemoFirebase(
+    () => (firestore && auth.user && !auth.isAdmin ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', auth.user.uid)) : null),
+    [firestore, auth.user, auth.isAdmin]
+  );
+  const { data: userResponses, isLoading: isLoadingUserResponses } = useCollection<AppointmentResponse>(userResponsesQuery);
+
+  const allResponses = useMemo(() => (auth.isAdmin ? allResponsesForAdmin : userResponses), [auth.isAdmin, allResponsesForAdmin, userResponses]);
+
 
   const appointmentTypesRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentTypes') : null), [firestore, auth.user]);
   const { data: appointmentTypes, isLoading: typesLoading } = useCollection<AppointmentType>(appointmentTypesRef);
@@ -139,7 +152,8 @@ export default function VerwaltungTerminePage() {
     typesLoading ||
     groupsLoading ||
     locationsLoading ||
-    allResponsesLoading ||
+    isLoadingAllResponses ||
+    isLoadingUserResponses ||
     membersLoading ||
     isLoadingExceptions;
 
