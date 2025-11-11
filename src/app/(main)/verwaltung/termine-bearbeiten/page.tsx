@@ -569,7 +569,7 @@ export default function AppointmentManagementPage() {
                                               </TableCell>
                                               <TableCell className="text-right">
                                                   <div className="flex items-center justify-end gap-0">
-                                                    <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
+                                                    {isAdmin && <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />}
                                                     
                                                     {app.isCancelled ? (
                                                       <AlertDialog>
@@ -671,4 +671,5 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     
 
     
+
 
