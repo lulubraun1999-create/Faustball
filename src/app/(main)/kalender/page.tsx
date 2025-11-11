@@ -463,9 +463,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-
-
-    
-
-    

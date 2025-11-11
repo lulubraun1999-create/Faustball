@@ -112,7 +112,10 @@ export default function VerwaltungTerminePage() {
   const exceptionsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentExceptions') : null), [firestore, auth.user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  const allMembersRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'members') : null), [firestore, auth.user]);
+  const allMembersRef = useMemoFirebase(
+    () => (firestore && auth.isAdmin ? collection(firestore, 'members') : null),
+    [firestore, auth.isAdmin]
+  );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
   const allResponsesRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentResponses') : null), [firestore, auth.user]);
@@ -704,7 +707,8 @@ interface ResponseStatusProps {
 }
 
 const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers, allResponses, groups }) => {
-  const { relevantMembers, accepted, rejected, unsure, pending } = useMemo(() => {
+  const { relevantMembers, accepted, rejected, unsure, pending, membersMap } = useMemo(() => {
+    const membersMap = new Map(allMembers.map(m => [m.userId, m]));
     const relevantMemberIds = new Set<string>();
     const visibility = appointment.visibility;
 
@@ -720,7 +724,7 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
       });
     }
 
-    const relevantMembers = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter(Boolean) as MemberProfile[];
+    const relevantMembers = Array.from(relevantMemberIds).map(id => membersMap.get(id)).filter(Boolean) as MemberProfile[];
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
     const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === dateString);
 
@@ -731,10 +735,17 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     const respondedUserIds = new Set(responsesForInstance.map(r => r.userId));
     const pending = relevantMembers.filter(m => !respondedUserIds.has(m.userId));
 
-    return { relevantMembers, accepted, rejected, unsure, pending };
+    return { relevantMembers, accepted, rejected, unsure, pending, membersMap };
   }, [appointment, allMembers, allResponses]);
   
-  const membersMap = useMemo(() => new Map(allMembers.map(m => [m.userId, m])), [allMembers]);
+  if (!membersMap || membersMap.size === 0) {
+     return (
+        <Button variant="link" className="h-auto p-0 text-xs" disabled>
+            <Users className="mr-1 h-3 w-3" />
+            {accepted.length} / {relevantMembers.length}
+        </Button>
+     );
+  }
 
 
   return (
@@ -793,5 +804,3 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
-
-    
