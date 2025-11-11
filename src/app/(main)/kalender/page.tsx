@@ -99,6 +99,9 @@ export default function KalenderPage() {
     if (!userTeamIds || !teamsMap) return [];
     return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
   }, [userTeamIds, teamsMap]);
+  
+  const spieltagTypeId = useMemo(() => appointmentTypes?.find(t => t.name.toLowerCase() === 'spieltag')?.id, [appointmentTypes]);
+
 
   // Set initial filter state once teams are loaded
   React.useEffect(() => {
@@ -214,14 +217,23 @@ export default function KalenderPage() {
 
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return filteredAppointments.map(app => ({
-        title: app.title,
+    return filteredAppointments.map(app => {
+      let title = app.title;
+      if (app.appointmentTypeId === spieltagTypeId && app.visibility.type === 'specificTeams' && app.visibility.teamIds.length > 0) {
+        const teamNames = app.visibility.teamIds.map(id => teamsMap.get(id)).filter(Boolean).join(', ');
+        if (teamNames) {
+          title = `${app.title} (${teamNames})`;
+        }
+      }
+      return {
+        title,
         start: app.instanceDate,
         end: app.endDate ? app.endDate.toDate() : app.instanceDate,
         allDay: app.isAllDay,
         resource: app,
-    }));
-  }, [filteredAppointments]);
+      };
+    });
+  }, [filteredAppointments, teamsMap, spieltagTypeId]);
 
 
   const handleTeamFilterChange = (teamId: string, checked: boolean) => {
@@ -245,12 +257,16 @@ export default function KalenderPage() {
   const handleDownloadCalendar = () => {
     const icsEvents: EventAttributes[] = filteredAppointments.map(app => {
         const start = app.instanceDate;
-        const startDateArray = [start.getFullYear(), start.getMonth() + 1, start.getDate(), start.getHours(), start.getMinutes()] as [number, number, number, number, number];
-        
+        const location = app.locationId ? locationsMap.get(app.locationId) : null;
+        let description = app.description || '';
+        if (app.meetingPoint) description += `\n\nTreffpunkt: ${app.meetingPoint}`;
+        if (app.meetingTime) description += `\nTreffzeit: ${app.meetingTime}`;
+
         let event: EventAttributes = {
             title: app.title,
-            start: startDateArray,
-            description: app.description || '',
+            start: [start.getFullYear(), start.getMonth() + 1, start.getDate(), start.getHours(), start.getMinutes()],
+            location: location ? `${location.name}, ${location.address || ''}` : undefined,
+            description: description.trim(),
         };
 
         if (app.isAllDay) {
@@ -466,3 +482,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    
