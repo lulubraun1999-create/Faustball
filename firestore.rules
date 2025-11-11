@@ -1,4 +1,3 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -8,13 +7,11 @@ service cloud.firestore {
     function isAdmin() { return request.auth.token.admin == true; }
     function getMemberDoc(uid) { return get(/databases/$(database)/documents/members/$(uid)); }
     
-    // Gibt die Teams des Benutzers als Liste zurück, oder eine leere Liste, wenn keine vorhanden sind
     function getUserTeams() {
       let memberData = getMemberDoc(request.auth.uid).data;
       return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
     
-    // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das gelesene Dokument gehört
     function isMemberOfDocTeamResource() {
       let userTeams = getUserTeams();
       return isSignedIn() &&
@@ -22,10 +19,6 @@ service cloud.firestore {
              resource.data.keys().hasAny(['teamId']) &&
              userTeams.size() > 0 &&
              userTeams.hasAny([resource.data.teamId]);
-    }
-    
-    function isMemberOfAnyTeam() {
-      return getUserTeams().size() > 0;
     }
 
 
@@ -52,11 +45,10 @@ service cloud.firestore {
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
-        allow get: if isSignedIn();
-        allow list: if isSignedIn(); // Erlaubt das Lesen der Liste für alle angemeldeten Benutzer
+        allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
-        allow update: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
     }
 
     // --- /groups/{groupId} ---
@@ -85,8 +77,23 @@ service cloud.firestore {
 
     // --- /appointments/{appointmentId} ---
     match /appointments/{appointmentId} {
-      allow get, list: if isSignedIn();
-      allow write: if isSignedIn() && isAdmin();
+        function isMemberOfVisibleTeamForAppointment() {
+          let memberTeams = getUserTeams();
+          return memberTeams != null &&
+                 resource.data != null &&
+                 resource.data.keys().hasAny(['visibility']) &&
+                 resource.data.visibility.type == 'specificTeams' &&
+                 resource.data.visibility.keys().hasAny(['teamIds']) &&
+                 resource.data.visibility.teamIds.hasAny(memberTeams);
+        }
+
+        allow get: if isSignedIn() && (
+                      isAdmin() ||
+                      (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
+                      isMemberOfVisibleTeamForAppointment()
+                    );
+        allow list: if isSignedIn(); // Erlaube LIST für Kalender
+        allow write: if isSignedIn() && isAdmin();
     }
     
     // --- /appointmentResponses/{responseId} ---
@@ -94,17 +101,42 @@ service cloud.firestore {
         function isResponseOwner() { return request.resource.data.keys().hasAny(['userId']) && request.auth.uid == request.resource.data.userId; }
         function isExistingResponseOwner() { return resource != null && resource.data.keys().hasAny(['userId']) && request.auth.uid == resource.data.userId; }
 
-        allow get: if isSignedIn();
-        allow list: if isSignedIn(); // Erlaubt allen angemeldeten Benutzern, Listen von Antworten zu lesen (wird durch App-Logik gefiltert)
+        allow get: if isSignedIn() && (isAdmin() || isExistingResponseOwner());
+        allow list: if isSignedIn() && (
+                      isAdmin() ||
+                      (request.query.keys().hasAny(['where']) && (
+                        (request.query.where.field == 'userId' && request.query.where.value == request.auth.uid) ||
+                        (request.query.where.field == 'appointmentId')
+                      ))
+                    );
         allow create: if isSignedIn() && isResponseOwner();
-        allow update: if isSignedIn() && isResponseOwner();
-        allow delete: if isSignedIn() && isExistingResponseOwner();
+        allow update, delete: if isSignedIn() && isExistingResponseOwner();
     }
 
     // --- /appointmentExceptions/{exceptionId} ---
     match /appointmentExceptions/{exceptionId} {
-        allow read: if isSignedIn();
-        allow write: if isSignedIn() && isAdmin();
+        function getOriginalAppointmentFromResource() { return resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(resource.data.originalAppointmentId)) : null; }
+        function getOriginalAppointmentFromRequest() { return request.resource.data.keys().hasAny(['originalAppointmentId']) ? get(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId)) : null; }
+        function isMemberOfOriginalAppointmentTeamFromResource() {
+           let originalAppointment = getOriginalAppointmentFromResource();
+           if (originalAppointment == null || originalAppointment.data == null) { return false; }
+           let originalAppointmentData = originalAppointment.data;
+           let memberTeams = getUserTeams();
+           return memberTeams != null &&
+                  'visibility' in originalAppointmentData &&
+                  originalAppointmentData.visibility.type == 'specificTeams' &&
+                  'teamIds' in originalAppointmentData.visibility &&
+                  originalAppointmentData.visibility.teamIds.hasAny(memberTeams);
+        }
+
+        // Admins dürfen Ausnahmen lesen
+        allow get: if isSignedIn() && ( isAdmin() || (getOriginalAppointmentFromResource() != null && getOriginalAppointmentFromResource().data.visibility.type == 'all') || isMemberOfOriginalAppointmentTeamFromResource() );
+        allow list: if isSignedIn() && isAdmin();
+        
+        // Normale User dürfen Ausnahmen NICHT auflisten (behebt den Fehler für Spieler)
+        
+        allow create: if isSignedIn() && isAdmin() && exists(/databases/$(database)/documents/appointments/$(request.resource.data.originalAppointmentId));
+        allow update, delete: if isSignedIn() && isAdmin();
     }
 
     // --- /polls/{pollId} ---
@@ -143,11 +175,13 @@ service cloud.firestore {
     // --- /chats/{chatId} ---
     match /chats/{chatId} {
       function isChatMember() {
-        return resource.data.userIds.hasAny([request.auth.uid]);
+        return resource.data != null &&
+               resource.data.keys().hasAny(['userIds']) &&
+               resource.data.userIds.hasAny([request.auth.uid]);
       }
       
       allow get, list: if isSignedIn() && (isAdmin() || isChatMember());
-      allow write: if isSignedIn() && (isAdmin() || isChatMember());
+      allow write: if isSignedIn() && (isAdmin() || isChatMember()); // Einfache Regel für Erstellen/Ändern
       
       match /messages/{messageId} {
         function isMessageSender() {
@@ -163,14 +197,14 @@ service cloud.firestore {
     // --- /treasury/{transactionId} ---
     match /treasury/{transactionId} {
         allow get: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
-        allow list: if isSignedIn() && (isAdmin() || isMemberOfAnyTeam()); // Allow list for any team member
+        allow list: if isSignedIn(); // Erlaube List für Spieler
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- /penalties/{penaltyId} ---
     match /penalties/{penaltyId} {
        allow get: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
-       allow list: if isSignedIn() && (isAdmin() || isMemberOfAnyTeam()); // Allow list for any team member
+       allow list: if isSignedIn(); // Erlaube List für Spieler
        allow write: if isSignedIn() && isAdmin();
     }
   }
