@@ -7,7 +7,7 @@
     font-family: var(--font-inter), sans-serif;
     @apply bg-background text-foreground;
   }
-  
+
   :root {
     --background: 220 40% 98%;
     --foreground: 220 20% 10%;
@@ -72,66 +72,103 @@
 
 /* Custom styles for react-big-calendar */
 @layer components {
-    .rbc-month-view .rbc-row .rbc-gutter-cell {
-      @apply w-10 flex-shrink-0;
-    }
-    .rbc-week-number {
-      @apply text-sm font-medium text-muted-foreground text-center pt-2;
-    }
+  /* General Toolbar Styling */
+  .rbc-toolbar {
+    @apply flex items-center justify-between flex-wrap gap-2 mb-4;
+  }
 
-    .rbc-month-view, .rbc-month-row {
-      @apply flex flex-col flex-grow;
-    }
-    
-    .rbc-month-row {
-      @apply flex-row;
-    }
+  /* Styling for all buttons in the toolbar */
+  .rbc-toolbar .rbc-btn-group button {
+    @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground;
+    @apply h-10 px-4 py-2;
+  }
 
-    .rbc-row-content {
-      @apply h-full;
-    }
+  /* Remove default borders and styles */
+  .rbc-btn-group {
+    @apply flex gap-1;
+  }
 
-    .rbc-day-bg + .rbc-day-bg {
-      @apply border-l border-border;
-    }
-    
-    .rbc-month-row + .rbc-month-row {
-      @apply border-t border-border;
-    }
-    
-    .rbc-day-bg {
-      aspect-ratio: 1 / 1;
-    }
-    
-    .rbc-off-range-bg {
-      visibility: hidden;
-    }
+  .rbc-btn-group button {
+    @apply border-input;
+    outline: none;
+  }
+  
+  .rbc-btn-group button:focus,
+  .rbc-btn-group button:hover {
+     background-color: hsl(var(--accent));
+     color: hsl(var(--accent-foreground));
+  }
 
-    .rbc-day-bg.rbc-today {
-       background-color: transparent !important;
-       border: 2px solid hsl(var(--primary));
-    }
+  /* Active state for view selection buttons */
+  .rbc-btn-group .rbc-active {
+    @apply ring-1 ring-foreground; /* Use white/black border for active state */
+    background-color: transparent !important;
+  }
+  
+  .rbc-toolbar-label {
+    @apply text-xl font-bold text-center grow;
+  }
 
+  .rbc-month-view .rbc-row .rbc-gutter-cell {
+    @apply w-10 flex-shrink-0;
+  }
+  .rbc-week-number {
+    @apply text-sm font-medium text-muted-foreground text-center pt-2;
+  }
 
-    /* Mobile-specific calendar optimizations */
-    @media (max-width: 768px) {
-      .rbc-toolbar {
-        @apply flex-col items-start gap-2;
-      }
-      .rbc-btn-group {
-        @apply flex flex-wrap;
-      }
-      .rbc-toolbar .rbc-toolbar-label {
-        @apply text-lg font-bold;
-      }
-      .rbc-event {
-        @apply whitespace-normal text-xs p-0.5;
-      }
-      .rbc-header {
-        @apply text-center pb-1;
-      }
-      .rbc-header a {
-        @apply text-xs;
-      }
+  .rbc-month-view,
+  .rbc-month-row {
+    @apply flex flex-col flex-grow;
+  }
+
+  .rbc-month-row {
+    @apply flex-row;
+  }
+
+  .rbc-row-content {
+    @apply h-full;
+  }
+
+  .rbc-day-bg + .rbc-day-bg {
+    @apply border-l border-border;
+  }
+
+  .rbc-month-row + .rbc-month-row {
+    @apply border-t border-border;
+  }
+
+  .rbc-day-bg {
+    aspect-ratio: 1 / 1;
+  }
+
+  .rbc-off-range-bg {
+    visibility: hidden;
+  }
+
+  .rbc-day-bg.rbc-today {
+    background-color: transparent !important;
+    border: 2px solid hsl(var(--primary));
+  }
+
+  /* Mobile-specific calendar optimizations */
+  @media (max-width: 768px) {
+    .rbc-toolbar {
+      @apply flex-col items-stretch gap-2;
     }
+    .rbc-btn-group {
+      @apply w-full justify-between;
+    }
+    .rbc-toolbar .rbc-toolbar-label {
+      @apply text-lg font-bold text-center order-first w-full;
+    }
+    .rbc-event {
+      @apply whitespace-normal text-xs p-0.5;
+    }
+    .rbc-header {
+      @apply text-center pb-1;
+    }
+    .rbc-header a {
+      @apply text-xs;
+    }
+  }
 }
