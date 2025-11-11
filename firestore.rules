@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -52,7 +53,22 @@ service cloud.firestore {
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        allow list: if isSignedIn() && isAdmin();
+        // List-Regel für Mitglieder:
+        allow list: if isSignedIn() && (
+                      // Admins dürfen immer alles listen
+                      isAdmin() ||
+                      // Normale User dürfen listen, wenn sie nach ihren eigenen Teams filtern
+                      (request.query.keys().hasAny(['where']) && 
+                       request.query.where.field == 'teams' && 
+                       request.query.where.operator == 'array-contains-any' &&
+                       // Sicherstellen, dass die abgefragten Werte mit den eigenen Teams des Benutzers übereinstimmen
+                       request.query.where.value.hasOnly(getUserTeams())) ||
+                      // Normale User dürfen auch nur ihr eigenes Profil abfragen
+                      (request.query.keys().hasAny(['where']) &&
+                       request.query.where.field == 'userId' &&
+                       request.query.where.operator == '==' &&
+                       request.query.where.value == request.auth.uid)
+                    );
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
     }
@@ -178,4 +194,3 @@ service cloud.firestore {
     }
   }
 }
-    
