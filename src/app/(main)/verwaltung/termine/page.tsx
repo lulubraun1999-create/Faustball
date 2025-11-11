@@ -112,14 +112,13 @@ export default function VerwaltungTerminePage() {
   const exceptionsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentExceptions') : null), [firestore, auth.user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  // KORREKTUR: Diese Abfrage nur als Admin ausführen
   const allMembersRef = useMemoFirebase(
     () => (firestore && auth.isAdmin ? collection(firestore, 'members') : null),
     [firestore, auth.isAdmin]
   );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
-    // Admins fetch all responses, users fetch only their own.
+  // Admins fetch all responses, users fetch only their own.
   const allResponsesQuery = useMemoFirebase(
     () => (firestore && auth.isAdmin ? collection(firestore, 'appointmentResponses') : null),
     [firestore, auth.isAdmin]
@@ -721,13 +720,12 @@ interface ResponseStatusProps {
 
 const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers, allResponses }) => {
   const { accepted, rejected, unsure, pending, relevantMemberCount } = useMemo(() => {
-    // Wenn allMembers null ist (Nicht-Admin), können wir keine volle Liste erstellen
+    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === formatDate(appointment.instanceDate, 'yyyy-MM-dd'));
+    const acceptedList = responsesForInstance.filter(r => r.status === 'zugesagt');
+    
+    // If not admin, we can only show the count of 'accepted' responses
     if (!allMembers) {
-        const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === formatDate(appointment.instanceDate, 'yyyy-MM-dd'));
-        const acceptedCount = responsesForInstance.filter(r => r.status === 'zugesagt').length;
-        // Da wir nicht alle Mitglieder kennen, können wir die Gesamtzahl nicht genau bestimmen.
-        // Wir zeigen nur die Anzahl der Zusagen an.
-        return { accepted: [], rejected: [], unsure: [], pending: [], relevantMemberCount: acceptedCount };
+        return { accepted: acceptedList, rejected: [], unsure: [], pending: [], relevantMemberCount: acceptedList.length };
     }
 
     const relevantMemberIds = new Set<string>();
@@ -745,27 +743,23 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
       });
     }
 
-    const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === dateString);
-
-    const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
-    const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');
-    const unsure = responsesForInstance.filter(r => r.status === 'unsicher');
+    const rejectedList = responsesForInstance.filter(r => r.status === 'abgesagt');
+    const unsureList = responsesForInstance.filter(r => r.status === 'unsicher');
 
     const respondedUserIds = new Set(responsesForInstance.map(r => r.userId));
-    const pending = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter((m): m is MemberProfile => !!m && !respondedUserIds.has(m.userId));
+    const pendingList = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter((m): m is MemberProfile => !!m && !respondedUserIds.has(m.userId));
 
-    return { accepted, rejected, unsure, pending, relevantMemberCount: relevantMemberIds.size };
+    return { accepted: acceptedList, rejected: rejectedList, unsure: unsureList, pending: pendingList, relevantMemberCount: relevantMemberIds.size };
   }, [appointment, allMembers, allResponses]);
   
   const membersMap = useMemo(() => new Map(allMembers?.map(m => [m.userId, m])), [allMembers]);
 
-  // Wenn der Benutzer kein Admin ist und keine Mitgliederdaten vorhanden sind, nur die Zusagen anzeigen
+  // If the user is not an admin, we only show the number of accepted responses.
   if (!allMembers) {
       return (
         <div className="flex items-center text-xs">
             <Users className="mr-1 h-3 w-3" />
-            {relevantMemberCount}
+            {relevantMemberCount > 0 ? relevantMemberCount : '-'}
         </div>
       );
   }
@@ -826,5 +820,3 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
-
-    
