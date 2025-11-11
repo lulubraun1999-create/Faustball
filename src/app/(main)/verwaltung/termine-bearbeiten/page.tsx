@@ -56,7 +56,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException, MemberProfile, AppointmentResponse } from '@/lib/types';
-import { Loader2, CalendarPlus, Edit, Trash2, X, AlertTriangle, ArrowRight, CalendarIcon, Users, Undo2 } from 'lucide-react';
+import { Loader2, CalendarPlus, X, Trash2, CalendarIcon, Users, Undo2 } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
@@ -68,7 +68,6 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -110,7 +109,8 @@ const appointmentSchema = z.object({
     visibleTeamIds: z.array(z.string()).default([]),
     recurrence: z.enum(['none', 'daily', 'weekly', 'bi-weekly', 'monthly']).default('none'),
     recurrenceEndDate: z.string().optional(),
-    rsvpDeadline: z.string().optional(),
+    rsvpDeadlineDays: z.string().optional(),
+    rsvpDeadlineTime: z.string().optional(),
     editMode: z.enum(['single', 'future']).optional(),
     originalDateISO: z.string().optional(),
   }).refine(data => {
@@ -173,7 +173,7 @@ export default function AppointmentManagementPage() {
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '',
-      visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadline: '' },
+      visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadlineDays: '0', rsvpDeadlineTime: '12:00' },
   });
 
   const watchVisibilityType = form.watch('visibilityType');
@@ -279,7 +279,7 @@ export default function AppointmentManagementPage() {
 
 
   const handleAddNew = () => {
-    form.reset({ title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '', visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadline: '' });
+    form.reset({ title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '', visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadlineDays: '0', rsvpDeadlineTime: '12:00' });
     setIsDialogOpen(true);
   };
 
@@ -352,10 +352,9 @@ export default function AppointmentManagementPage() {
     
     try {
         const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
-        let rsvpTimestamp: Timestamp | null = null;
-        if (data.rsvpDeadline) {
-          rsvpTimestamp = Timestamp.fromDate(new Date(data.rsvpDeadline));
-        }
+        const rsvpDeadline = (data.rsvpDeadlineDays && data.rsvpDeadlineTime) 
+          ? `${data.rsvpDeadlineDays}:${data.rsvpDeadlineTime}` 
+          : null;
 
         const newAppointmentData = {
             title: (data.title || '').trim() === '' ? typeName : data.title,
@@ -364,7 +363,7 @@ export default function AppointmentManagementPage() {
             isAllDay: data.isAllDay, appointmentTypeId: data.appointmentTypeId, locationId: data.locationId || null,
             description: data.description || null, meetingPoint: data.meetingPoint || null, meetingTime: data.meetingTime || null,
             recurrence: data.recurrence, recurrenceEndDate: data.recurrenceEndDate ? Timestamp.fromDate(new Date(data.recurrenceEndDate)) : null,
-            rsvpDeadline: rsvpTimestamp,
+            rsvpDeadline: rsvpDeadline,
             visibility: { type: data.visibilityType, teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [] },
             createdBy: user.uid, createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
         };
@@ -430,7 +429,29 @@ export default function AppointmentManagementPage() {
                       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                           <FormField control={form.control} name="recurrence" render={({ field }) => (<FormItem><FormLabel>Wiederholung</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Keine</SelectItem><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="bi-weekly">Alle 2 Wochen</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select></FormItem>)}/>
                           <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (<FormItem><FormLabel>Ende der Wiederholung</FormLabel><FormControl><Input type="date" {...field} disabled={form.watch('recurrence') === 'none'} /></FormControl><FormMessage /></FormItem>)}/>
-                          <FormField control={form.control} name="rsvpDeadline" render={({ field }) => (<FormItem><FormLabel>Rückmeldefrist</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                          
+                          <FormItem>
+                            <FormLabel>Rückmeldefrist</FormLabel>
+                            <div className="flex gap-2">
+                               <FormField control={form.control} name="rsvpDeadlineDays" render={({ field }) => (
+                                   <FormItem className="flex-1">
+                                       <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>
+                                           <SelectItem value="0">Am selben Tag</SelectItem>
+                                           <SelectItem value="1">1 Tag vorher</SelectItem>
+                                           <SelectItem value="2">2 Tage vorher</SelectItem>
+                                           <SelectItem value="3">3 Tage vorher</SelectItem>
+                                           <SelectItem value="7">1 Woche vorher</SelectItem>
+                                       </SelectContent></Select>
+                                   </FormItem>
+                               )}/>
+                               <FormField control={form.control} name="rsvpDeadlineTime" render={({ field }) => (
+                                   <FormItem className="flex-1">
+                                     <FormControl><Input type="time" {...field} /></FormControl>
+                                   </FormItem>
+                               )}/>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
                       </div>
                       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                           <FormField control={form.control} name="meetingPoint" render={({ field }) => (<FormItem><FormLabel>Treffpunkt</FormLabel><FormControl><Input placeholder="z.B. Vor der Halle" {...field} /></FormControl></FormItem>)}/>
@@ -462,17 +483,15 @@ export default function AppointmentManagementPage() {
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
                                         const typeName = appointmentTypes?.find(t => t.id === app.appointmentTypeId)?.name;
-                                        const rsvpDeadline = appointments?.find(a => a.id === app.originalId)?.rsvpDeadline;
+                                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
+
                                         let rsvpDeadlineString = '-';
-                                        if (rsvpDeadline) {
-                                            if (typeof rsvpDeadline === 'string') { // Old format
-                                                const [days, hours] = rsvpDeadline.split(':').map(Number);
-                                                const totalMillis = ((days * 24) + (hours || 0)) * 3600000;
-                                                const instanceRsvpMillis = app.instanceDate.getTime() - totalMillis;
-                                                rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
-                                            } else if (rsvpDeadline instanceof Timestamp) { // New format
-                                                rsvpDeadlineString = formatDate(rsvpDeadline.toDate(), 'dd.MM.yy HH:mm');
-                                            }
+                                        if (originalAppointment?.rsvpDeadline && typeof originalAppointment.rsvpDeadline === 'string') {
+                                            const [days, time] = originalAppointment.rsvpDeadline.split(':');
+                                            const deadlineDate = addDays(app.instanceDate, -parseInt(days, 10));
+                                            const [hours, minutes] = time.split(';').map(Number);
+                                            const finalDeadline = set(deadlineDate, { hours, minutes });
+                                            rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
                                         }
 
                                         return (

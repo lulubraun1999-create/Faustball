@@ -97,7 +97,7 @@ export interface Appointment {
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'; // Recurrence rule
   recurrenceEndDate?: Timestamp; // End date for the recurrence
-  rsvpDeadline?: Timestamp; // Optional deadline for responses
+  rsvpDeadline?: string | null; // Format: "daysBefore:HH;mm", e.g., "1:18;00" for 1 day before at 18:00
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
   createdAt?: Timestamp | FieldValue; // Optional: Server timestamp when created
