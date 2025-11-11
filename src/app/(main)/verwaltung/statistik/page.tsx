@@ -6,11 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Timestamp } from 'firebase/firestore';
-import type { Appointment, AppointmentException, AppointmentResponse, Group, MemberProfile } from '@/lib/types';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, Timestamp, doc } from 'firebase/firestore';
+import type { Appointment, AppointmentException, AppointmentResponse, Group, MemberProfile, AppointmentType } from '@/lib/types';
 import { Loader2, BarChart, Users, Percent } from 'lucide-react';
-import { startOfDay, addDays, addWeeks, addMonths, differenceInMilliseconds, isBefore, getYear, getMonth, set, subDays, startOfYear, endOfYear, endOfMonth, startOfMonth } from 'date-fns';
+import { startOfDay, addDays, addWeeks, addMonths, differenceInMilliseconds, isBefore, getYear, getMonth, set, subDays, startOfYear, endOfYear, endOfMonth, startOfMonth, format, parse } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 type UnrolledAppointment = Appointment & {
@@ -54,13 +54,14 @@ export default function AdminStatistikPage() {
 // Main content component
 function StatistikContent() {
   const firestore = useFirestore();
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
-  const [timeRange, setTimeRange] = useState<string>('30'); // '30', '90', '365'
+  const { user } = useUser();
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+  const [selectedAppointmentType, setSelectedAppointmentType] = useState<string>('all');
+
 
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
-  
-  const teams = useMemo(() => allGroups?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [], [allGroups]);
   
   const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersRef);
@@ -72,16 +73,42 @@ function StatistikContent() {
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
   
   const responsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
-  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesRef);
+  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesRef);
   
+  const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
+  const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
+  
+  const memberProfileRef = useMemoFirebase(() => (user ? doc(firestore, 'members', user.uid) : null), [firestore, user]);
+  const { data: memberProfile, isLoading: isLoadingMemberProfile } = useDoc<MemberProfile>(memberProfileRef);
+  
+  const adminTeams = useMemo(() => {
+    if (!allGroups || !memberProfile?.teams) return [];
+    const userTeamIds = new Set(memberProfile.teams);
+    return allGroups.filter(g => g.type === 'team' && userTeamIds.has(g.id))
+                      .sort((a,b) => a.name.localeCompare(b.name));
+  }, [allGroups, memberProfile]);
+
+  const monthOptions = useMemo(() => {
+      const options = [];
+      let date = new Date();
+      for (let i = 0; i < 12; i++) {
+          options.push({
+              value: format(date, 'yyyy-MM'),
+              label: format(date, 'MMMM yyyy', { locale: de })
+          });
+          date = addMonths(date, -1);
+      }
+      return options;
+  }, []);
+
   useEffect(() => {
-    if (selectedTeamId === 'all' && teams.length > 0) {
-      setSelectedTeamId(teams[0].id);
+    if (!selectedTeamId && adminTeams.length > 0) {
+      setSelectedTeamId(adminTeams[0].id);
     }
-  }, [teams, selectedTeamId]);
+  }, [adminTeams, selectedTeamId]);
 
   const { memberStats, teamTotalStats } = useMemo(() => {
-    if (!selectedTeamId || selectedTeamId === 'all' || !allMembers || !appointments || !allResponses || !exceptions) {
+    if (!selectedTeamId || !allMembers || !appointments || !allResponses || !exceptions || !selectedMonth) {
       return { memberStats: [], teamTotalStats: null };
     }
 
@@ -90,13 +117,17 @@ function StatistikContent() {
 
     const unrolledApps = unrollAppointments(appointments, exceptions);
 
-    const now = new Date();
-    const startDate = subDays(now, parseInt(timeRange));
+    const targetMonth = parse(selectedMonth, 'yyyy-MM', new Date());
+    const monthStart = startOfMonth(targetMonth);
+    const monthEnd = endOfMonth(targetMonth);
 
     const relevantAppointments = unrolledApps.filter(app => {
       const appDate = app.instanceDate;
       const isVisibleToTeam = app.visibility.type === 'all' || app.visibility.teamIds.includes(selectedTeamId);
-      return isVisibleToTeam && appDate >= startDate && appDate <= now && !app.isCancelled;
+      const isInMonth = appDate >= monthStart && appDate <= monthEnd;
+      const typeMatch = selectedAppointmentType === 'all' || app.appointmentTypeId === selectedAppointmentType;
+
+      return isVisibleToTeam && isInMonth && typeMatch && !app.isCancelled;
     });
 
     const responsesMap = new Map<string, 'zugesagt' | 'abgesagt' | 'unsicher'>();
@@ -132,14 +163,14 @@ function StatistikContent() {
         return acc;
     }, { attended: 0, missed: 0, unsure: 0, open: 0, total: 0 });
 
-    const teamRate = teamTotals.total > 0 ? (teamTotals.attended / teamTotals.total) * 100 : 0;
+    const teamRate = teamTotals.attended > 0 ? (teamTotals.attended / teamTotals.total) * 100 : 0;
     const teamTotalStats = { ...teamTotals, rate: teamRate };
 
     return { memberStats: stats, teamTotalStats: teamTotalStats };
-  }, [selectedTeamId, allMembers, appointments, allResponses, exceptions, timeRange]);
+  }, [selectedTeamId, allMembers, appointments, allResponses, exceptions, selectedMonth, selectedAppointmentType]);
 
-  const isLoading = isLoadingGroups || isLoadingMembers || isLoadingAppointments || isLoadingExceptions || isLoadingResponses;
-  const teamName = teams.find(t => t.id === selectedTeamId)?.name || '...';
+  const isLoading = isLoadingGroups || isLoadingMembers || isLoadingAppointments || isLoadingExceptions || isLoadingResponses || isLoadingTypes || isLoadingMemberProfile;
+  const teamName = allGroups?.find(t => t.id === selectedTeamId)?.name || '...';
   
   return (
     <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
@@ -149,22 +180,31 @@ function StatistikContent() {
           <span className="font-headline">Admin: Statistik</span>
         </h1>
         <div className="flex gap-2">
-            <Select value={selectedTeamId} onValueChange={setSelectedTeamId} disabled={teams.length === 0}>
+            <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId} disabled={adminTeams.length === 0}>
                 <SelectTrigger className="w-full sm:w-[220px]">
                     <SelectValue placeholder="Mannschaft auswählen..." />
                 </SelectTrigger>
                 <SelectContent>
-                    {teams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
+                    {adminTeams.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
                 </SelectContent>
             </Select>
-            <Select value={timeRange} onValueChange={setTimeRange}>
+             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="30">Letzte 30 Tage</SelectItem>
-                    <SelectItem value="90">Letzte 90 Tage</SelectItem>
-                    <SelectItem value="365">Letztes Jahr</SelectItem>
+                    {monthOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Select value={selectedAppointmentType} onValueChange={setSelectedAppointmentType}>
+                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Alle Arten</SelectItem>
+                    {appointmentTypes?.map(type => (
+                        <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                    ))}
                 </SelectContent>
             </Select>
         </div>
@@ -172,8 +212,8 @@ function StatistikContent() {
 
       {isLoading ? (
         <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
-      ) : selectedTeamId === 'all' || teams.length === 0 ? (
-          <Card><CardHeader><CardTitle>Keine Mannschaft ausgewählt</CardTitle></CardHeader><CardContent><p>Bitte wählen Sie eine Mannschaft aus.</p></CardContent></Card>
+      ) : !selectedTeamId || adminTeams.length === 0 ? (
+          <Card><CardHeader><CardTitle>Keine Mannschaft ausgewählt</CardTitle></CardHeader><CardContent><p>Bitte wählen Sie eine Ihrer Mannschaften aus, um die Statistik anzuzeigen.</p></CardContent></Card>
       ) : (
         <div className="space-y-6">
             {teamTotalStats && (
@@ -264,7 +304,9 @@ const StatCard: FC<StatCardProps> = ({ title, value, total, color }) => {
                 <span className="text-sm font-bold">{value} / {total}</span>
             </div>
             <div className="flex items-center gap-2">
-                <div className={`h-2.5 flex-grow rounded-full ${color}`} style={{ width: `${percentage}%` }}></div>
+                <div className={`h-2.5 flex-grow rounded-full bg-muted overflow-hidden`}>
+                   <div className={`h-full rounded-full ${color}`} style={{ width: `${percentage}%` }}></div>
+                </div>
                 <span className="text-xs font-semibold">{percentage.toFixed(0)}%</span>
             </div>
         </div>
@@ -345,5 +387,7 @@ function unrollAppointments(appointments: Appointment[], exceptions: Appointment
     });
     return allEvents;
 }
+
+    
 
     
