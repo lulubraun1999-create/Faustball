@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
-import type { Appointment, AppointmentException, Location, Group, MemberProfile } from '@/lib/types';
+import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar, dateFnsLocalizer, Event } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
@@ -77,6 +77,10 @@ export default function KalenderPage() {
       [firestore, isAdmin]
   );
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
+  
+  const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
+  const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
+  const appointmentTypesMap = useMemo(() => new Map(appointmentTypes?.map(t => [t.id, t.name.toLowerCase()])), [appointmentTypes]);
 
   const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
   const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
@@ -190,7 +194,7 @@ export default function KalenderPage() {
     });
   }, [unrolledAppointments]);
 
-  const isLoading = isUserLoadingAuth || isLoadingMember || isLoadingAppointments || (isAdmin && isLoadingExceptions) || isLoadingLocations;
+  const isLoading = isUserLoadingAuth || isLoadingMember || isLoadingAppointments || (isAdmin && isLoadingExceptions) || isLoadingLocations || isLoadingTypes;
 
   if (isLoading) {
     return (
@@ -199,21 +203,34 @@ export default function KalenderPage() {
       </div>
     );
   }
-
+  
   // Event-Styling
   const eventStyleGetter = (event: CalendarEvent) => {
-    const style: React.CSSProperties = { // Expliziter Typ
-      backgroundColor: 'var(--primary)',
+    const typeName = appointmentTypesMap.get(event.resource.appointmentTypeId) || '';
+    let style: React.CSSProperties = {
+      backgroundColor: 'var(--secondary)',
+      color: 'var(--secondary-foreground)',
       borderRadius: '4px',
       opacity: 1,
-      color: 'var(--primary-foreground)',
-      border: '0px',
+      border: '1px solid var(--border)',
       display: 'block',
     };
-    if (event.resource.isException) {
-      style.backgroundColor = 'var(--secondary)';
-      style.color = 'var(--secondary-foreground)';
+    
+    if (typeName.includes('spieltag')) {
+      style.backgroundColor = 'var(--primary)';
+      style.color = 'var(--primary-foreground)';
+      style.border = '1px solid var(--primary)';
+    } else if (typeName.includes('training')) {
+      style.backgroundColor = 'var(--accent)';
+      style.color = 'var(--accent-foreground)';
+      style.border = '1px solid var(--border)';
     }
+    
+    if (event.resource.isException) {
+      style.borderStyle = 'dashed';
+      style.boxShadow = 'inset 0 0 0 1px var(--foreground)';
+    }
+
     return {
       style: style,
     };
