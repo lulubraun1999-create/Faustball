@@ -540,15 +540,19 @@ export default function AppointmentManagementPage() {
                                         const originalAppointment = appointments?.find(a => a.id === app.originalId);
 
                                         let rsvpDeadlineString = '-';
-                                        if (originalAppointment?.rsvpDeadline && typeof originalAppointment.rsvpDeadline === 'string') {
-                                            const [daysBeforeStr, timeStr] = originalAppointment.rsvpDeadline.split(':');
-                                            const daysBefore = parseInt(daysBeforeStr, 10);
-                                            const [hours, minutes] = timeStr.split(';').map(Number);
-
-                                            if (!isNaN(daysBefore) && !isNaN(hours) && !isNaN(minutes)) {
-                                                const deadlineDate = addDays(app.instanceDate, -daysBefore);
-                                                const finalDeadline = set(deadlineDate, { hours, minutes });
-                                                rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
+                                        if (originalAppointment?.rsvpDeadline) {
+                                            try {
+                                                const [daysBeforeStr, timeStr] = originalAppointment.rsvpDeadline.split(':');
+                                                const daysBefore = parseInt(daysBeforeStr, 10);
+                                                const [hours, minutes] = timeStr.split(';').map(Number);
+                                                
+                                                if (!isNaN(daysBefore) && !isNaN(hours) && !isNaN(minutes)) {
+                                                    const deadlineDate = addDays(app.instanceDate, -daysBefore);
+                                                    const finalDeadline = set(deadlineDate, { hours, minutes, seconds: 0, milliseconds: 0 });
+                                                    rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
+                                                }
+                                            } catch (e) {
+                                                console.error("Error parsing rsvpDeadline", e);
                                             }
                                         }
 

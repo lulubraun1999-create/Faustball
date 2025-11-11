@@ -191,7 +191,7 @@ export default function VerwaltungTerminePage() {
         let isException = false;
         if (exception?.status === 'modified' && exception.modifiedData) {
             const modData = exception.modifiedData;
-            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
+            finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? app.endDate : (modData.endDate || undefined), id: app.id };
             isException = true;
         }
         
@@ -551,11 +551,24 @@ export default function VerwaltungTerminePage() {
                                         const showTitle = app.title && (!titleIsDefault || isSonstiges);
                                         const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
                                         const originalAppointment = appointments?.find(a => a.id === app.originalId);
+                                        
                                         let rsvpDeadlineString = '-';
                                         if (originalAppointment?.rsvpDeadline) {
-                                            const deadline = originalAppointment.rsvpDeadline.toDate();
-                                            rsvpDeadlineString = formatDate(deadline, 'dd.MM.yy HH:mm');
+                                            try {
+                                                const [daysBeforeStr, timeStr] = originalAppointment.rsvpDeadline.split(':');
+                                                const daysBefore = parseInt(daysBeforeStr, 10);
+                                                const [hours, minutes] = timeStr.split(';').map(Number);
+                                                
+                                                if (!isNaN(daysBefore) && !isNaN(hours) && !isNaN(minutes)) {
+                                                    const deadlineDate = addDays(app.instanceDate, -daysBefore);
+                                                    const finalDeadline = set(deadlineDate, { hours, minutes, seconds: 0, milliseconds: 0 });
+                                                    rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
+                                                }
+                                            } catch (e) {
+                                                console.error("Error parsing rsvpDeadline", e);
+                                            }
                                         }
+
                                         return (
                                             <TableRow 
                                                 key={app.virtualId} 
