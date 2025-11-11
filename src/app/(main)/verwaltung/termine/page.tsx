@@ -1,63 +1,37 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
+import React, { useMemo, useState } from 'react';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, doc, query, where, Timestamp, setDoc } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Event } from 'react-big-calendar';
-import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
+import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
-import { Loader2, ListTodo } from 'lucide-react';
+import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-// --- (Typen und Kalender-Setup) ---
-const locales = { 'de-DE': de };
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
-  getDay,
-  locales,
-});
-
-interface CalendarEvent extends Event {
-  resource: UnrolledAppointment;
-}
 
 type UnrolledAppointment = Appointment & {
+  instanceDate: Date;
   virtualId: string;
   originalId: string;
-  originalDateISO?: string;
-  isException?: boolean;
-  isCancelled?: boolean;
+  isCancelled: boolean;
+  isException: boolean;
 };
-
-const messages = {
-  allDay: 'Ganztägig',
-  previous: 'Zurück',
-  next: 'Weiter',
-  today: 'Heute',
-  month: 'Monat',
-  week: 'Woche',
-  day: 'Tag',
-  agenda: 'Agenda',
-  date: 'Datum',
-  time: 'Uhrzeit',
-  event: 'Termin',
-  noEventsInRange: 'Keine Termine in diesem Zeitraum.',
-  showMore: (total: number) => `+ ${total} weitere`,
-};
-
 
 export default function TermineUebersichtPage() {
   const router = useRouter();
   const { user, isUserLoading, isAdmin } = useUser();
   const firestore = useFirestore();
 
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
+  
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
@@ -73,7 +47,26 @@ export default function TermineUebersichtPage() {
 
   const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
   const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
-  const locationsMap = useMemo(() => new Map(locations?.map(l => [l.id, l.name])), [locations]);
+  const locationsMap = useMemo(() => new Map(locations?.map(l => [l.id, l])), [locations]);
+  
+  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  const teamsMap = useMemo(() => new Map(groups?.filter(g => g.type === 'team').map(t => [t.id, t.name])), [groups]);
+  
+  const userTeamsForFilter = useMemo(() => {
+    if (!userTeamIds || !teamsMap) return [];
+    return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
+  }, [userTeamIds, teamsMap]);
+
+  const userResponsesQuery = useMemoFirebase(() => {
+      if (!firestore || !user) return null;
+      return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
+  }, [firestore, user]);
+  const { data: userResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(userResponsesQuery);
+  const userResponsesMap = useMemo(() => {
+    return new Map(userResponses?.map(r => [`${r.appointmentId}-${r.date}`, r.status]));
+  }, [userResponses]);
+
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments || !exceptions || !memberProfile) return [];
@@ -87,8 +80,7 @@ export default function TermineUebersichtPage() {
     });
 
     const allEvents: UnrolledAppointment[] = [];
-    const now = new Date();
-    
+    const today = startOfDay(new Date());
     const userTeamIdsSet = new Set(userTeamIds);
 
     appointments.forEach(app => {
@@ -96,157 +88,190 @@ export default function TermineUebersichtPage() {
 
       const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIdsSet.has(teamId)));
       if (!isVisible) return;
+      
+      const recurrenceEndDate = app.recurrenceEndDate ? app.recurrenceEndDate.toDate() : null;
+      const appStartDate = app.startDate.toDate();
 
+      if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+        if (isBefore(appStartDate, today)) return;
 
-      const originalDateStartOfDay = startOfDay(app.startDate.toDate());
-      const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
-      const key = `${app.id}-${originalDateStartOfDayISO}`;
-      const exception = exceptionsMap.get(key);
-      const isCancelled = exception?.status === 'cancelled';
-
-      if (app.recurrence === 'none') {
-        const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
-        allEvents.push({ ...modifiedApp, originalId: app.id, virtualId: app.id, isCancelled, originalDateISO: originalDateStartOfDayISO });
-      } else {
-        let currentDate = app.startDate.toDate();
-        const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
-        const recurrenceStartDate = addMonths(now, -3);
+        const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
+        const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
+        let finalData: Appointment = { ...app };
+        let isException = false;
+        if (exception?.status === 'modified' && exception.modifiedData) {
+          const modData = exception.modifiedData;
+          finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? app.endDate : (modData.endDate || undefined), id: app.id };
+          isException = true;
+        }
+        
+        if (exception?.status !== 'cancelled') {
+            allEvents.push({ ...finalData, instanceDate: finalData.startDate.toDate(), originalId: app.id, virtualId: app.id, isCancelled: false, isException });
+        }
+
+      } else {
+        let currentDate = appStartDate;
+        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), currentDate) : 0;
         let iter = 0;
-        const MAX_ITERATIONS = 1000;
+        const MAX_ITERATIONS = 500;
 
-        while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
-          const currentDateStartOfDay = startOfDay(currentDate);
-          
-          if (currentDateStartOfDay >= recurrenceStartDate) {
-              const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
-              const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
-              const instanceException = exceptionsMap.get(instanceKey);
-              const instanceIsCancelled = instanceException?.status === 'cancelled';
+        while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
+          if (currentDate >= today) {
+            const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
+            const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-              const newStartDate = Timestamp.fromDate(currentDate);
-              const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
+            if (instanceException?.status !== 'cancelled') {
+              let isException = false;
+              let instanceData: Appointment = { ...app };
+              let instanceStartDate = currentDate;
+              let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
               
-              let instanceData: UnrolledAppointment = {
-                ...app,
-                id: `${app.id}-${currentDate.toISOString()}`,
-                virtualId: instanceKey,
-                originalId: app.id,
-                originalDateISO: currentDateStartOfDayISO,
-                startDate: newStartDate,
-                endDate: newEndDate,
-                isCancelled: instanceIsCancelled,
-              };
-
               if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                  instanceData = { ...instanceData, ...instanceException.modifiedData, isException: true };
+                  isException = true;
+                  const modData = instanceException.modifiedData;
+                  instanceData = { ...instanceData, ...modData };
+                  instanceStartDate = modData.startDate?.toDate() ?? instanceStartDate;
+                  instanceEndDate = modData.endDate?.toDate() ?? instanceEndDate;
               }
-              allEvents.push(instanceData);
-          }
 
+              allEvents.push({
+                ...instanceData,
+                id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
+                instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromTimestamp(instanceEndDate) : undefined,
+                isCancelled: false, isException,
+              });
+            }
+          }
+          
+          iter++;
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'bi-weekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = addMonths(currentDate, 1); break;
-            default: currentDate = addDays(recurrenceEndDate, 1); break;
+            case 'monthly':
+                const nextMonth = addMonths(currentDate, 1);
+                currentDate = set(nextMonth, { date: Math.min(appStartDate.getDate(), new Date(getYear(nextMonth), getMonth(nextMonth) + 1, 0).getDate()) });
+                break;
+            default: iter = MAX_ITERATIONS; break;
           }
-          iter++;
         }
       }
     });
-    return allEvents;
+    return allEvents.sort((a,b) => a.instanceDate.getTime() - b.instanceDate.getTime());
   }, [appointments, exceptions, userTeamIds, memberProfile]);
 
-  const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return unrolledAppointments.map(app => {
-      const start = app.startDate.toDate();
-      const end = app.isAllDay ? start : (app.endDate ? app.endDate.toDate() : start);
-      return {
-        title: app.title,
-        start: start,
-        end: end,
-        allDay: app.isAllDay,
-        resource: app,
-      };
+  const filteredAppointments = useMemo(() => {
+    return unrolledAppointments.filter(app => {
+      const teamMatch = selectedTeamFilter === 'all' || app.visibility.teamIds.includes(selectedTeamFilter) || app.visibility.type === 'all';
+      return teamMatch;
     });
-  }, [unrolledAppointments]);
+  }, [unrolledAppointments, selectedTeamFilter]);
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember;
+  const groupedAppointments = useMemo(() => {
+    return filteredAppointments.reduce((acc, app) => {
+      const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
+      if (!acc[monthYear]) acc[monthYear] = [];
+      acc[monthYear].push(app);
+      return acc;
+    }, {} as Record<string, UnrolledAppointment[]>);
+  }, [filteredAppointments]);
+  
+  const handleResponse = async (appointment: UnrolledAppointment, status: 'zugesagt' | 'abgesagt') => {
+      if (!firestore || !user) return;
+      const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+      const responseId = `${appointment.originalId}_${user.uid}_${dateString}`;
+      const responseDocRef = doc(firestore, 'appointmentResponses', responseId);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Event-Styling (inkl. Abgesagt)
-  const eventStyleGetter = (event: CalendarEvent) => {
-    const style: React.CSSProperties = {
-      backgroundColor: 'var(--primary)',
-      borderRadius: '4px',
-      opacity: 1,
-      color: 'var(--primary-foreground)',
-      border: '0px',
-      display: 'block',
-    };
-    if (isAdmin) {
-        if (event.resource.isCancelled) {
-            style.backgroundColor = 'var(--destructive)';
-            style.color = 'var(--destructive-foreground)';
-            style.textDecoration = 'line-through';
-            style.opacity = 0.7;
-        } else if (event.resource.isException) {
-            style.backgroundColor = 'var(--secondary)';
-            style.color = 'var(--secondary-foreground)';
-        }
-    }
-    return {
-      style: style,
-    };
+      const responseData: AppointmentResponse = {
+          id: responseId,
+          appointmentId: appointment.originalId,
+          userId: user.uid,
+          date: dateString,
+          status,
+          timestamp: Timestamp.now(),
+      };
+      
+      try {
+        await setDoc(responseDocRef, responseData, { merge: true });
+      } catch (e: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `appointmentResponses/${responseId}`,
+            operation: 'write',
+            requestResourceData: responseData
+        }));
+      }
   };
 
-  const handleSelectEvent = (event: CalendarEvent) => {
-    if (isAdmin) {
-        router.push('/verwaltung/termine-bearbeiten');
-    }
-    // Ansonsten keine Aktion für normale Spieler
-  };
-
-
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses;
+  const defaultOpenMonth = Object.keys(groupedAppointments)[0];
+  
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-             <ListTodo className="h-6 w-6" /> {isAdmin ? 'Admin: Terminübersicht' : 'Deine Terminübersicht'}
-          </CardTitle>
-          <CardDescription>
-            {isAdmin 
-                ? "Dies ist die Admin-Ansicht. Alle Termine, inklusive abgesagter (rot durchgestrichen) und geänderter (grau), werden angezeigt."
-                : "Eine Übersicht aller für dich relevanten Termine."
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 md:p-6">
-          <div className="h-[75vh]">
-            <Calendar
-              localizer={localizer}
-              events={calendarEvents}
-              startAccessor="start"
-              endAccessor="end"
-              messages={messages}
-              culture="de-DE"
-              style={{ height: '100%' }}
-              eventPropGetter={eventStyleGetter}
-              onSelectEvent={handleSelectEvent}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <h1 className="flex items-center gap-3 text-3xl font-bold">
+           <ListTodo className="h-8 w-8 text-primary" /> Deine Termine
+        </h1>
+        <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter} disabled={userTeamsForFilter.length === 0}>
+            <SelectTrigger className="w-full sm:w-[280px]">
+                <SelectValue placeholder="Nach Mannschaft filtern..." />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">Alle meine Mannschaften</SelectItem>
+                {userTeamsForFilter.map(team => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
+            </SelectContent>
+        </Select>
+      </div>
+
+       {isLoading ? <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+        : Object.keys(groupedAppointments).length > 0 ? (
+          <Accordion type="multiple" defaultValue={defaultOpenMonth ? [defaultOpenMonth] : []} className="w-full space-y-4">
+              {Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                  <AccordionItem value={monthYear} key={monthYear} className="border-b-0">
+                      <AccordionTrigger className="text-xl font-semibold py-3 px-4 bg-muted/50 rounded-t-lg hover:no-underline">{monthYear} ({appointmentsInMonth.length})</AccordionTrigger>
+                      <AccordionContent className="border border-t-0 rounded-b-lg p-0">
+                          <div className="divide-y">
+                              {appointmentsInMonth.map(app => {
+                                  const dateKey = `${app.originalId}-${formatDate(app.instanceDate, 'yyyy-MM-dd')}`;
+                                  const userStatus = userResponsesMap.get(dateKey);
+                                  const location = app.locationId ? locationsMap.get(app.locationId) : null;
+                                  
+                                  return (
+                                    <div key={app.virtualId} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                      <div className="flex-1 space-y-1">
+                                        <p className="font-semibold">{app.title}</p>
+                                        <p className="text-sm text-muted-foreground">{formatDate(app.instanceDate, 'eeee, dd.MM.yyyy', {locale: de})} - {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}</p>
+                                        {location && (
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="link" className="p-0 h-auto font-normal text-sm text-muted-foreground"><MapPin className="h-4 w-4 mr-1" /> {location.name}</Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-64 text-sm">
+                                                    {location.name}{location.address && `, ${location.address}`}
+                                                </PopoverContent>
+                                            </Popover>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')} className="gap-2">
+                                            <ThumbsUp className="h-4 w-4"/> Zusagen
+                                        </Button>
+                                        <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')} className="gap-2">
+                                            <ThumbsDown className="h-4 w-4"/> Absagen
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                              })}
+                          </div>
+                      </AccordionContent>
+                  </AccordionItem>
+              ))}
+          </Accordion>
+        ) : (<div className="text-center py-10 text-muted-foreground">Keine bevorstehenden Termine gefunden.</div>)
+      }
     </div>
   );
 }
+
+    
