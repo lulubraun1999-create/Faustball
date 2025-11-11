@@ -237,7 +237,7 @@ export default function KalenderPage() {
         let event: EventAttributes = {
             title: app.title,
             start: startDateArray,
-            description: app.description
+            description: app.description || ''
         };
 
         if (app.isAllDay) {
