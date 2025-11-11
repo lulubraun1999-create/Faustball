@@ -73,62 +73,62 @@
 /* Custom styles for react-big-calendar */
 @layer components {
     .rbc-month-view .rbc-row .rbc-gutter-cell {
-        @apply w-10 flex-shrink-0;
+      @apply w-10 flex-shrink-0;
     }
     .rbc-week-number {
-        @apply text-sm font-medium text-muted-foreground text-center pt-2;
+      @apply text-sm font-medium text-muted-foreground text-center pt-2;
     }
 
     .rbc-month-view, .rbc-month-row {
-        @apply flex flex-col flex-grow;
+      @apply flex flex-col flex-grow;
     }
     
     .rbc-month-row {
-        @apply flex-row;
+      @apply flex-row;
     }
 
     .rbc-row-content {
-        @apply h-full;
+      @apply h-full;
     }
 
     .rbc-day-bg + .rbc-day-bg {
-        @apply border-l border-border;
+      @apply border-l border-border;
     }
     
     .rbc-month-row + .rbc-month-row {
-        @apply border-t border-border;
+      @apply border-t border-border;
     }
     
     .rbc-day-bg {
-       aspect-ratio: 1 / 1;
+      aspect-ratio: 1 / 1;
     }
     
     .rbc-off-range-bg {
-       visibility: hidden;
+      visibility: hidden;
     }
 
     .rbc-day-bg.rbc-today {
-        background-color: transparent !important;
-        @apply border-2 border-primary;
+       background-color: transparent !important;
+       @apply border-2 border-primary;
     }
 
 
     /* Mobile-specific calendar optimizations */
     @media (max-width: 768px) {
-        .rbc-toolbar {
-            @apply flex-col items-start gap-2;
-        }
-        .rbc-btn-group {
-            @apply flex flex-wrap;
-        }
-        .rbc-toolbar .rbc-toolbar-label {
-            @apply text-lg font-bold;
-        }
-        .rbc-event {
-            @apply whitespace-normal text-xs p-0.5;
-        }
-        .rbc-header {
-            @apply text-center pb-1;
-        }
+      .rbc-toolbar {
+        @apply flex-col items-start gap-2;
+      }
+      .rbc-btn-group {
+        @apply flex flex-wrap;
+      }
+      .rbc-toolbar .rbc-toolbar-label {
+        @apply text-lg font-bold;
+      }
+      .rbc-event {
+        @apply whitespace-normal text-xs p-0.5;
+      }
+      .rbc-header {
+        @apply text-center pb-1;
+      }
     }
 }
