@@ -17,7 +17,7 @@ export interface Appointment {
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
   recurrenceEndDate?: Timestamp | null; // Explizit null erlauben
-  rsvpDeadline?: string | null;
+  rsvpDeadline?: string | null; // Format: "days_before:HH;mm" (e.g., "1:18;00" for 1 day before at 18:00)
   meetingPoint?: string;
   meetingTime?: string;
   createdAt?: Timestamp | FieldValue;

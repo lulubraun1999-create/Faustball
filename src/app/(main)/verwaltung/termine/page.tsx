@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -5,10 +6,10 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmi
 import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
+import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
-import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin } from 'lucide-react';
+import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, CalendarClock, CalendarX2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -68,17 +69,17 @@ export default function TermineUebersichtPage() {
     return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
   }, [userTeamIds, teamsMap]);
 
+  const allMembersQuery = useMemoFirebase(() => {
+    if (!firestore || !isAdmin) return null; // NUR Admins laden alle Mitglieder
+    return collection(firestore, 'members');
+  }, [firestore, isAdmin]);
+  const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
+
   const allResponsesQuery = useMemoFirebase(() => {
-      if (!firestore) return null;
-      return collection(firestore, 'appointmentResponses');
+    if (!firestore) return null;
+    return collection(firestore, 'appointmentResponses');
   }, [firestore]);
   const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
-  
-  const allMembersQuery = useMemoFirebase(() => {
-      if (!firestore) return null;
-      return collection(firestore, 'members');
-  }, [firestore]);
-  const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments || !exceptions || !memberProfile) return [];
@@ -118,9 +119,7 @@ export default function TermineUebersichtPage() {
           isException = true;
         }
         
-        if (exception?.status !== 'cancelled') {
-            allEvents.push({ ...finalData, instanceDate: finalData.startDate.toDate(), originalId: app.id, virtualId: app.id, isCancelled: false, isException });
-        }
+        allEvents.push({ ...finalData, instanceDate: finalData.startDate.toDate(), originalId: app.id, virtualId: app.id, isCancelled: exception?.status === 'cancelled', isException });
 
       } else {
         let currentDate = appStartDate;
@@ -133,27 +132,25 @@ export default function TermineUebersichtPage() {
             const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
             const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
 
-            if (instanceException?.status !== 'cancelled') {
-              let isException = false;
-              let instanceData: Appointment = { ...app };
-              let instanceStartDate = currentDate;
-              let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
-              
-              if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                  isException = true;
-                  const modData = instanceException.modifiedData;
-                  instanceData = { ...instanceData, ...modData };
-                  instanceStartDate = modData.startDate?.toDate() ?? instanceStartDate;
-                  instanceEndDate = modData.endDate?.toDate() ?? instanceEndDate;
-              }
-
-              allEvents.push({
-                ...instanceData,
-                id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
-                instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
-                isCancelled: false, isException,
-              });
+            let isException = false;
+            let instanceData: Appointment = { ...app };
+            let instanceStartDate = currentDate;
+            let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
+            
+            if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                isException = true;
+                const modData = instanceException.modifiedData;
+                instanceData = { ...instanceData, ...modData };
+                instanceStartDate = modData.startDate?.toDate() ?? instanceStartDate;
+                instanceEndDate = modData.endDate?.toDate() ?? instanceEndDate;
             }
+
+            allEvents.push({
+              ...instanceData,
+              id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
+              instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+              isCancelled: instanceException?.status === 'cancelled', isException,
+            });
           }
           
           iter++;
@@ -215,7 +212,7 @@ export default function TermineUebersichtPage() {
       }
   };
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses || isLoadingMembers;
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses || (isAdmin && isLoadingMembers);
   const defaultOpenMonth = Object.keys(groupedAppointments)[0];
   
   return (
@@ -249,12 +246,31 @@ export default function TermineUebersichtPage() {
 
                                   const location = app.locationId ? locationsMap.get(app.locationId) : null;
                                   
+                                  const originalAppointment = appointments?.find(a => a.id === app.originalId);
+
+                                  let rsvpDate: Date | null = null;
+                                  if (originalAppointment?.rsvpDeadline) {
+                                      const [days, time] = originalAppointment.rsvpDeadline.split(':');
+                                      const [hours, minutes] = time.split(';').map(Number);
+                                      const deadlineBaseDate = subDays(app.instanceDate, Number(days));
+                                      rsvpDate = setMilliseconds(setSeconds(setMinutes(setHours(deadlineBaseDate, hours), minutes), 0), 0);
+                                  }
+                                  
                                   return (
-                                    <div key={app.virtualId} className="p-4 flex flex-col gap-4">
+                                    <div key={app.virtualId} className={cn("p-4 flex flex-col gap-4", app.isCancelled && 'bg-red-50/50 dark:bg-red-900/20')}>
                                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                                         <div className="flex-1 space-y-1">
-                                          <p className="font-semibold text-lg">{app.title}</p>
-                                          <p className="text-sm text-muted-foreground">{formatDate(app.instanceDate, 'eeee, dd.MM.yyyy', {locale: de})} - {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}</p>
+                                          <p className={cn("font-semibold text-lg", app.isCancelled && 'line-through')}>{app.title}</p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {formatDate(app.instanceDate, 'eeee, dd.MM.yyyy', {locale: de})} - {app.isAllDay ? 'Ganztägig' : `${formatDate(app.instanceDate, 'HH:mm')} Uhr`}
+                                            {app.endDate && !app.isAllDay && ` bis ${formatDate(app.endDate.toDate(), 'HH:mm')} Uhr`}
+                                          </p>
+                                           {rsvpDate && (
+                                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                                <CalendarClock className="h-3 w-3" />
+                                                Rückmeldung bis: {formatDate(rsvpDate, 'dd.MM.yy, HH:mm')} Uhr
+                                            </p>
+                                          )}
                                           {location && (
                                               <Popover>
                                                   <PopoverTrigger asChild>
@@ -271,22 +287,27 @@ export default function TermineUebersichtPage() {
                                               {app.meetingTime && <p><strong>Treffzeit:</strong> {app.meetingTime}</p>}
                                             </div>
                                           )}
+                                          {app.isCancelled && <p className="text-destructive font-semibold flex items-center gap-2 mt-2"><CalendarX2 className="h-4 w-4" /> ABGESAGT</p>}
                                         </div>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')} className="gap-2">
-                                              <ThumbsUp className="h-4 w-4"/> Zusagen
-                                          </Button>
-                                          <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')} className="gap-2">
-                                              <ThumbsDown className="h-4 w-4"/> Absagen
-                                          </Button>
-                                          <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')} className="gap-2">
-                                              <HelpCircle className="h-4 w-4"/> Unsicher
-                                          </Button>
+                                        {!app.isCancelled && (
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')} className="gap-2">
+                                                <ThumbsUp className="h-4 w-4"/> Zusagen
+                                            </Button>
+                                            <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')} className="gap-2">
+                                                <ThumbsDown className="h-4 w-4"/> Absagen
+                                            </Button>
+                                            <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')} className="gap-2">
+                                                <HelpCircle className="h-4 w-4"/> Unsicher
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {!app.isCancelled && (
+                                        <div className="flex justify-end">
+                                            <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                         </div>
-                                      </div>
-                                      <div className="flex justify-end">
-                                          <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
-                                      </div>
+                                      )}
                                     </div>
                                   );
                               })}
