@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -35,7 +36,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell, Legend } from "recharts";
-import { ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 
 
 type UnrolledAppointment = Appointment & {
@@ -88,10 +89,13 @@ export default function TermineUebersichtPage() {
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
   const responsesQuery = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      // Admin sees all responses, user sees only their own
-      return query(collection(firestore, 'appointmentResponses'));
-  }, [firestore, user]);
+    if (!firestore || !user) return null;
+    if (isAdmin) {
+      return collection(firestore, 'appointmentResponses');
+    }
+    // Only fetch the user's own responses if not an admin.
+    return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
+  }, [firestore, user, isAdmin]);
   const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
   const userResponses = useMemo(() => {
     if (!allResponses || !user) return [];
@@ -261,7 +265,7 @@ export default function TermineUebersichtPage() {
             <StatisticsDialog 
               user={user} 
               appointments={unrolledAppointments} 
-              responses={userResponses} 
+              responses={allResponses} 
               appointmentTypesMap={appointmentTypesMap} 
             />
             <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter} disabled={userTeamsForFilter.length === 0}>
@@ -499,11 +503,9 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
 
     for (const app of relevantAppointments) {
         const appDate = app.instanceDate;
-        
         const isCurrentMonth = getYear(appDate) === getYear(now) && getMonth(appDate) === getMonth(now);
         
-        // Count only past appointments for past months, and all for current month
-        if (!isCurrentMonth && isBefore(appDate, now) === false) {
+        if (!isCurrentMonth && isBefore(now, appDate)) {
             continue;
         }
 
@@ -592,8 +594,8 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                                   <CardHeader className="p-4 bg-muted/50">
                                                       <CardTitle className="text-base">{typeName} (Gesamt: {total})</CardTitle>
                                                   </CardHeader>
-                                                  <CardContent className="flex flex-col gap-4 p-4">
-                                                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center">
+                                                  <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                                      <div className="grid grid-cols-2 gap-2 text-center">
                                                           <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
                                                               <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
                                                               <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(total > 0 ? (zugesagt/total)*100 : 0).toFixed(0)}%)</div>
@@ -636,8 +638,8 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                              <CardHeader className="p-4 bg-muted/50">
                                 <CardTitle className="text-base">Jahresbilanz (Letzte 12 Monate)</CardTitle>
                              </CardHeader>
-                              <CardContent className="flex flex-col gap-4 p-4">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center">
+                              <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                <div className="grid grid-cols-2 gap-2 text-center">
                                     <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30"><div className="text-2xl font-bold text-green-700 dark:text-green-400">{yearlyTotals.zugesagt}</div><div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.zugesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30"><div className="text-2xl font-bold text-red-700 dark:text-red-400">{yearlyTotals.abgesagt}</div><div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.abgesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30"><div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{yearlyTotals.unsicher}</div><div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({(yearlyTotals.total > 0 ? (yearlyTotals.unsicher / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
