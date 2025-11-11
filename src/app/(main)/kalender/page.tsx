@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -10,13 +11,13 @@ import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, diffe
 import { de } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
-import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin, Users as UsersIcon, Clock, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createEvents, type EventAttributes } from 'ics';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 
 // date-fns Localizer
@@ -67,7 +68,6 @@ export default function KalenderPage() {
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [popoverTarget, setPopoverTarget] = useState<HTMLElement | null>(null);
 
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState<View>(Views.MONTH);
@@ -87,10 +87,13 @@ export default function KalenderPage() {
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
   const appointmentTypesMap = useMemo(() => new Map(appointmentTypes?.map(t => [t.id, t.name])), [appointmentTypes]);
 
+  const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
+  const { data: allLocations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
+  const locationsMap = useMemo(() => new Map(allLocations?.map(l => [l.id, l])), [allLocations]);
+
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
   const teamsMap = useMemo(() => new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name])), [allGroups]);
-  const locationsMap = useMemo(() => new Map(allGroups?.filter(g => g.type === 'location').map(t => [t.id, t.name])), [allGroups]);
   
   const userTeamsForFilter = useMemo(() => {
     if (!userTeamIds || !teamsMap) return [];
@@ -212,7 +215,7 @@ export default function KalenderPage() {
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return filteredAppointments.map(app => ({
-        title: app.isAllDay ? app.title : `${format(app.instanceDate, 'HH:mm')} ${app.title}`,
+        title: app.title,
         start: app.instanceDate,
         end: app.endDate ? app.endDate.toDate() : app.instanceDate,
         allDay: app.isAllDay,
@@ -279,7 +282,7 @@ export default function KalenderPage() {
     });
   }
 
-  const isLoading = isUserLoadingAuth || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingGroups || isLoadingTypes;
+  const isLoading = isUserLoadingAuth || isLoadingMember || isLoadingAppointments || isLoadingExceptions || isLoadingGroups || isLoadingTypes || isLoadingLocations;
 
   if (isLoading) {
     return (
@@ -309,9 +312,8 @@ export default function KalenderPage() {
     return { style };
   };
 
-  const handleSelectEvent = (event: CalendarEvent, e: React.SyntheticEvent<HTMLElement>) => {
+  const handleSelectEvent = (event: CalendarEvent) => {
     setSelectedEvent(event);
-    setPopoverTarget(e.currentTarget);
   };
   
   const handleNavigate = (newDate: Date, view: View, action: NavigateAction) => {
@@ -372,72 +374,97 @@ export default function KalenderPage() {
                     </Button>
                 </CardHeader>
                 <CardContent className="p-4 md:p-6">
-                <Popover open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-                  <PopoverTrigger asChild>
-                    <div className="h-[80vh]">
-                        <Calendar
-                            localizer={localizer}
-                            events={calendarEvents}
-                            startAccessor="start"
-                            endAccessor="end"
-                            messages={messages}
-                            culture="de-DE"
-                            style={{ height: '100%' }}
-                            eventPropGetter={eventStyleGetter}
-                            onSelectEvent={handleSelectEvent}
-                            onNavigate={handleNavigate}
-                            onView={setView}
-                            view={view}
-                            date={date}
-                            showWeekNumbers
-                        />
-                    </div>
-                  </PopoverTrigger>
-                   {selectedEvent && (
-                      <PopoverContent className="w-80" target={popoverTarget} align="start">
-                        <Card className="border-none shadow-none">
-                            <CardHeader className="p-2">
-                                <div className="flex justify-between items-start">
-                                    <CardTitle className="text-lg mb-2">{selectedEvent.title}</CardTitle>
-                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedEvent(null)}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                                <CardDescription className="flex flex-col gap-1">
-                                    <span className="font-semibold text-foreground">{appointmentTypesMap.get(selectedEvent.resource.appointmentTypeId)}</span>
-                                    <span>
-                                        {format(selectedEvent.start!, "eeee, dd.MM.yyyy", { locale: de })}
-                                    </span>
-                                    {!selectedEvent.allDay && (
-                                        <span>
-                                            {format(selectedEvent.start!, "HH:mm", { locale: de })} - {format(selectedEvent.end!, "HH:mm", { locale: de })} Uhr
-                                        </span>
-                                    )}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="p-2 text-sm space-y-2">
-                               {selectedEvent.resource.locationId && locationsMap.has(selectedEvent.resource.locationId) && (
-                                 <div className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-muted-foreground"/>
-                                    <span>{locationsMap.get(selectedEvent.resource.locationId)?.name}</span>
-                                 </div>
-                               )}
-                                <p className="text-muted-foreground">
-                                    Mannschaften: {selectedEvent.resource.visibility.type === 'all' ? 'Alle' : selectedEvent.resource.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
-                                </p>
-                            </CardContent>
-                            <CardFooter className="p-2">
-                                <Button className="w-full" onClick={() => router.push('/verwaltung/termine')}>
-                                    Details & Rückmeldung
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                      </PopoverContent>
-                   )}
-                </Popover>
+                  <div className="h-[80vh]">
+                      <Calendar
+                          localizer={localizer}
+                          events={calendarEvents}
+                          startAccessor="start"
+                          endAccessor="end"
+                          messages={messages}
+                          culture="de-DE"
+                          style={{ height: '100%' }}
+                          eventPropGetter={eventStyleGetter}
+                          onSelectEvent={handleSelectEvent}
+                          onNavigate={handleNavigate}
+                          onView={setView}
+                          view={view}
+                          date={date}
+                          showWeekNumbers
+                      />
+                  </div>
                 </CardContent>
             </Card>
         </main>
+        
+        <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+            <DialogContent className="sm:max-w-md">
+                {selectedEvent && (
+                    <>
+                        <DialogHeader>
+                            <DialogTitle className="text-xl">{selectedEvent.title}</DialogTitle>
+                            <DialogDescription>
+                                {appointmentTypesMap.get(selectedEvent.resource.appointmentTypeId)}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4 text-sm">
+                            <div className="flex items-start gap-3">
+                                <CalendarIcon className="h-4 w-4 mt-1 text-muted-foreground" />
+                                <div>
+                                    <p className="font-semibold">{format(selectedEvent.start!, "eeee, dd. MMMM yyyy", { locale: de })}</p>
+                                    <p className="text-muted-foreground">
+                                        {selectedEvent.allDay 
+                                            ? 'Ganztägig' 
+                                            : `${format(selectedEvent.start!, "HH:mm", { locale: de })} - ${format(selectedEvent.end!, "HH:mm", { locale: de })} Uhr`
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                            {selectedEvent.resource.locationId && locationsMap.has(selectedEvent.resource.locationId) && (
+                                <div className="flex items-start gap-3">
+                                    <MapPin className="h-4 w-4 mt-1 text-muted-foreground"/>
+                                    <div>
+                                        <p className="font-semibold">{locationsMap.get(selectedEvent.resource.locationId)?.name}</p>
+                                        <p className="text-muted-foreground">{locationsMap.get(selectedEvent.resource.locationId)?.address}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {(selectedEvent.resource.meetingPoint || selectedEvent.resource.meetingTime) && (
+                                <div className="flex items-start gap-3">
+                                    <Clock className="h-4 w-4 mt-1 text-muted-foreground"/>
+                                    <div>
+                                        {selectedEvent.resource.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {selectedEvent.resource.meetingPoint}</p>}
+                                        {selectedEvent.resource.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {selectedEvent.resource.meetingTime}</p>}
+                                    </div>
+                                </div>
+                            )}
+                             <div className="flex items-start gap-3">
+                                <UsersIcon className="h-4 w-4 mt-1 text-muted-foreground"/>
+                                <div>
+                                    <p className="font-semibold">Mannschaften</p>
+                                    <p className="text-muted-foreground">
+                                        {selectedEvent.resource.visibility.type === 'all' 
+                                            ? 'Alle Mannschaften' 
+                                            : selectedEvent.resource.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <DialogClose asChild>
+                                <Button type="button" variant="secondary">
+                                    Schließen
+                                </Button>
+                            </DialogClose>
+                            <Button onClick={() => router.push('/verwaltung/termine')}>
+                                Details & Rückmeldung
+                            </Button>
+                        </DialogFooter>
+                    </>
+                )}
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
+
+    

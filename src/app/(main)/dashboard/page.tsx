@@ -77,6 +77,8 @@ export default function DashboardPage() {
         return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id));
     }, [allGroups, memberProfile]);
 
+    const teamsMap = useMemo(() => new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name])), [allGroups]);
+
     const { nextMatchDay, nextAppointments } = useMemo(() => {
         if (!appointments || !appointmentTypes || !memberProfile || isLoadingExceptions) return { nextMatchDay: null, nextAppointments: [] };
         
@@ -228,6 +230,11 @@ export default function DashboardPage() {
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div className="space-y-1">
                                 <p className="text-2xl font-bold">{nextMatchDay.title}</p>
+                                {nextMatchDay.visibility.type === 'specificTeams' && (
+                                    <p className="text-sm font-medium text-primary">
+                                        {nextMatchDay.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
+                                    </p>
+                                )}
                                 <p className="text-muted-foreground text-lg">
                                     {format(nextMatchDay.instanceDate, 'eeee, dd. MMMM yyyy', { locale: de })}
                                 </p>
@@ -370,7 +377,5 @@ export default function DashboardPage() {
         </div>
     );
 }
-
-    
 
     
