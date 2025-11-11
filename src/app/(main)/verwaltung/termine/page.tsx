@@ -91,7 +91,7 @@ export default function TermineUebersichtPage() {
 
   const responsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
   const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesRef);
-  
+
   const userResponses = useMemo(() => {
     if (!allResponses || !user) return [];
     return allResponses.filter(r => r.userId === user.uid);
@@ -422,8 +422,8 @@ interface ParticipantListDialogProps {
 
 const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointment, allMembers, allResponses }) => {
 
-  const { accepted, rejected, unsure, totalCount } = useMemo(() => {
-    if (!allMembers || !allResponses) return { accepted: [], rejected: [], unsure: [], totalCount: 0};
+  const { accepted, rejected, unsure, pending } = useMemo(() => {
+    if (!allMembers || !allResponses) return { accepted: [], rejected: [], unsure: [], pending: []};
     
     const relevantMemberIds = new Set<string>();
     if (appointment.visibility.type === 'all') {
@@ -437,38 +437,31 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     }
 
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responsesForInstance = allResponses?.filter(r => r.appointmentId === appointment.originalId && r.date === dateString) || [];
+    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === dateString) || [];
     
     const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
     const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');
     const unsure = responsesForInstance.filter(r => r.status === 'unsicher');
 
-    return { accepted, rejected, unsure, totalCount: relevantMemberIds.size };
+    const respondedUserIds = new Set(responsesForInstance.map(r => r.userId));
+    const pending = Array.from(relevantMemberIds).map(id => allMembers.find(m => m.userId === id)).filter((m): m is MemberProfile => !!m && !respondedUserIds.has(m.userId));
+
+    return { accepted, rejected, unsure, pending };
   }, [appointment, allMembers, allResponses]);
 
   const membersMap = useMemo(() => new Map(allMembers?.map(m => [m.userId, m])), [allMembers]);
-  const respondedCount = accepted.length + rejected.length + unsure.length;
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-            <Users className="h-4 w-4 mr-2" />
-            {respondedCount} / {totalCount}
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger asChild><Button variant="ghost" size="icon" title="Teilnehmerliste anzeigen"><Users className="h-4 w-4" /></Button></DialogTrigger>
       <DialogContent>
-        <DialogHeader>
-            <DialogTitle>Teilnehmerliste für "{appointment.title}"</DialogTitle>
-            <DialogDescription>{formatDate(appointment.instanceDate, "eeee, dd. MMMM yyyy 'um' HH:mm 'Uhr'", { locale: de })}</DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-4 p-4">
-              <div><h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3><ul className="list-disc pl-5 text-sm">{accepted.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
-              <div><h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3><ul className="list-disc pl-5 text-sm">{unsure.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
-              <div><h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3><ul className="list-disc pl-5 text-sm">{rejected.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}{r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}</li>))}</ul></div>
-            </div>
-        </ScrollArea>
+        <DialogHeader><DialogTitle>Teilnehmerliste für "{appointment.title}"</DialogTitle><DialogDescription>{formatDate(appointment.instanceDate, "eeee, dd. MMMM yyyy 'um' HH:mm 'Uhr'", { locale: de })}</DialogDescription></DialogHeader>
+        <ScrollArea className="max-h-[60vh]"><div className="space-y-4 p-4">
+          <div><h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3><ul className="list-disc pl-5 text-sm">{accepted.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+          <div><h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3><ul className="list-disc pl-5 text-sm">{rejected.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}{r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}</li>))}</ul></div>
+          <div><h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3><ul className="list-disc pl-5 text-sm">{unsure.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+          <div><h3 className="font-semibold text-muted-foreground mb-2">Ausstehend ({pending.length})</h3><ul className="list-disc pl-5 text-sm">{pending.map(m => (<li key={m.userId}>{m.firstName} {m.lastName}</li>))}</ul></div>
+        </div></ScrollArea>
       </DialogContent>
     </Dialog>
   );
@@ -488,6 +481,7 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     const now = new Date();
     const oneYearAgo = startOfYear(addMonths(now, -11));
     const currentYear = getYear(now);
+    const currentMonth = getMonth(now);
 
     const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number; offen: number; }>> = {};
     const yearSummary = { zugesagt: 0, abgesagt: 0, unsicher: 0, offen: 0, total: 0 };
@@ -496,17 +490,17 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     
     const relevantAppointments = appointments.filter(app => {
         const appDate = app.instanceDate;
-        return appDate >= oneYearAgo && getYear(appDate) <= currentYear;
+        // Include all appointments from the start of the 12-month-ago year up to now.
+        return appDate >= oneYearAgo && appDate <= endOfMonth(now);
     });
 
     for (const app of relevantAppointments) {
         const appDate = app.instanceDate;
         const appMonth = getMonth(appDate);
         const appYear = getYear(appDate);
-        const currentMonth = getMonth(now);
-        const isCurrentMonth = appYear === currentYear && appMonth === currentMonth;
-
-        if (!isCurrentMonth && isBefore(now, appDate)) {
+        
+        // Skip future appointments unless they are in the current month
+        if (isBefore(now, appDate) && !(appYear === currentYear && appMonth === currentMonth)) {
             continue;
         }
 
@@ -560,7 +554,7 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     offen: { label: 'Offen', color: 'hsl(var(--muted-foreground))' },
   } satisfies ChartConfig
 
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
     const RADIAN = Math.PI / 180;
     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -569,7 +563,18 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     if (percent < 0.05) return null; // Don't render label if segment is too small
 
     return (
-      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+       <text
+        x={x}
+        y={y}
+        fill="hsl(var(--card-foreground))"
+        textAnchor="middle"
+        dominantBaseline="central"
+        style={{
+          fontSize: '0.8rem',
+          fontWeight: 'bold',
+          textShadow: '0 0 2px hsl(var(--background)), 0 0 2px hsl(var(--background)), 0 0 2px hsl(var(--background))'
+        }}
+      >
         {`${(percent * 100).toFixed(0)}%`}
       </text>
     );
@@ -692,4 +697,5 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     
 
     
+
 
