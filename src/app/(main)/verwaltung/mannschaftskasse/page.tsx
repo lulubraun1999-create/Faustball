@@ -58,13 +58,13 @@ import { de } from 'date-fns/locale';
 
 export default function VerwaltungMannschaftskassePage() {
   const firestore = useFirestore();
-  const { user, isUserLoading } = useUser();
+  const { user, isAdmin, isUserLoading } = useUser();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   const allGroupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
 
-  const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
 
   const penaltiesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'penalties') : null), [firestore]);
@@ -118,7 +118,7 @@ export default function VerwaltungMannschaftskassePage() {
     return { penalties: teamPenalties, transactions: teamTransactions, totalBalance: balance };
   }, [selectedTeamId, allPenalties, allTransactions]);
 
-  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || isLoadingAllMembers || isLoadingPenalties || isLoadingTransactions;
+  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || (isAdmin && isLoadingAllMembers) || isLoadingPenalties || isLoadingTransactions;
 
     if (isLoadingInitial) {
         return (
