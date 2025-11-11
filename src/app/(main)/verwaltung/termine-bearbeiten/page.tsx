@@ -394,7 +394,7 @@ export default function AppointmentManagementPage() {
     }
   };
 
-  const isLoading = isUserLoading || isLoadingTypes || isLoadingLocations || isLoadingGroups || isLoadingAppointments || isProcessing || isLoadingExceptions || allResponsesLoading || membersLoading;
+  const isLoading = isUserLoading || isLoadingTypes || isLoadingLocations || isLoadingGroups || isLoadingAppointments || isProcessing || isLoadingExceptions || (isAdmin && (allResponsesLoading || membersLoading));
   
   if (isUserLoading) {
     return <div className="container mx-auto flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -622,7 +622,7 @@ interface ParticipantListDialogProps {
 
 const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointment, allMembers, allResponses }) => {
   const { accepted, rejected, unsure, pending } = useMemo(() => {
-    if (!allMembers) return { accepted: [], rejected: [], unsure: [], pending: []};
+    if (!allMembers || !allResponses) return { accepted: [], rejected: [], unsure: [], pending: []};
     const relevantMemberIds = new Set<string>();
     if (appointment.visibility.type === 'all') {
       allMembers.forEach(m => relevantMemberIds.add(m.userId));
@@ -635,7 +635,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     }
 
     const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
-    const responsesForInstance = allResponses?.filter(r => r.appointmentId === appointment.originalId && r.date === dateString) || [];
+    const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === dateString) || [];
     
     const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
     const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');
