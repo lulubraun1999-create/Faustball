@@ -48,10 +48,15 @@ export default function VerwaltungMitgliederPage() {
   
   // Abfrage, die nur die Mitglieder der eigenen Teams lädt
   const membersQuery = useMemoFirebase(() => {
-      if (!firestore || !user || userTeamIds.length === 0) return null;
-      // Admins und normale User holen sich nur Mitglieder aus ihren Teams
+      // Warten, bis das Profil (und damit die Teams) geladen ist.
+      if (isMemberProfileLoading || !firestore || !user) return null; 
+      
+      // Wenn das Profil geladen ist, aber keine Teams vorhanden sind, keine Abfrage starten.
+      if (userTeamIds.length === 0) return null;
+
+      // Erst jetzt, mit den Team-IDs, die sichere Abfrage starten.
       return query(collection(firestore, 'members'), where('teams', 'array-contains-any', userTeamIds));
-  }, [firestore, user, userTeamIds]);
+  }, [firestore, user, userTeamIds, isMemberProfileLoading]);
 
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersQuery);
   const usersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
