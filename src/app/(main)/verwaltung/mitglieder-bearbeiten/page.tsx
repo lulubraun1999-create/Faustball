@@ -240,7 +240,7 @@ export default function AdminMitgliederPage() {
             await revokeAdminRole({ uid: userId });
         }
         if (forceRefresh && (newRole !== currentRole)) {
-            await forceRefresh();
+            await forceRefresh(); // Force a refresh of the user's token to get the new claim
         }
         toast({
             title: 'Rolle aktualisiert',
