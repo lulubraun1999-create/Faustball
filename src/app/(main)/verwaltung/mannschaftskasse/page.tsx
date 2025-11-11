@@ -71,8 +71,24 @@ export default function VerwaltungMannschaftskassePage() {
   const penaltiesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'penalties') : null), [firestore]);
   const { data: allPenalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
-  const transactionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'treasury') : null), [firestore]);
-  const { data: allTransactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
+  // KORREKTUR: Die Abfrage für Transaktionen wird jetzt auf die Teams des Benutzers beschränkt, wenn dieser kein Admin ist.
+  const transactionsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const baseQuery = collection(firestore, 'treasury');
+    if (isAdmin) {
+      return baseQuery; // Admins können alles sehen
+    }
+    // Für normale Benutzer: Nur Transaktionen der eigenen Teams laden.
+    // Wichtig: Eine `whereIn`-Abfrage mit einem leeren Array ist ungültig.
+    const userTeamIds = memberProfile?.teams;
+    if (userTeamIds && userTeamIds.length > 0) {
+      return query(baseQuery, where('teamId', 'in', userTeamIds));
+    }
+    return null; // Kein Team -> keine Transaktionen abfragen
+  }, [firestore, user, isAdmin, memberProfile?.teams]);
+
+  const { data: allTransactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsQuery);
+
 
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),

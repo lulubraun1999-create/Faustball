@@ -157,7 +157,8 @@ service cloud.firestore {
 
     // --- /treasury/{transactionId} ---
     match /treasury/{transactionId} {
-        allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+        allow get: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+        allow list: if isSignedIn() && isAdmin();
         allow write: if isSignedIn() && isAdmin();
     }
 
