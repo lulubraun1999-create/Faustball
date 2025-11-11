@@ -78,12 +78,28 @@
   }
 }
 
-/* Custom styles for react-big-calendar week numbers */
+/* Custom styles for react-big-calendar */
 @layer components {
     .rbc-month-view .rbc-row .rbc-gutter-cell {
         @apply w-10 flex-shrink-0;
     }
     .rbc-week-number {
         @apply text-sm font-medium text-muted-foreground text-center pt-2;
+    }
+
+    /* Mobile-specific calendar optimizations */
+    @media (max-width: 768px) {
+        .rbc-toolbar {
+            @apply flex-col items-start gap-2;
+        }
+        .rbc-btn-group {
+            @apply flex flex-wrap;
+        }
+        .rbc-toolbar .rbc-toolbar-label {
+            @apply text-lg font-bold;
+        }
+        .rbc-event {
+            @apply whitespace-normal text-xs p-0.5;
+        }
     }
 }

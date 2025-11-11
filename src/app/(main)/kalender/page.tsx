@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, 'useMemo, useState } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
@@ -18,10 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { saveAs } from 'file-saver';
 
 
 // date-fns Localizer
-const locales = { 'de-DE': de };
+const locales = { 'de': de };
 const localizer = dateFnsLocalizer({
   format,
   parse,
@@ -58,6 +59,11 @@ const messages = {
   noEventsInRange: 'Keine Termine in diesem Zeitraum.',
   showMore: (total: number) => `+ ${total} weitere`,
 };
+
+const formats = {
+    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EEE', culture),
+};
+
 
 export default function KalenderPage() {
   const router = useRouter();
@@ -289,12 +295,7 @@ export default function KalenderPage() {
             return;
         }
         const blob = new Blob([value], { type: 'text/calendar;charset=utf-8' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'faustball_kalender.ics';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        saveAs(blob, 'faustball_kalender.ics');
     });
   }
 
@@ -397,7 +398,8 @@ export default function KalenderPage() {
                           startAccessor="start"
                           endAccessor="end"
                           messages={messages}
-                          culture="de-DE"
+                          culture="de"
+                          formats={formats}
                           style={{ height: '100%' }}
                           eventPropGetter={eventStyleGetter}
                           onSelectEvent={handleSelectEvent}
