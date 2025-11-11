@@ -1,10 +1,12 @@
+
 "use client";
 
 import { useUser, useFirestore, useMemoFirebase, useDoc } from "@/firebase";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import type { MemberProfile } from "@/lib/types";
+import { doc } from "firebase/firestore";
 
 export function MainLayoutClient({
   children,
@@ -13,32 +15,21 @@ export function MainLayoutClient({
 }) {
   const { user: authUser, isUserLoading: isAuthLoading } = useUser();
   const router = useRouter();
-  
-  const memberRef = useMemoFirebase(() => {
-     if (!authUser) return null;
-     // This part is problematic, we'll simplify and rely on registration to create the doc.
-     return null; 
-  }, [authUser]);
+  const firestore = useFirestore();
 
-  // isMemberLoading is no longer a concern here as we simplify the logic.
-  // const { isLoading: isMemberLoading } = useDoc<MemberProfile>(memberRef);
-
-
+  // We only need to check if the user is authenticated.
+  // Other data loading should happen within the pages themselves.
   useEffect(() => {
     if (isAuthLoading) {
-      return;
+      return; // Wait until authentication state is resolved
     }
 
     if (!authUser) {
-      router.replace("/login");
-      return;
+      router.replace("/login"); // If not logged in, redirect
     }
-    
-    // The complex consistency check has been removed.
-    // The registration flow is now the single source of truth for creating user/member documents.
-
   }, [authUser, isAuthLoading, router]);
 
+  // While auth is loading, show a full-screen loader.
   if (isAuthLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -47,9 +38,8 @@ export function MainLayoutClient({
     );
   }
   
+  // If user is not authenticated, show loader while redirecting.
   if (!authUser) {
-      // This case is handled by the redirect, but as a fallback, show a loader
-      // to prevent flashing content before the redirect happens.
        return (
           <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -57,5 +47,6 @@ export function MainLayoutClient({
        );
   }
 
+  // If authenticated, render the children pages.
   return <main className="flex-1">{children}</main>;
 }

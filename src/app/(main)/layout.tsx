@@ -1,5 +1,6 @@
 
 import { MainHeader } from "@/components/main-header";
+import { MainLayoutClient } from "@/components/main-layout-client";
 
 export default function MainAppLayout({
   children,
@@ -9,7 +10,7 @@ export default function MainAppLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <MainHeader />
-      <main className="flex-1">{children}</main>
+      <MainLayoutClient>{children}</MainLayoutClient>
     </div>
   );
 }
