@@ -460,7 +460,7 @@ export default function VerwaltungTerminePage() {
   return (
     <>
       <TooltipProvider>
-        <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="w-full p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Termine</CardTitle>
@@ -529,12 +529,10 @@ export default function VerwaltungTerminePage() {
                                         <TableHead>Titel</TableHead>
                                         <TableHead>Datum & Uhrzeit</TableHead>
                                         <TableHead>Mannschaft</TableHead>
-                                        <TableHead>Ort</TableHead>
-                                        <TableHead>Treffpunkt</TableHead>
-                                        <TableHead>Treffzeit</TableHead>
+                                        <TableHead>Details</TableHead>
                                         <TableHead>Rückmeldung bis</TableHead>
                                         <TableHead>Teilnehmer</TableHead>
-                                        <TableHead className="text-right">Aktionen</TableHead>
+                                        <TableHead className="text-right min-w-[280px]">Aktionen</TableHead>
                                     </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -587,7 +585,7 @@ export default function VerwaltungTerminePage() {
                                                 : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                                             </TableCell>
                                             <TableCell>
-                                              {location ? (
+                                              {location || app.meetingPoint || app.meetingTime ? (
                                                 <Popover>
                                                   <PopoverTrigger asChild>
                                                     <Button
@@ -595,14 +593,12 @@ export default function VerwaltungTerminePage() {
                                                       className="flex items-center gap-2 p-0 h-auto font-normal text-foreground"
                                                     >
                                                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                                                      <span>{location.name}</span>
+                                                      <span>{location ? location.name : 'Details'}</span>
                                                     </Button>
                                                   </PopoverTrigger>
                                                   <PopoverContent className="w-64">
-                                                    <p className="font-semibold">{location.name}</p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                      {location.address || 'Keine Adresse hinterlegt'}
-                                                    </p>
+                                                    {location && <p className="font-semibold">{location.name}</p>}
+                                                    {location?.address && <p className="text-sm text-muted-foreground">{location.address}</p>}
                                                      {app.meetingPoint && <p className="text-sm mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
                                                      {app.meetingTime && <p className="text-sm"><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
                                                   </PopoverContent>
@@ -611,8 +607,6 @@ export default function VerwaltungTerminePage() {
                                                 '-'
                                               )}
                                             </TableCell>
-                                            <TableCell>{app.meetingPoint || '-'}</TableCell>
-                                            <TableCell>{app.meetingTime || '-'}</TableCell>
                                             <TableCell>{rsvpDeadlineString}</TableCell>
                                             <TableCell>
                                                 <ResponseStatus
