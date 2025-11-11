@@ -5,7 +5,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmi
 import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
+import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds, startOfMonth } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, ClipboardCopy, CalendarIcon, BarChartHorizontal } from 'lucide-react';
@@ -89,11 +89,8 @@ export default function TermineUebersichtPage() {
 
   const responsesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    if (isAdmin) {
-      return collection(firestore, 'appointmentResponses');
-    }
-    return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
-  }, [firestore, user, isAdmin]);
+    return collection(firestore, 'appointmentResponses');
+}, [firestore, user, isAdmin]);
 
   const { data: responses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
 
@@ -482,14 +479,20 @@ interface StatisticsDialogProps {
 }
 
 const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments, responses, appointmentTypesMap }) => {
-  const userStats = useMemo(() => {
-    if (!user || !responses || appointments.length === 0) return {};
+  const { userStats, yearlyTotals } = useMemo(() => {
+    if (!user || !responses || appointments.length === 0) return { userStats: {}, yearlyTotals: null };
+
+    const now = new Date();
+    const oneYearAgo = startOfMonth(addMonths(now, -11));
+
+    const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number }>> = {};
+    const yearSummary = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
 
     const userResponses = responses.filter(r => r.userId === user.uid);
-    const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number }>> = {};
+    const userResponsesMap = new Map(userResponses.map(r => [`${r.appointmentId}-${r.date}`, r.status]));
 
     for (const app of appointments) {
-        if (isBefore(app.instanceDate, new Date())) { // Nur vergangene Termine zählen
+        if (app.instanceDate >= oneYearAgo) {
             const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
             const typeName = appointmentTypesMap.get(app.appointmentTypeId) || 'Unbekannt';
 
@@ -497,18 +500,40 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
             if (!stats[monthYear][typeName]) stats[monthYear][typeName] = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
             
             stats[monthYear][typeName].total++;
+            yearSummary.total++;
             
-            const response = userResponses.find(r => r.appointmentId === app.originalId && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'));
+            const responseStatus = userResponsesMap.get(`${app.originalId}-${formatDate(app.instanceDate, 'yyyy-MM-dd')}`);
             
-            if (response) {
-                if (response.status === 'zugesagt') stats[monthYear][typeName].zugesagt++;
-                else if (response.status === 'abgesagt') stats[monthYear][typeName].abgesagt++;
-                else if (response.status === 'unsicher') stats[monthYear][typeName].unsicher++;
+            if (responseStatus) {
+                if (responseStatus === 'zugesagt') {
+                  stats[monthYear][typeName].zugesagt++;
+                  yearSummary.zugesagt++;
+                }
+                else if (responseStatus === 'abgesagt') {
+                  stats[monthYear][typeName].abgesagt++;
+                  yearSummary.abgesagt++;
+                }
+                else if (responseStatus === 'unsicher') {
+                  stats[monthYear][typeName].unsicher++;
+                  yearSummary.unsicher++;
+                }
             }
         }
     }
-    return stats;
+    
+    // Sort months chronologically descending
+    const sortedStats = Object.fromEntries(
+        Object.entries(stats).sort(([a], [b]) => {
+            const dateA = new Date(a.split(' ')[1], de.localize?.month(de.month.indexOf(a.split(' ')[0]), {width: 'wide'}));
+            const dateB = new Date(b.split(' ')[1], de.localize?.month(de.month.indexOf(b.split(' ')[0]), {width: 'wide'}));
+            return dateB.getTime() - dateA.getTime();
+        })
+    );
+
+    return { userStats: sortedStats, yearlyTotals: yearSummary };
   }, [user, appointments, responses, appointmentTypesMap]);
+  
+  const renderYearlyChart = yearlyTotals && yearlyTotals.total > 0;
 
   return (
     <Dialog>
@@ -518,68 +543,102 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
         <DialogContent className="max-w-4xl">
             <DialogHeader>
                 <DialogTitle>Deine Anwesenheitsstatistik</DialogTitle>
-                <DialogDescription>Übersicht deiner vergangenen Teilnahmen, gruppiert nach Monat und Terminart.</DialogDescription>
+                <DialogDescription>Übersicht deiner Teilnahmen der letzten 12 Monate.</DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[70vh] p-1">
                 <div className="space-y-6 p-4">
-                  {Object.keys(userStats).length > 0 ? Object.entries(userStats).map(([month, typeStats]) => (
-                      <Accordion type="single" collapsible key={month} defaultValue={Object.keys(userStats)[0]}>
-                        <AccordionItem value={month}>
-                            <AccordionTrigger className="text-lg font-semibold">{month}</AccordionTrigger>
-                            <AccordionContent className="p-2">
-                                <div className="space-y-4">
-                                {Object.entries(typeStats).map(([typeName, counts]) => {
-                                    const { zugesagt, abgesagt, unsicher, total } = counts;
-                                    const attendedPercent = total > 0 ? (zugesagt / total) * 100 : 0;
-                                    const absentPercent = total > 0 ? (abgesagt / total) * 100 : 0;
-                                    const unsurePercent = total > 0 ? (unsicher / total) * 100 : 0;
-                                    const chartData = [
-                                      { name: 'Anwesend', value: zugesagt, fill: 'hsl(var(--chart-1))' },
-                                      { name: 'Abwesend', value: abgesagt, fill: 'hsl(var(--destructive))' },
-                                      { name: 'Unsicher', value: unsicher, fill: 'hsl(var(--chart-3))' },
-                                    ];
+                  {Object.keys(userStats).length > 0 ? (
+                      <>
+                        <Accordion type="multiple" defaultValue={Object.keys(userStats)} className="w-full space-y-4">
+                          {Object.entries(userStats).map(([month, typeStats]) => (
+                              <AccordionItem value={month} key={month} className="border-b-0">
+                                  <AccordionTrigger className="text-lg font-semibold py-3 px-4 bg-muted/50 rounded-t-lg hover:no-underline">{month}</AccordionTrigger>
+                                  <AccordionContent className="border border-t-0 rounded-b-lg p-2">
+                                      <div className="space-y-4 p-2">
+                                      {Object.entries(typeStats).sort(([a], [b]) => a.localeCompare(b)).map(([typeName, counts]) => {
+                                          const { zugesagt, abgesagt, unsicher, total } = counts;
+                                          const attendedPercent = total > 0 ? (zugesagt / total) * 100 : 0;
+                                          const absentPercent = total > 0 ? (abgesagt / total) * 100 : 0;
+                                          const unsurePercent = total > 0 ? (unsicher / total) * 100 : 0;
+                                          const chartData = [
+                                            { name: 'Anwesend', value: zugesagt, fill: 'hsl(var(--chart-1))' },
+                                            { name: 'Abwesend', value: abgesagt, fill: 'hsl(var(--destructive))' },
+                                            { name: 'Unsicher', value: unsicher, fill: 'hsl(var(--chart-3))' },
+                                          ].filter(item => item.value > 0);
 
-                                    return (
-                                        <Card key={typeName} className="overflow-hidden">
-                                            <CardHeader className="p-4 bg-muted/50">
-                                                <CardTitle className="text-base">{typeName}</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
-                                                <div className="grid grid-cols-3 gap-2 text-center flex-1">
-                                                    <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
-                                                        <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
-                                                        <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({attendedPercent.toFixed(0)}%)</div>
-                                                    </div>
-                                                     <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30">
-                                                        <div className="text-2xl font-bold text-red-700 dark:text-red-400">{abgesagt}</div>
-                                                        <div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({absentPercent.toFixed(0)}%)</div>
-                                                    </div>
-                                                     <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30">
-                                                        <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unsicher}</div>
-                                                        <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({unsurePercent.toFixed(0)}%)</div>
-                                                    </div>
-                                                </div>
-                                                <div className="h-40 w-full md:w-40">
-                                                  <ChartContainer config={{}} className="min-h-[150px]">
-                                                      <PieChart>
-                                                          <Tooltip content={<ChartTooltipContent hideLabel />} />
-                                                          <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                                                              {chartData.map((entry) => (
-                                                                  <Cell key={`cell-${entry.name}`} fill={entry.fill} />
-                                                              ))}
-                                                          </Pie>
-                                                      </PieChart>
-                                                  </ChartContainer>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    );
-                                })}
+                                          return (
+                                              <Card key={typeName} className="overflow-hidden">
+                                                  <CardHeader className="p-4 bg-muted/50">
+                                                      <CardTitle className="text-base">{typeName} ({total})</CardTitle>
+                                                  </CardHeader>
+                                                  <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
+                                                      <div className="grid grid-cols-3 gap-2 text-center flex-1">
+                                                          <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
+                                                              <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
+                                                              <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({attendedPercent.toFixed(0)}%)</div>
+                                                          </div>
+                                                          <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30">
+                                                              <div className="text-2xl font-bold text-red-700 dark:text-red-400">{abgesagt}</div>
+                                                              <div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({absentPercent.toFixed(0)}%)</div>
+                                                          </div>
+                                                          <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30">
+                                                              <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unsicher}</div>
+                                                              <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({unsurePercent.toFixed(0)}%)</div>
+                                                          </div>
+                                                      </div>
+                                                      <div className="h-40 w-full md:w-40">
+                                                        {chartData.length > 0 ? (
+                                                          <ChartContainer config={{}} className="min-h-[150px]">
+                                                              <PieChart>
+                                                                  <Tooltip content={<ChartTooltipContent hideLabel />} />
+                                                                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                                                                      {chartData.map((entry) => (
+                                                                          <Cell key={`cell-${entry.name}`} fill={entry.fill} />
+                                                                      ))}
+                                                                  </Pie>
+                                                              </PieChart>
+                                                          </ChartContainer>
+                                                        ) : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Keine Daten</div>}
+                                                      </div>
+                                                  </CardContent>
+                                              </Card>
+                                          );
+                                      })}
+                                      </div>
+                                  </AccordionContent>
+                              </AccordionItem>
+                          ))}
+                        </Accordion>
+                        {renderYearlyChart && yearlyTotals && (
+                          <Card className="mt-6 border-primary/50">
+                             <CardHeader className="p-4 bg-muted/50">
+                                <CardTitle className="text-base">Jahresbilanz (Letzte 12 Monate)</CardTitle>
+                             </CardHeader>
+                             <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
+                                <div className="grid grid-cols-3 gap-2 text-center flex-1">
+                                    <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30"><div className="text-2xl font-bold text-green-700 dark:text-green-400">{yearlyTotals.zugesagt}</div><div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.zugesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
+                                    <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30"><div className="text-2xl font-bold text-red-700 dark:text-red-400">{yearlyTotals.abgesagt}</div><div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.abgesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
+                                    <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30"><div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{yearlyTotals.unsicher}</div><div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({(yearlyTotals.total > 0 ? (yearlyTotals.unsicher / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                 </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                  )) : <p className="text-center text-muted-foreground py-10">Keine vergangenen Termine mit Rückmeldungen gefunden.</p>}
+                                <div className="h-40 w-full md:w-40">
+                                  <ChartContainer config={{}} className="min-h-[150px]">
+                                      <PieChart>
+                                          <Tooltip content={<ChartTooltipContent hideLabel />} />
+                                          <Pie data={[
+                                              { name: 'Anwesend', value: yearlyTotals.zugesagt, fill: 'hsl(var(--chart-1))' },
+                                              { name: 'Abwesend', value: yearlyTotals.abgesagt, fill: 'hsl(var(--destructive))' },
+                                              { name: 'Unsicher', value: yearlyTotals.unsicher, fill: 'hsl(var(--chart-3))' },
+                                          ].filter(item => item.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                                              <Cell fill="hsl(var(--chart-1))" /><Cell fill="hsl(var(--destructive))" /><Cell fill="hsl(var(--chart-3))" />
+                                          </Pie>
+                                      </PieChart>
+                                  </ChartContainer>
+                                </div>
+                             </CardContent>
+                          </Card>
+                        )}
+                      </>
+                  ) : <p className="text-center text-muted-foreground py-10">Keine vergangenen Termine mit Rückmeldungen gefunden.</p>}
                 </div>
             </ScrollArea>
         </DialogContent>
