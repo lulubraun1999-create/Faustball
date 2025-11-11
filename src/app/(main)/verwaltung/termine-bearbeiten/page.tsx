@@ -78,6 +78,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Table,
@@ -351,7 +352,9 @@ export default function AppointmentManagementPage() {
     
     try {
         const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
-        const rsvpDeadline = (data.rsvpDeadlineDays && data.rsvpDeadlineTime) 
+        
+        // Umwandlung der RSVP-Frist in das String-Format
+        const rsvpDeadlineString = (data.rsvpDeadlineDays && data.rsvpDeadlineTime) 
           ? `${data.rsvpDeadlineDays}:${data.rsvpDeadlineTime}` 
           : null;
 
@@ -362,7 +365,7 @@ export default function AppointmentManagementPage() {
             isAllDay: data.isAllDay, appointmentTypeId: data.appointmentTypeId, locationId: data.locationId || null,
             description: data.description || null, meetingPoint: data.meetingPoint || null, meetingTime: data.meetingTime || null,
             recurrence: data.recurrence, recurrenceEndDate: data.recurrenceEndDate ? Timestamp.fromDate(new Date(data.recurrenceEndDate)) : null,
-            rsvpDeadline: rsvpDeadline,
+            rsvpDeadline: rsvpDeadlineString,
             visibility: { type: data.visibilityType, teamIds: data.visibilityType === 'specificTeams' ? data.visibleTeamIds : [] },
             createdBy: user.uid, createdAt: serverTimestamp(), lastUpdated: serverTimestamp()
         };
@@ -605,5 +608,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    
 
     
