@@ -111,10 +111,11 @@ service cloud.firestore {
         allow get: if isSignedIn() && (isAdmin() || isExistingResponseOwner());
         allow list: if isSignedIn() && (
                       isAdmin() ||
-                      (request.query.keys().hasAny(['where']) && (
-                        (request.query.where.field == 'userId' && request.query.where.value == request.auth.uid) ||
-                        (request.query.where.field == 'appointmentId')
-                      ))
+                      // Non-admins can only list their own responses
+                      (request.query.keys().hasAny(['where']) &&
+                       request.query.where.field == 'userId' &&
+                       request.query.where.operator == '==' &&
+                       request.query.where.value == request.auth.uid)
                     );
         allow create: if isSignedIn() && isResponseOwner();
         allow update, delete: if isSignedIn() && isExistingResponseOwner();
