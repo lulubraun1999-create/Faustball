@@ -64,6 +64,7 @@ export default function VerwaltungMannschaftskassePage() {
   const allGroupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
 
+  // KORRIGIERT: Diese Abfrage nur ausführen, wenn der User Admin ist.
   const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
 
@@ -87,9 +88,16 @@ export default function VerwaltungMannschaftskassePage() {
   }, [memberProfile, allGroups]);
 
    const membersMap = useMemo(() => {
-       if (!allMembers) return new Map<string, MemberProfile>();
-       return new Map(allMembers.map(m => [m.userId, m]));
-   }, [allMembers]);
+       // Admins see all names, users see only their own name if needed.
+       const map = new Map<string, MemberProfile>();
+       if (isAdmin && allMembers) {
+           allMembers.forEach(m => map.set(m.userId, m));
+       } else if (memberProfile) {
+           // For non-admins, at least their own profile is available.
+           map.set(memberProfile.userId, memberProfile);
+       }
+       return map;
+   }, [allMembers, memberProfile, isAdmin]);
 
   useEffect(() => {
        if (!selectedTeamId && userTeams.length > 0) {
@@ -220,7 +228,7 @@ export default function VerwaltungMannschaftskassePage() {
                                     </Tooltip>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>
-                                <TableCell className="hidden md:table-cell">{memberName}</TableCell>
+                                <TableCell className="hidden md:table-cell">{memberName || '-'}</TableCell>
                                 <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
                                   {isExpense ? '-' : '+'}
                                   {tx.amount.toFixed(2)} €
