@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -56,7 +57,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Appointment, AppointmentType, Group, Location, AppointmentException, MemberProfile, AppointmentResponse } from '@/lib/types';
-import { Loader2, CalendarPlus, X, Trash2, CalendarIcon, Users, Undo2 } from 'lucide-react';
+import { Loader2, CalendarPlus, X, Trash2, CalendarIcon, Users, Undo2, Edit } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRouter } from 'next/navigation';
@@ -169,6 +170,16 @@ export default function AppointmentManagementPage() {
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [], [groups]);
   const teamsMap = useMemo(() => new Map(teams.map(t => [t.id, t.name])), [teams]);
   const locationsMap = useMemo(() => new Map(locations?.map(l => [l.id, l.name])), [locations]);
+  
+  const groupedTeamsForSelection = useMemo(() => {
+    if (!groups) return [];
+    const classes = groups.filter(g => g.type === 'class').sort((a, b) => a.name.localeCompare(b.name));
+    const teams = groups.filter(g => g.type === 'team');
+    return classes.map(c => ({
+        ...c,
+        teams: teams.filter(t => t.parentId === c.id).sort((a, b) => a.name.localeCompare(b.name))
+    })).filter(c => c.teams.length > 0);
+  }, [groups]);
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
@@ -462,7 +473,48 @@ export default function AppointmentManagementPage() {
                       </div>
                       <div>
                           <FormField control={form.control} name="visibilityType" render={({ field }) => (<FormItem className="space-y-3"><FormLabel>Sichtbarkeit</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="all">Alle</SelectItem><SelectItem value="specificTeams">Bestimmte Mannschaften</SelectItem></SelectContent></Select></FormItem>)}/>
-                          {watchVisibilityType === 'specificTeams' && (<div className="pt-4"><FormField control={form.control} name="visibleTeamIds" render={() => (<FormItem><FormLabel>Mannschaften auswählen</FormLabel><ScrollArea className="h-32 rounded-md border p-4"><div className="grid grid-cols-2 gap-2">{teams.map(team => (<FormField key={team.id} control={form.control} name="visibleTeamIds" render={({ field }) => (<FormItem className="flex items-center space-x-3"><FormControl><Checkbox checked={field.value?.includes(team.id)} onCheckedChange={checked => field.onChange(checked ? [...field.value || [], team.id] : field.value?.filter(id => id !== team.id))} /></FormControl><FormLabel className="font-normal">{team.name}</FormLabel></FormItem>)} />))}</div></ScrollArea></FormItem>)}/></div>)}
+                          {watchVisibilityType === 'specificTeams' && (
+                            <div className="pt-4">
+                                <FormField
+                                    control={form.control}
+                                    name="visibleTeamIds"
+                                    render={() => (
+                                        <FormItem>
+                                            <FormLabel>Mannschaften auswählen</FormLabel>
+                                            <ScrollArea className="h-40 rounded-md border p-4">
+                                                {groupedTeamsForSelection.length > 0 ? groupedTeamsForSelection.map(group => (
+                                                    <div key={group.id} className="mb-4">
+                                                        <h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4>
+                                                        <div className="flex flex-col space-y-2">
+                                                            {group.teams.map(team => (
+                                                                <FormField
+                                                                    key={team.id}
+                                                                    control={form.control}
+                                                                    name="visibleTeamIds"
+                                                                    render={({ field }) => (
+                                                                        <FormItem className="flex items-center space-x-3">
+                                                                            <FormControl>
+                                                                                <Checkbox
+                                                                                    checked={field.value?.includes(team.id)}
+                                                                                    onCheckedChange={checked => field.onChange(checked ? [...field.value || [], team.id] : field.value?.filter(id => id !== team.id))}
+                                                                                />
+                                                                            </FormControl>
+                                                                            <FormLabel className="font-normal">{team.name}</FormLabel>
+                                                                        </FormItem>
+                                                                    )}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )) : (
+                                                    <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>
+                                                )}
+                                            </ScrollArea>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                          )}
                       </div>
                     </div>
                 </div>
@@ -608,9 +660,3 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
-
-    
-
-    
-
-    
