@@ -4,63 +4,57 @@
 
 @layer base {
   body {
-    font-family: var(--font-inter), sans-serif;
     @apply bg-background text-foreground;
   }
-
+ 
   :root {
-    --background: 220 40% 98%;
-    --foreground: 220 20% 10%;
-    --card: 220 40% 98%;
-    --card-foreground: 220 20% 10%;
-    --popover: 220 40% 98%;
-    --popover-foreground: 220 20% 10%;
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
     --primary: 220 70% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 40% 92%;
-    --secondary-foreground: 220 20% 10%;
-    --muted: 220 40% 92%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 220 90% 70%;
-    --accent-foreground: 220 20% 10%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 40% 85%;
-    --input: 220 40% 85%;
-    --ring: 220 70% 50%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 222 47.4% 11.2%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 222 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
     --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 5.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 220 75% 65%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 220 90% 70%;
-    --accent-foreground: 220 20% 10%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 220 75% 65%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+  }
+ 
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 210 20% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 210 20% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -72,103 +66,65 @@
 
 /* Custom styles for react-big-calendar */
 @layer components {
-  /* General Toolbar Styling */
-  .rbc-toolbar {
-    @apply flex items-center justify-between flex-wrap gap-2 mb-4;
-  }
-
-  /* Styling for all buttons in the toolbar */
-  .rbc-toolbar .rbc-btn-group button {
-    @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground;
-    @apply h-10 px-4 py-2;
-  }
-
-  /* Remove default borders and styles */
-  .rbc-btn-group {
-    @apply flex gap-1;
-  }
-
-  .rbc-btn-group button {
-    @apply border-input;
-    outline: none;
-  }
-  
-  .rbc-btn-group button:focus,
-  .rbc-btn-group button:hover {
-     background-color: hsl(var(--accent));
-     color: hsl(var(--accent-foreground));
-  }
-
-  /* Active state for view selection buttons */
-  .rbc-btn-group .rbc-active {
-    @apply ring-1 ring-foreground; /* Use white/black border for active state */
-    background-color: transparent !important;
-  }
-  
-  .rbc-toolbar-label {
-    @apply text-xl font-bold text-center grow;
-  }
-
-  .rbc-month-view .rbc-row .rbc-gutter-cell {
-    @apply w-10 flex-shrink-0;
-  }
-  .rbc-week-number {
-    @apply text-sm font-medium text-muted-foreground text-center pt-2;
-  }
-
-  .rbc-month-view,
-  .rbc-month-row {
-    @apply flex flex-col flex-grow;
-  }
-
-  .rbc-month-row {
-    @apply flex-row;
-  }
-
-  .rbc-row-content {
-    @apply h-full;
-  }
-
-  .rbc-day-bg + .rbc-day-bg {
-    @apply border-l border-border;
-  }
-
-  .rbc-month-row + .rbc-month-row {
-    @apply border-t border-border;
-  }
-
-  .rbc-day-bg {
-    aspect-ratio: 1 / 1;
-  }
-
-  .rbc-off-range-bg {
-    visibility: hidden;
-  }
-
-  .rbc-day-bg.rbc-today {
-    background-color: transparent !important;
-    border: 2px solid hsl(var(--primary));
-  }
-
-  /* Mobile-specific calendar optimizations */
-  @media (max-width: 768px) {
     .rbc-toolbar {
-      @apply flex-col items-stretch gap-2;
+        @apply mb-4 flex flex-wrap items-center justify-between gap-2;
     }
-    .rbc-btn-group {
-      @apply w-full justify-between;
+
+    .rbc-toolbar .rbc-btn-group {
+        @apply flex items-center gap-1;
     }
+    
+    .rbc-toolbar .rbc-btn-group:first-child {
+        @apply order-1;
+    }
+
     .rbc-toolbar .rbc-toolbar-label {
-      @apply text-lg font-bold text-center order-first w-full;
+        @apply text-xl font-bold order-2;
     }
-    .rbc-event {
-      @apply whitespace-normal text-xs p-0.5;
+
+    .rbc-toolbar .rbc-btn-group:last-child {
+        @apply order-3;
     }
+
+    .rbc-toolbar button {
+        @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+        @apply border border-input bg-background hover:bg-accent hover:text-accent-foreground;
+        @apply h-10 px-4 py-2;
+        @apply m-0;
+    }
+    
+    .rbc-toolbar button.rbc-active {
+        @apply bg-transparent text-foreground shadow-none;
+        @apply ring-2 ring-foreground; /* Weißer Rand im hellen und dunklen Modus */
+    }
+
+    .rbc-day-bg {
+        aspect-ratio: 1 / 1;
+    }
+    
+    .rbc-off-range-bg {
+        visibility: hidden;
+    }
+
+    .rbc-day-bg.rbc-today {
+       background-color: transparent !important;
+       @apply border-2 border-primary rounded-md;
+    }
+
     .rbc-header {
-      @apply text-center pb-1;
+      @apply text-center pb-1 capitalize; /* Wochentage zentrieren und großschreiben */
     }
-    .rbc-header a {
-      @apply text-xs;
+
+    /* Mobile-specific calendar optimizations */
+    @media (max-width: 768px) {
+        .rbc-toolbar {
+            @apply flex-col items-stretch;
+        }
+        .rbc-toolbar .rbc-toolbar-label {
+            @apply text-center text-lg;
+        }
+        .rbc-header {
+            @apply text-xs;
+        }
     }
-  }
 }
