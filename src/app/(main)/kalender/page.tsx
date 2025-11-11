@@ -129,12 +129,13 @@ export default function KalenderPage() {
     isLoadingLocations;
 
   const { teamsForFilter, typesMap, locationsMap, teamsMap } = useMemo(() => {
-    const adminOrUserTeams = allGroups?.filter(g => g.type === 'team' && (isAdmin || userTeamIds.includes(g.id))) || [];
+    const userTeamIdsSet = new Set(userTeamIds);
+    const teamsForFilter = allGroups?.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id)) || [];
     const typesMap = new Map(appointmentTypes?.map((t) => [t.id, t.name]));
     const locs = new Map(locations?.map((l) => [l.id, l]));
     const teamMap = new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name]));
-    return { teamsForFilter: adminOrUserTeams, typesMap, locationsMap: locs, teamsMap: teamMap };
-  }, [allGroups, appointmentTypes, locations, userTeamIds, isAdmin]);
+    return { teamsForFilter, typesMap, locationsMap: locs, teamsMap: teamMap };
+  }, [allGroups, appointmentTypes, locations, userTeamIds]);
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments || isLoadingExceptions) return [];

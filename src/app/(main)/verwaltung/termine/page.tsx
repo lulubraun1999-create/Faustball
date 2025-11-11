@@ -18,12 +18,12 @@ import {
 } from "firebase/firestore";
 import {
   Appointment,
+  AppointmentException,
   AppointmentType,
   Group,
   Location,
   MemberProfile,
   AppointmentResponse,
-  AppointmentException,
 } from "@/lib/types";
 import {
   Card,
@@ -498,14 +498,12 @@ export default function VerwaltungTerminePage() {
                                 <Table>
                                     <TableHeader>
                                     <TableRow>
-                                        <TableHead>Titel</TableHead>
-                                        <TableHead>Datum & Uhrzeit</TableHead>
-                                        <TableHead className="hidden xl:table-cell">Ort</TableHead>
-                                        <TableHead className="hidden lg:table-cell">Treffpunkt</TableHead>
-                                        <TableHead className="hidden xl:table-cell">Treffzeit</TableHead>
-                                        <TableHead className="hidden lg:table-cell">Rückmeldung bis</TableHead>
-                                        <TableHead>Teilnehmer</TableHead>
-                                        <TableHead className="text-right min-w-[280px]">Aktionen</TableHead>
+                                        <TableHead className="px-2 py-2">Titel</TableHead>
+                                        <TableHead className="px-2 py-2">Datum & Uhrzeit</TableHead>
+                                        <TableHead className="hidden md:table-cell px-2 py-2">Details</TableHead>
+                                        <TableHead className="hidden lg:table-cell px-2 py-2">Rückmeldung bis</TableHead>
+                                        <TableHead className="px-2 py-2">Teilnehmer</TableHead>
+                                        <TableHead className="text-right min-w-[250px] px-2 py-2">Aktionen</TableHead>
                                     </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -545,25 +543,37 @@ export default function VerwaltungTerminePage() {
                                                 key={app.virtualId} 
                                                 id={app.virtualId} 
                                                 ref={el => rowRefs.current[app.virtualId] = el}
-                                                className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
-                                            <TableCell className="font-medium">
+                                                className={cn("text-sm", app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
+                                            <TableCell className="font-medium px-2 py-3">
                                                <div>{displayTitle}</div>
                                                 <div className="text-xs text-muted-foreground">{app.visibility.type === 'all' 
                                                   ? 'Alle' 
                                                   : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                                                 </div>
                                             </TableCell>
-                                            <TableCell>
-                                                <div>{formatDate(app.instanceDate, 'eeee, dd.MM.yy', { locale: de })}</div>
+                                            <TableCell className="px-2 py-3">
+                                                <div>{formatDate(app.instanceDate, 'eee, dd.MM.yy', { locale: de })}</div>
                                                 <div className="text-xs text-muted-foreground">
                                                   {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="hidden xl:table-cell">{location ? location.name : '-'}</TableCell>
-                                            <TableCell className="hidden lg:table-cell">{app.meetingPoint || '-'}</TableCell>
-                                            <TableCell className="hidden xl:table-cell">{app.meetingTime || '-'}</TableCell>
-                                            <TableCell className="hidden lg:table-cell">{rsvpDeadlineString}</TableCell>
-                                            <TableCell>
+                                             <TableCell className="hidden md:table-cell px-2 py-3">
+                                                 {location || app.meetingPoint || app.meetingTime ? (
+                                                     <Popover>
+                                                         <PopoverTrigger asChild>
+                                                             <Button variant="link" className="p-0 h-auto font-normal text-xs"><MapPin className="h-3 w-3 mr-1" />Details</Button>
+                                                         </PopoverTrigger>
+                                                         <PopoverContent className="w-60 text-sm">
+                                                             {location && <p className="font-semibold">{location.name}</p>}
+                                                             {location?.address && <p className="text-muted-foreground text-xs">{location.address}</p>}
+                                                             {app.meetingPoint && <p className="mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
+                                                             {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
+                                                         </PopoverContent>
+                                                     </Popover>
+                                                 ) : '-'}
+                                             </TableCell>
+                                            <TableCell className="hidden lg:table-cell px-2 py-3">{rsvpDeadlineString}</TableCell>
+                                            <TableCell className="px-2 py-3">
                                                 <ResponseStatus
                                                 appointment={app}
                                                 allMembers={allMembers || []}
@@ -571,13 +581,14 @@ export default function VerwaltungTerminePage() {
                                                 groups={groups || []}
                                                 />
                                             </TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right px-2 py-3">
                                                 {app.isCancelled ? (
-                                                     <span className="text-sm font-semibold text-destructive">Abgesagt</span>
+                                                     <span className="text-xs font-semibold text-destructive">Abgesagt</span>
                                                 ) : canRespond && auth.user ? (
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex justify-end gap-1">
                                                     <Button
                                                     size="sm"
+                                                    className="h-7 px-2 text-xs"
                                                     variant={
                                                         userStatus === "zugesagt"
                                                         ? "default"
@@ -595,6 +606,7 @@ export default function VerwaltungTerminePage() {
                                                     </Button>
                                                     <Button
                                                     size="sm"
+                                                    className="h-7 px-2 text-xs"
                                                     variant={
                                                         userStatus === "unsicher"
                                                         ? "secondary"
@@ -612,6 +624,7 @@ export default function VerwaltungTerminePage() {
                                                     </Button>
                                                     <Button
                                                     size="sm"
+                                                    className="h-7 px-2 text-xs"
                                                     variant={
                                                         userStatus === "abgesagt"
                                                         ? "destructive"
@@ -725,8 +738,8 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="link" className="h-auto p-0">
-          <Users className="mr-2 h-4 w-4" />
+        <Button variant="link" className="h-auto p-0 text-xs">
+          <Users className="mr-1 h-3 w-3" />
           {accepted.length} / {relevantMembers.length}
         </Button>
       </DialogTrigger>
