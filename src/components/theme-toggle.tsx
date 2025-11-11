@@ -11,9 +11,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Skeleton } from "./ui/skeleton"
 
 export function ThemeToggle() {
   const { setTheme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    // Render a skeleton or a placeholder on the server and during initial client render
+    return <Skeleton className="h-10 w-10" />
+  }
 
   return (
     <DropdownMenu>
