@@ -64,52 +64,49 @@ export default function VerwaltungMannschaftskassePage() {
   const allGroupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
 
-  // KORRIGIERT: Diese Abfrage nur ausführen, wenn der User Admin ist.
-  const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
-  const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
-
-  const penaltiesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'penalties') : null), [firestore]);
-  const { data: allPenalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
-
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
     [firestore, user]
   );
   const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
+  
+  const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
+  
+  // Admins fetch all members for display purposes. Non-admins don't need this.
+  const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  const { data: allMembers, isLoading: isLoadingAllMembers } = useCollection<MemberProfile>(allMembersRef);
 
-  // KORREKTUR: Die Abfrage für Transaktionen wird jetzt auf die Teams des Benutzers beschränkt, wenn dieser kein Admin ist.
+  // Both admins and users fetch penalties, but the query is conditional.
+  const penaltiesQuery = useMemoFirebase(() => {
+    if (!firestore || !userTeamIds.length) return null;
+    return query(collection(firestore, 'penalties'), where('teamId', 'in', userTeamIds));
+  }, [firestore, userTeamIds]);
+  const { data: allPenalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesQuery);
+
+  // Both admins and users fetch transactions, but the query is conditional.
   const transactionsQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    const baseQuery = collection(firestore, 'treasury');
-    if (isAdmin) {
-      return baseQuery; // Admins können alles sehen
-    }
-    // Für normale Benutzer: Nur Transaktionen der eigenen Teams laden.
-    // Wichtig: Eine `whereIn`-Abfrage mit einem leeren Array ist ungültig.
-    const userTeamIds = memberProfile?.teams;
-    if (userTeamIds && userTeamIds.length > 0) {
-      return query(baseQuery, where('teamId', 'in', userTeamIds));
-    }
-    return null; // Kein Team -> keine Transaktionen abfragen
-  }, [firestore, user, isAdmin, memberProfile?.teams]);
+    if (!firestore || !userTeamIds.length) return null;
+    return query(collection(firestore, 'treasury'), where('teamId', 'in', userTeamIds));
+  }, [firestore, userTeamIds]);
 
   const { data: allTransactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsQuery);
 
 
   const userTeams = useMemo(() => {
     if (!memberProfile || !allGroups) return [];
-    const userTeamIds = memberProfile.teams || [];
-    return allGroups.filter(g => g.type === 'team' && userTeamIds.includes(g.id))
+    const userTeamIdsSet = new Set(memberProfile.teams || []);
+    return allGroups.filter(g => g.type === 'team' && userTeamIdsSet.has(g.id))
                       .sort((a, b) => a.name.localeCompare(b.name));
   }, [memberProfile, allGroups]);
 
    const membersMap = useMemo(() => {
-       // Admins see all names, users see only their own name if needed.
        const map = new Map<string, MemberProfile>();
+       // Admins get a full map of all members.
        if (isAdmin && allMembers) {
            allMembers.forEach(m => map.set(m.userId, m));
        } else if (memberProfile) {
-           // For non-admins, at least their own profile is available.
+           // Non-admins at least have their own profile available, and potentially others if fetched differently.
+           // For now, this ensures the current user's name can be resolved.
            map.set(memberProfile.userId, memberProfile);
        }
        return map;
@@ -131,18 +128,17 @@ export default function VerwaltungMannschaftskassePage() {
     const teamPenalties = allPenalties?.filter(p => p.teamId === selectedTeamId) || [];
     const teamTransactions = allTransactions?.filter(t => t.teamId === selectedTeamId) || [];
     
-    // KORREKTE SALDO-BERECHNUNG
     const balance = teamTransactions.reduce((acc, tx) => {
       if (tx.type === 'income') return acc + tx.amount;
-      if (tx.type === 'expense') return acc - tx.amount; // ABZIEHEN
-      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount; // NUR BEZAHLTE STRAFEN HINZUFÜGEN
+      if (tx.type === 'expense') return acc - Math.abs(tx.amount);
+      if (tx.type === 'penalty' && tx.status === 'paid') return acc + tx.amount;
       return acc;
     }, 0);
 
     return { penalties: teamPenalties, transactions: teamTransactions, totalBalance: balance };
   }, [selectedTeamId, allPenalties, allTransactions]);
 
-  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || (isAdmin && isLoadingAllMembers) || isLoadingPenalties || isLoadingTransactions;
+  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingMember || isLoadingPenalties || isLoadingTransactions || (isAdmin && isLoadingAllMembers);
 
     if (isLoadingInitial) {
         return (
@@ -247,7 +243,7 @@ export default function VerwaltungMannschaftskassePage() {
                                 <TableCell className="hidden md:table-cell">{memberName || '-'}</TableCell>
                                 <TableCell className={cn(isExpense ? "text-red-600" : "text-green-600")}>
                                   {isExpense ? '-' : '+'}
-                                  {tx.amount.toFixed(2)} €
+                                  {Math.abs(tx.amount).toFixed(2)} €
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
                                     {(tx.type === 'penalty') ? (

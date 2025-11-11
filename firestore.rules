@@ -23,6 +23,10 @@ service cloud.firestore {
              userTeams.size() > 0 &&
              userTeams.hasAny([resource.data.teamId]);
     }
+    
+    function isMemberOfAnyTeam() {
+      return getUserTeams().size() > 0;
+    }
 
 
     // --- /users/{userId} ---
@@ -158,13 +162,14 @@ service cloud.firestore {
     // --- /treasury/{transactionId} ---
     match /treasury/{transactionId} {
         allow get: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
-        allow list: if isSignedIn() && isAdmin();
+        allow list: if isSignedIn() && (isAdmin() || isMemberOfAnyTeam()); // Allow list for any team member
         allow write: if isSignedIn() && isAdmin();
     }
 
     // --- /penalties/{penaltyId} ---
     match /penalties/{penaltyId} {
-       allow read: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+       allow get: if isSignedIn() && (isAdmin() || isMemberOfDocTeamResource());
+       allow list: if isSignedIn() && (isAdmin() || isMemberOfAnyTeam()); // Allow list for any team member
        allow write: if isSignedIn() && isAdmin();
     }
   }
