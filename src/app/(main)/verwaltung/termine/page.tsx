@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -5,7 +6,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmi
 import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds, startOfMonth } from 'date-fns';
+import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds, startOfMonth, parse as parseDate } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, ClipboardCopy, CalendarIcon, BarChartHorizontal } from 'lucide-react';
@@ -88,9 +89,13 @@ export default function TermineUebersichtPage() {
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
   const responsesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return collection(firestore, 'appointmentResponses');
-}, [firestore, user, isAdmin]);
+      if (!firestore || !user) return null;
+      if (isAdmin) {
+          return collection(firestore, 'appointmentResponses');
+      }
+      // Normale Benutzer laden nur ihre eigenen Antworten, um die Regeln einzuhalten.
+      return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
+  }, [firestore, user, isAdmin]);
 
   const { data: responses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
 
@@ -524,8 +529,8 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     // Sort months chronologically descending
     const sortedStats = Object.fromEntries(
         Object.entries(stats).sort(([a], [b]) => {
-            const dateA = new Date(a.split(' ')[1], de.localize?.month(de.month.indexOf(a.split(' ')[0]), {width: 'wide'}));
-            const dateB = new Date(b.split(' ')[1], de.localize?.month(de.month.indexOf(b.split(' ')[0]), {width: 'wide'}));
+            const dateA = parseDate(a, 'MMMM yyyy', new Date(), { locale: de });
+            const dateB = parseDate(b, 'MMMM yyyy', new Date(), { locale: de });
             return dateB.getTime() - dateA.getTime();
         })
     );
