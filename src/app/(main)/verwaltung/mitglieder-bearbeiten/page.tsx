@@ -11,8 +11,8 @@ import {
   useMemoFirebase,
   useDoc
 } from '@/firebase';
-import { doc, writeBatch, collection } from 'firebase/firestore'; // Nur Firestore-spezifische Funktionen hier
-import { getFunctions, httpsCallable } from 'firebase/functions'; // *** Korrigierter Import ***
+import { doc, writeBatch, collection, query } from 'firebase/firestore'; // query hinzugefügt
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile, Group, UserProfile } from '@/lib/types';
 import {
   Card,
@@ -89,7 +89,7 @@ export default function AdminMitgliederPage() {
   const { data: currentUserMemberProfile, isLoading: isLoadingCurrentUserMember } = useDoc<MemberProfile>(currentUserMemberRef);
 
 
-  // Daten holen
+  // Daten holen - NUR wenn Admin!
   const usersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'users') : null), [firestore, isAdmin]);
   const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
@@ -97,7 +97,7 @@ export default function AdminMitgliederPage() {
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const isLoading = isUserLoading || isLoadingUsers || isLoadingMembers || isLoadingGroups || isLoadingCurrentUserMember;
+  const isLoading = isUserLoading || (isAdmin && (isLoadingUsers || isLoadingMembers)) || isLoadingGroups || isLoadingCurrentUserMember;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
   const [memberToEdit, setMemberToEdit] = useState<(CombinedMemberProfile) | null>(null);
@@ -296,11 +296,34 @@ export default function AdminMitgliederPage() {
   };
 
   // --- Render Logic ---
-    if (isLoading) {
+    if (isUserLoading) { // Nur initialen Auth-Ladevorgang abwarten
         return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> );
     }
+
+    // Zugriffsschutz für Nicht-Admins
     if (!isAdmin) {
-       return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><Users2 className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen...</p></CardContent></Card></div> );
+       return ( 
+          <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-destructive">
+                  <Users2 className="h-8 w-8" />
+                  <span className="text-2xl font-headline">Zugriff verweigert</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf diesen Bereich zuzugreifen.
+                </p>
+              </CardContent>
+            </Card>
+          </div> 
+        );
+    }
+    
+    // Ladeanzeige, während Admin-Daten geladen werden
+    if (isLoading) {
+        return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> );
     }
 
   return (
