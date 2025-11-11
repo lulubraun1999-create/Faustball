@@ -157,9 +157,9 @@ export default function AppointmentManagementPage() {
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
   const exceptionsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentExceptions') : null), [firestore, user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
-  const allMembersRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'members') : null), [firestore, user]);
+  const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
-  const allResponsesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentResponses') : null), [firestore, user]);
+  const allResponsesRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'appointmentResponses') : null), [firestore, isAdmin]);
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
   const appointmentTypesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentTypes') : null), [firestore, user]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
@@ -396,7 +396,7 @@ export default function AppointmentManagementPage() {
 
   const isLoading = isUserLoading || isLoadingTypes || isLoadingLocations || isLoadingGroups || isLoadingAppointments || isProcessing || isLoadingExceptions || allResponsesLoading || membersLoading;
   
-  if (isLoading) {
+  if (isUserLoading) {
     return <div className="container mx-auto flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
@@ -664,5 +664,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    
 
     
