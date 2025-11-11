@@ -168,10 +168,10 @@ export default function AdminKassePage() {
   }, [groups, currentUserMemberProfile]);
 
   // Firestore Abfragen basierend auf selectedTeamId
-  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
+  const penaltiesRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'penalties'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
   const { data: penalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
-  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId && isAdmin ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId, isAdmin]);
+  const transactionsRef = useMemoFirebase(() => (firestore && selectedTeamId ? query(collection(firestore, 'treasury'), where('teamId', '==', selectedTeamId)) : null), [firestore, selectedTeamId]);
   const { data: transactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsRef);
 
   const membersOfSelectedTeam = useMemo(() => { // Brauchen wir weiterhin für den Transaktionsdialog
@@ -295,7 +295,7 @@ export default function AdminKassePage() {
   };
 
   // Ladezustände
-  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingCurrentUserMember || isLoadingMembers; // isLoadingMembers hinzugefügt (für membersMap)
+  const isLoadingInitial = isUserLoading || isLoadingGroups || isLoadingCurrentUserMember || (isAdmin && isLoadingMembers);
   const isLoadingTeamData = selectedTeamId && (isLoadingPenalties || isLoadingTransactions);
 
   // Render Logic
@@ -395,7 +395,7 @@ export default function AdminKassePage() {
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             const isExpense = tx.type === 'expense';
-                            const isIncome = tx.type === 'income' || tx.type === 'penalty';
+                            
                             return (
                             <TableRow key={tx.id}>
                                 <TableCell>{tx.date ? format((tx.date as Timestamp).toDate(), 'dd.MM.yy', { locale: de }) : 'Datum fehlt'}</TableCell>

@@ -206,7 +206,7 @@ export default function VerwaltungMannschaftskassePage() {
                            [...transactions].sort((a,b) => (b.date as Timestamp).toMillis() - (a.date as Timestamp).toMillis()).map(tx => {
                             const memberName = tx.memberId ? `${membersMap.get(tx.memberId)?.firstName ?? ''} ${membersMap.get(tx.memberId)?.lastName ?? ''}`.trim() : '-';
                             const isExpense = tx.type === 'expense';
-                            const isIncome = tx.type === 'income' || tx.type === 'penalty';
+                            
                             return (
                             <TableRow key={tx.id}>
                                 <TableCell className="font-medium max-w-[150px] truncate">
