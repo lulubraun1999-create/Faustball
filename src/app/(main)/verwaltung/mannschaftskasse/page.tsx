@@ -71,6 +71,12 @@ export default function VerwaltungMannschaftskassePage() {
   const penaltiesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'penalties') : null), [firestore]);
   const { data: allPenalties, isLoading: isLoadingPenalties } = useCollection<Penalty>(penaltiesRef);
 
+  const memberRef = useMemoFirebase(
+    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
+    [firestore, user]
+  );
+  const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
+
   // KORREKTUR: Die Abfrage für Transaktionen wird jetzt auf die Teams des Benutzers beschränkt, wenn dieser kein Admin ist.
   const transactionsQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -89,12 +95,6 @@ export default function VerwaltungMannschaftskassePage() {
 
   const { data: allTransactions, isLoading: isLoadingTransactions } = useCollection<TreasuryTransaction>(transactionsQuery);
 
-
-  const memberRef = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
 
   const userTeams = useMemo(() => {
     if (!memberProfile || !allGroups) return [];
