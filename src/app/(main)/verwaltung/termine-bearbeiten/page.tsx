@@ -188,8 +188,7 @@ export default function AppointmentManagementPage() {
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
-      title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '',
-      visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadlineDays: '0', rsvpDeadlineTime: '12:00' },
+      title: '', appointmentTypeId: '', startDate: '', endDate: '', isAllDay: false, locationId: '', description: '', meetingPoint: '', meetingTime: '', visibilityType: 'all', visibleTeamIds: [], recurrence: 'none', recurrenceEndDate: '', rsvpDeadlineDays: '0', rsvpDeadlineTime: '12:00' },
   });
 
   const watchVisibilityType = form.watch('visibilityType');
@@ -540,33 +539,25 @@ export default function AppointmentManagementPage() {
                                   <TableHeader><TableRow>
                                     <TableHead>Art (Titel)</TableHead>
                                     <TableHead>Datum/Zeit</TableHead>
-                                    <TableHead className="hidden lg:table-cell">Details</TableHead>
+                                    <TableHead>Ort</TableHead>
+                                    <TableHead>Treffpunkt</TableHead>
+                                    <TableHead>Treffzeit</TableHead>
+                                    <TableHead>Sichtbarkeit</TableHead>
                                     <TableHead className="text-right">Aktionen</TableHead>
                                   </TableRow></TableHeader>
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
                                         const typeName = appointmentTypes?.find(t => t.id === app.appointmentTypeId)?.name;
-                                        const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                         const location = app.locationId ? locationsMap.get(app.locationId) : null;
 
                                         return (
                                           <TableRow key={app.virtualId} className={cn(app.isCancelled && 'bg-red-50/50 text-muted-foreground line-through dark:bg-red-900/20')}>
                                               <TableCell><div className="font-medium">{typeName}</div>{app.title !== typeName && <div className="text-xs text-muted-foreground">({app.title})</div>}</TableCell>
                                               <TableCell>{formatDate(app.instanceDate, 'dd.MM.yy')}<br/>{app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm')}</TableCell>
-                                              <TableCell className="hidden lg:table-cell">
-                                                <Popover>
-                                                  <PopoverTrigger asChild>
-                                                      <Button variant="link" className="p-0 h-auto font-normal"><MapPin className="h-4 w-4 mr-2" />Details anzeigen</Button>
-                                                  </PopoverTrigger>
-                                                  <PopoverContent className="w-64 text-sm">
-                                                    {location && <p><span className="font-semibold">Ort:</span> {location.name}</p>}
-                                                    {app.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
-                                                    {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
-                                                    {app.visibility.type !== 'all' && <p><span className="font-semibold">Sichtbar für:</span> {app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</p>}
-                                                    {originalAppointment?.recurrence !== 'none' && <p><span className="font-semibold">Wiederholung:</span> bis {formatDate(originalAppointment!.recurrenceEndDate!.toDate(), 'dd.MM.yy')}</p>}
-                                                  </PopoverContent>
-                                                </Popover>
-                                              </TableCell>
+                                              <TableCell>{location ? location.name : '-'}</TableCell>
+                                              <TableCell>{app.meetingPoint || '-'}</TableCell>
+                                              <TableCell>{app.meetingTime || '-'}</TableCell>
+                                              <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ') || '-'}</TableCell>
                                               <TableCell className="text-right">
                                                   <div className="flex items-center justify-end gap-0">
                                                     <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
@@ -671,6 +662,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     
 
     
+
 
 
 
