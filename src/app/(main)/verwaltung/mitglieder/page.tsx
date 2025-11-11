@@ -22,12 +22,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, query, where } from 'firebase/firestore';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-
-type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
 export default function VerwaltungMitgliederPage() {
   const { user, isUserLoading } = useUser();
@@ -46,41 +44,15 @@ export default function VerwaltungMitgliederPage() {
 
   const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
   
-  // Abfrage, die nur die Mitglieder der eigenen Teams lädt
   const membersQuery = useMemoFirebase(() => {
-      // Warten, bis das Profil (und damit die Teams) geladen ist.
       if (isMemberProfileLoading || !firestore || !user) return null; 
-      
-      // Wenn das Profil geladen ist, aber keine Teams vorhanden sind, keine Abfrage starten.
       if (userTeamIds.length === 0) return null;
-
-      // Erst jetzt, mit den Team-IDs, die sichere Abfrage starten.
       return query(collection(firestore, 'members'), where('teams', 'array-contains-any', userTeamIds));
   }, [firestore, user, userTeamIds, isMemberProfileLoading]);
 
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersQuery);
-  const usersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
 
-  const isLoading = isUserLoading || isLoadingMembers || isMemberProfileLoading || isLoadingUsers;
-
-  const combinedData = useMemo(() => {
-    // If members data (which is already pre-filtered by security rules/query) is not available, return empty.
-    if (!members || !users) return [];
-  
-    // Create a map of the filtered members for efficient lookup.
-    const memberMap = new Map(members.map(m => [m.userId, m]));
-  
-    // We iterate over ALL users and then check if they exist in our filtered member map.
-    // This correctly combines the data for the members we are allowed to see.
-    return users
-      .filter(user => memberMap.has(user.id)) // Filter users to only those in our allowed members list
-      .map(userProfile => ({
-        ...userProfile,
-        ...(memberMap.get(userProfile.id) || {}),
-      })) as CombinedMemberProfile[];
-
-  }, [users, members]);
+  const isLoading = isUserLoading || isLoadingMembers || isMemberProfileLoading;
 
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
@@ -92,7 +64,6 @@ export default function VerwaltungMitgliederPage() {
     const allTeams = groups.filter(g => g.type === 'team');
     allTeams.forEach(team => map.set(team.id, team.name));
   
-    // For ALL users (including admins), filter dropdown to only their teams on this page.
     if (memberProfile?.teams) {
         const userTeamIds = new Set(memberProfile.teams);
         const userTeams = allTeams.filter(team => userTeamIds.has(team.id));
@@ -100,14 +71,13 @@ export default function VerwaltungMitgliederPage() {
         return { teamsMap: map, teamsForFilterDropdown: userTeams }
     }
     
-    // Fallback for users with no teams
     return { teamsMap: map, teamsForFilterDropdown: [] };
   }, [groups, memberProfile]);
 
   const filteredAndSortedMembers = useMemo(() => {
-    if (!combinedData) return [];
+    if (!members) return [];
     
-    let filtered = [...combinedData];
+    let filtered = [...members];
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     if (lowerCaseSearchTerm) {
@@ -134,7 +104,7 @@ export default function VerwaltungMitgliederPage() {
       }
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData, selectedRoleFilter, selectedTeamFilter, searchTerm]);
+  }, [members, selectedRoleFilter, selectedTeamFilter, searchTerm]);
 
   const getTeamNames = (teamIds?: string[]): string[] => {
     if (!teamIds || teamIds.length === 0) return [];
@@ -213,7 +183,7 @@ export default function VerwaltungMitgliederPage() {
                     filteredAndSortedMembers.map((member) => {
                       const memberTeams = getTeamNames(member.teams);
                       return (
-                      <TableRow key={member.id}>
+                      <TableRow key={member.userId}>
                         <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
                         <TableCell>{member.firstName || '-'}</TableCell>
                         <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
