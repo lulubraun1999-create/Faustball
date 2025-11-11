@@ -432,7 +432,7 @@ export default function VerwaltungTerminePage() {
   return (
     <>
       <TooltipProvider>
-        <div className="w-full p-4 sm:p-6 lg:p-8">
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Termine</CardTitle>
@@ -498,12 +498,14 @@ export default function VerwaltungTerminePage() {
                                 <Table>
                                     <TableHeader>
                                     <TableRow>
-                                        <TableHead className="px-2 py-2">Titel</TableHead>
-                                        <TableHead className="px-2 py-2">Datum & Uhrzeit</TableHead>
-                                        <TableHead className="hidden md:table-cell px-2 py-2">Details</TableHead>
-                                        <TableHead className="hidden lg:table-cell px-2 py-2">Rückmeldung bis</TableHead>
-                                        <TableHead className="px-2 py-2">Teilnehmer</TableHead>
-                                        <TableHead className="text-right min-w-[250px] px-2 py-2">Aktionen</TableHead>
+                                        <TableHead className="px-1 py-2">Titel</TableHead>
+                                        <TableHead className="px-1 py-2">Datum & Uhrzeit</TableHead>
+                                        <TableHead className="px-1 py-2">Ort</TableHead>
+                                        <TableHead className="px-1 py-2">Treffpunkt</TableHead>
+                                        <TableHead className="px-1 py-2">Treffzeit</TableHead>
+                                        <TableHead className="px-1 py-2">Rückmeldung bis</TableHead>
+                                        <TableHead className="px-1 py-2">Teilnehmer</TableHead>
+                                        <TableHead className="text-right min-w-[250px] px-1 py-2">Aktionen</TableHead>
                                     </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -544,36 +546,36 @@ export default function VerwaltungTerminePage() {
                                                 id={app.virtualId} 
                                                 ref={el => rowRefs.current[app.virtualId] = el}
                                                 className={cn("text-sm", app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
-                                            <TableCell className="font-medium px-2 py-3">
+                                            <TableCell className="font-medium px-1 py-3">
                                                <div>{displayTitle}</div>
                                                 <div className="text-xs text-muted-foreground">{app.visibility.type === 'all' 
                                                   ? 'Alle' 
                                                   : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="px-2 py-3">
+                                            <TableCell className="px-1 py-3">
                                                 <div>{formatDate(app.instanceDate, 'eee, dd.MM.yy', { locale: de })}</div>
                                                 <div className="text-xs text-muted-foreground">
                                                   {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}
                                                 </div>
                                             </TableCell>
-                                             <TableCell className="hidden md:table-cell px-2 py-3">
-                                                 {location || app.meetingPoint || app.meetingTime ? (
-                                                     <Popover>
-                                                         <PopoverTrigger asChild>
-                                                             <Button variant="link" className="p-0 h-auto font-normal text-xs"><MapPin className="h-3 w-3 mr-1" />Details</Button>
-                                                         </PopoverTrigger>
-                                                         <PopoverContent className="w-60 text-sm">
-                                                             {location && <p className="font-semibold">{location.name}</p>}
-                                                             {location?.address && <p className="text-muted-foreground text-xs">{location.address}</p>}
-                                                             {app.meetingPoint && <p className="mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
-                                                             {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
-                                                         </PopoverContent>
-                                                     </Popover>
-                                                 ) : '-'}
-                                             </TableCell>
-                                            <TableCell className="hidden lg:table-cell px-2 py-3">{rsvpDeadlineString}</TableCell>
-                                            <TableCell className="px-2 py-3">
+                                            <TableCell className="px-1 py-3">
+                                                {location ? (
+                                                    <Popover>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="link" className="p-0 h-auto font-normal text-xs"><MapPin className="h-3 w-3 mr-1" />{location.name}</Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-60 text-sm">
+                                                            <p className="font-semibold">{location.name}</p>
+                                                            {location.address && <p className="text-muted-foreground text-xs">{location.address}</p>}
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                ) : '-'}
+                                            </TableCell>
+                                            <TableCell className="px-1 py-3">{app.meetingPoint || '-'}</TableCell>
+                                            <TableCell className="px-1 py-3">{app.meetingTime || '-'}</TableCell>
+                                            <TableCell className="px-1 py-3">{rsvpDeadlineString}</TableCell>
+                                            <TableCell className="px-1 py-3">
                                                 <ResponseStatus
                                                 appointment={app}
                                                 allMembers={allMembers || []}
@@ -581,7 +583,7 @@ export default function VerwaltungTerminePage() {
                                                 groups={groups || []}
                                                 />
                                             </TableCell>
-                                            <TableCell className="text-right px-2 py-3">
+                                            <TableCell className="text-right px-1 py-3">
                                                 {app.isCancelled ? (
                                                      <span className="text-xs font-semibold text-destructive">Abgesagt</span>
                                                 ) : canRespond && auth.user ? (
