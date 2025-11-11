@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, 'useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
@@ -484,5 +484,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
