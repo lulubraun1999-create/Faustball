@@ -30,7 +30,7 @@ import { de } from 'date-fns/locale';
 type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
 
 export default function VerwaltungMitgliederPage() {
-  const { user, isAdmin, isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
@@ -48,42 +48,34 @@ export default function VerwaltungMitgliederPage() {
   
   // Abfrage, die nur die Mitglieder der eigenen Teams lädt
   const membersQuery = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      if (isAdmin) {
-          // Admins holen sich alle Mitglieder
-          return collection(firestore, 'members');
-      }
-      if (userTeamIds.length > 0) {
-          // Normale User holen sich nur Mitglieder aus ihren Teams
-          return query(collection(firestore, 'members'), where('teams', 'array-contains-any', userTeamIds));
-      }
-      // User ist in keinem Team, holt sich nur das eigene Profil
-      return query(collection(firestore, 'members'), where('userId', '==', user.uid));
-  }, [firestore, user, isAdmin, userTeamIds]);
+      if (!firestore || !user || userTeamIds.length === 0) return null;
+      // Admins und normale User holen sich nur Mitglieder aus ihren Teams
+      return query(collection(firestore, 'members'), where('teams', 'array-contains-any', userTeamIds));
+  }, [firestore, user, userTeamIds]);
 
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersQuery);
-  const usersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'users') : null), [firestore, isAdmin]);
+  const usersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'users') : null), [firestore]);
   const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
 
-  const isLoading = isUserLoading || isLoadingMembers || isMemberProfileLoading || (isAdmin && isLoadingUsers);
+  const isLoading = isUserLoading || isLoadingMembers || isMemberProfileLoading || isLoadingUsers;
 
   const combinedData = useMemo(() => {
-      if (isAdmin) {
-          if (!members || !users) return [];
-          const memberMap = new Map(members.map(m => [m.userId, m]));
-          return users.map(userProfile => ({
-              ...userProfile,
-              ...(memberMap.get(userProfile.id) || {}),
-          })) as CombinedMemberProfile[];
-      }
-      // Für normale User sind 'members' bereits die gefilterten Teamkollegen.
-      // Wir müssen die Datenstruktur an 'CombinedMemberProfile' anpassen.
-      return (members || []).map(member => ({
-          ...member,
-          id: member.userId,
+    // If members data (which is already pre-filtered by security rules/query) is not available, return empty.
+    if (!members || !users) return [];
+  
+    // Create a map of the filtered members for efficient lookup.
+    const memberMap = new Map(members.map(m => [m.userId, m]));
+  
+    // We iterate over ALL users and then check if they exist in our filtered member map.
+    // This correctly combines the data for the members we are allowed to see.
+    return users
+      .filter(user => memberMap.has(user.id)) // Filter users to only those in our allowed members list
+      .map(userProfile => ({
+        ...userProfile,
+        ...(memberMap.get(userProfile.id) || {}),
       })) as CombinedMemberProfile[];
 
-  }, [users, members, isAdmin]);
+  }, [users, members]);
 
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
