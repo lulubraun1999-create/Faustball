@@ -4,18 +4,20 @@ import React, { useMemo, useState } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Event } from 'react-big-calendar';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Calendar, dateFnsLocalizer, Event, Views, NavigateAction, View } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
-import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createEvents, type EventAttributes } from 'ics';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 
 // date-fns Localizer
 const locales = { 'de-DE': de };
@@ -63,6 +65,13 @@ export default function KalenderPage() {
 
   const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [popoverTarget, setPopoverTarget] = useState<HTMLElement | null>(null);
+
+  const [date, setDate] = useState(new Date());
+  const [view, setView] = useState<View>(Views.MONTH);
+
 
   const memberRef = useMemoFirebase(() => (firestore && user ? doc(firestore, 'members', user.uid) : null), [firestore, user]);
   const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
@@ -81,6 +90,7 @@ export default function KalenderPage() {
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
   const teamsMap = useMemo(() => new Map(allGroups?.filter(g => g.type === 'team').map(t => [t.id, t.name])), [allGroups]);
+  const locationsMap = useMemo(() => new Map(allGroups?.filter(g => g.type === 'location').map(t => [t.id, t.name])), [allGroups]);
   
   const userTeamsForFilter = useMemo(() => {
     if (!userTeamIds || !teamsMap) return [];
@@ -237,7 +247,7 @@ export default function KalenderPage() {
         let event: EventAttributes = {
             title: app.title,
             start: startDateArray,
-            description: app.description || ''
+            description: app.description || '',
         };
 
         if (app.isAllDay) {
@@ -299,6 +309,17 @@ export default function KalenderPage() {
     return { style };
   };
 
+  const handleSelectEvent = (event: CalendarEvent, e: React.SyntheticEvent<HTMLElement>) => {
+    setSelectedEvent(event);
+    setPopoverTarget(e.currentTarget);
+  };
+  
+  const handleNavigate = (newDate: Date, view: View, action: NavigateAction) => {
+    setDate(newDate);
+    setView(view);
+  };
+
+
   return (
     <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 p-4 sm:p-6 lg:p-8">
         <aside className="md:col-span-1">
@@ -351,21 +372,69 @@ export default function KalenderPage() {
                     </Button>
                 </CardHeader>
                 <CardContent className="p-4 md:p-6">
-                <div className="h-[80vh]">
-                    <Calendar
-                        localizer={localizer}
-                        events={calendarEvents}
-                        startAccessor="start"
-                        endAccessor="end"
-                        messages={messages}
-                        culture="de-DE"
-                        style={{ height: '100%' }}
-                        eventPropGetter={eventStyleGetter}
-                        onSelectEvent={(event: CalendarEvent) => {
-                            router.push('/verwaltung/termine');
-                        }}
-                    />
-                </div>
+                <Popover open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+                  <PopoverTrigger asChild>
+                    <div className="h-[80vh]">
+                        <Calendar
+                            localizer={localizer}
+                            events={calendarEvents}
+                            startAccessor="start"
+                            endAccessor="end"
+                            messages={messages}
+                            culture="de-DE"
+                            style={{ height: '100%' }}
+                            eventPropGetter={eventStyleGetter}
+                            onSelectEvent={handleSelectEvent}
+                            onNavigate={handleNavigate}
+                            onView={setView}
+                            view={view}
+                            date={date}
+                            showWeekNumbers
+                        />
+                    </div>
+                  </PopoverTrigger>
+                   {selectedEvent && (
+                      <PopoverContent className="w-80" target={popoverTarget} align="start">
+                        <Card className="border-none shadow-none">
+                            <CardHeader className="p-2">
+                                <div className="flex justify-between items-start">
+                                    <CardTitle className="text-lg mb-2">{selectedEvent.title}</CardTitle>
+                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedEvent(null)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <CardDescription className="flex flex-col gap-1">
+                                    <span className="font-semibold text-foreground">{appointmentTypesMap.get(selectedEvent.resource.appointmentTypeId)}</span>
+                                    <span>
+                                        {format(selectedEvent.start!, "eeee, dd.MM.yyyy", { locale: de })}
+                                    </span>
+                                    {!selectedEvent.allDay && (
+                                        <span>
+                                            {format(selectedEvent.start!, "HH:mm", { locale: de })} - {format(selectedEvent.end!, "HH:mm", { locale: de })} Uhr
+                                        </span>
+                                    )}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-2 text-sm space-y-2">
+                               {selectedEvent.resource.locationId && locationsMap.has(selectedEvent.resource.locationId) && (
+                                 <div className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-muted-foreground"/>
+                                    <span>{locationsMap.get(selectedEvent.resource.locationId)?.name}</span>
+                                 </div>
+                               )}
+                                <p className="text-muted-foreground">
+                                    Mannschaften: {selectedEvent.resource.visibility.type === 'all' ? 'Alle' : selectedEvent.resource.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
+                                </p>
+                            </CardContent>
+                            <CardFooter className="p-2">
+                                <Button className="w-full" onClick={() => router.push('/verwaltung/termine')}>
+                                    Details & Rückmeldung
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                      </PopoverContent>
+                   )}
+                </Popover>
                 </CardContent>
             </Card>
         </main>
