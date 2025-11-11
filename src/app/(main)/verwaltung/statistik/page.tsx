@@ -73,7 +73,7 @@ function StatistikContent() {
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
   
   const responsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
-  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesRef);
+  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesRef);
   
   const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
@@ -387,7 +387,3 @@ function unrollAppointments(appointments: Appointment[], exceptions: Appointment
     });
     return allEvents;
 }
-
-    
-
-    
