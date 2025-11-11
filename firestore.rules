@@ -49,7 +49,7 @@ service cloud.firestore {
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
         allow get: if isSignedIn();
-        allow list: if isSignedIn();
+        allow list: if isSignedIn(); // Erlaubt das Lesen der Liste für alle angemeldeten Benutzer
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
     }
@@ -90,7 +90,7 @@ service cloud.firestore {
         function isExistingResponseOwner() { return resource != null && resource.data.keys().hasAny(['userId']) && request.auth.uid == resource.data.userId; }
 
         allow get: if isSignedIn();
-        allow list: if isSignedIn();
+        allow list: if isSignedIn(); // Erlaubt allen angemeldeten Benutzern, Listen von Antworten zu lesen (wird durch App-Logik gefiltert)
         allow create: if isSignedIn() && isResponseOwner();
         allow update: if isSignedIn() && isResponseOwner();
         allow delete: if isSignedIn() && isExistingResponseOwner();

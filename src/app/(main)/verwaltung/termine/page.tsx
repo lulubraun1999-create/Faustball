@@ -1,9 +1,10 @@
 
+
 'use client';
 
 import React, { useMemo, useState } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
@@ -82,15 +83,11 @@ export default function TermineUebersichtPage() {
     return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
   }, [userTeamIds, teamsMap]);
 
-  const allMembersQuery = useMemoFirebase(() => (isAdmin && firestore ? collection(firestore, 'members') : null), [firestore, isAdmin]);
+  const allMembersQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
-  const allResponsesQuery = useMemoFirebase(() => (firestore ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', user?.uid || '')) : null), [firestore, user]);
-  const { data: userResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
-  
-  const adminAllResponsesQuery = useMemoFirebase(() => (isAdmin && firestore ? collection(firestore, 'appointmentResponses') : null), [firestore, isAdmin]);
-  const { data: adminAllResponses, isLoading: isAdminAllResponsesLoading } = useCollection<AppointmentResponse>(adminAllResponsesQuery);
-  const allResponses = isAdmin ? adminAllResponses : userResponses;
+  const allResponsesQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
+  const { data: allResponses, isLoading: isLoadingAllResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
 
 
   const unrolledAppointments = useMemo(() => {
@@ -204,10 +201,27 @@ export default function TermineUebersichtPage() {
 
   const handleResponse = async (appointment: UnrolledAppointment, status: 'zugesagt' | 'abgesagt' | 'unsicher') => {
       if (!firestore || !user) return;
+      
       const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
       const responseId = `${appointment.originalId}_${user.uid}_${dateString}`;
       const responseDocRef = doc(firestore, 'appointmentResponses', responseId);
 
+      const currentUserResponse = allResponses?.find(r => r.id === responseId);
+
+      // If user clicks the same status again, retract the vote
+      if (currentUserResponse?.status === status) {
+          try {
+              await deleteDoc(responseDocRef);
+          } catch(e: any) {
+               errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  path: `appointmentResponses/${responseId}`,
+                  operation: 'delete'
+              }));
+          }
+          return;
+      }
+      
+      // Otherwise, create or update the vote
       const responseData: AppointmentResponse = {
           id: responseId,
           appointmentId: appointment.originalId,
@@ -228,7 +242,7 @@ export default function TermineUebersichtPage() {
       }
   };
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses || isLoadingTypes || (isAdmin && (isLoadingMembers || isAdminAllResponsesLoading));
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingAllResponses || isLoadingTypes || isLoadingMembers;
   
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -287,10 +301,13 @@ export default function TermineUebersichtPage() {
                                           const typeName = appointmentTypes?.find(t => t.id === app.appointmentTypeId)?.name;
                                           let rsvpDate: Date | null = null;
                                           if (originalAppointment?.rsvpDeadline) {
-                                              const [days, time] = originalAppointment.rsvpDeadline.split(':');
-                                              const [hours, minutes] = time.split(';').map(Number);
-                                              const deadlineBaseDate = subDays(app.instanceDate, Number(days));
-                                              rsvpDate = setMilliseconds(setSeconds(setMinutes(setHours(deadlineBaseDate, hours), minutes), 0), 0);
+                                              const deadlineParts = originalAppointment.rsvpDeadline.split(':');
+                                              if (deadlineParts.length === 2) {
+                                                  const [days, time] = deadlineParts;
+                                                  const [hours, minutes] = time.split(';').map(Number);
+                                                  const deadlineBaseDate = subDays(app.instanceDate, Number(days));
+                                                  rsvpDate = setMilliseconds(setSeconds(setMinutes(setHours(deadlineBaseDate, hours), minutes), 0), 0);
+                                              }
                                           }
 
                                           return (
