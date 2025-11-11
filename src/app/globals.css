@@ -77,3 +77,13 @@
     @apply border-border;
   }
 }
+
+/* Custom styles for react-big-calendar week numbers */
+@layer components {
+    .rbc-month-view .rbc-row .rbc-gutter-cell {
+        @apply w-10 flex-shrink-0;
+    }
+    .rbc-week-number {
+        @apply text-sm font-medium text-muted-foreground text-center pt-2;
+    }
+}
