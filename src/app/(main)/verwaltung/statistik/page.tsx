@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, FC } from 'react';
+import { useState, useMemo, FC, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -72,7 +72,7 @@ function StatistikContent() {
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
   
   const responsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
-  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesRef);
+  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesRef);
   
   useEffect(() => {
     if (selectedTeamId === 'all' && teams.length > 0) {
@@ -345,3 +345,5 @@ function unrollAppointments(appointments: Appointment[], exceptions: Appointment
     });
     return allEvents;
 }
+
+    
