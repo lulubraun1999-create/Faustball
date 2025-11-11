@@ -10,21 +10,18 @@ service cloud.firestore {
     
     // Gibt die Teams des Benutzers als Liste zurück, oder eine leere Liste, wenn keine vorhanden sind
     function getUserTeams() {
-      // Nutze get() direkt mit .data Zugriff, was null zurückgibt, falls nicht existent
       let memberData = getMemberDoc(request.auth.uid).data;
-      // Stelle sicher, dass memberData und das 'teams'-Feld existieren
       return memberData != null && 'teams' in memberData ? memberData.teams : [];
     }
     
     // Prüft, ob der Benutzer Mitglied des Teams ist, zu dem das gelesene Dokument gehört
     function isMemberOfDocTeamResource() {
-      let userTeams = getUserTeams(); // Hole User Teams (kann leere Liste sein)
-      // Stelle sicher, dass resource.data existiert, teamId hat und der User Teams hat
+      let userTeams = getUserTeams();
       return isSignedIn() &&
              resource != null && resource.data != null &&
              resource.data.keys().hasAny(['teamId']) &&
              userTeams.size() > 0 &&
-             userTeams.hasAny([resource.data.teamId]); // Prüfe Mitgliedschaft mit hasAny
+             userTeams.hasAny([resource.data.teamId]);
     }
 
 
@@ -47,13 +44,11 @@ service cloud.firestore {
     match /members/{memberId} {
         function isOwner(memberId) { return request.auth.uid == memberId; }
         function isExistingOwner() {
-          // Prüft, ob resource existiert und userId hat
           return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid;
         }
         function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
 
-        allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
-        // JEDER angemeldete Benutzer darf die Mitgliederliste lesen
+        allow get: if isSignedIn();
         allow list: if isSignedIn();
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
@@ -94,17 +89,11 @@ service cloud.firestore {
         function isResponseOwner() { return request.resource.data.keys().hasAny(['userId']) && request.auth.uid == request.resource.data.userId; }
         function isExistingResponseOwner() { return resource != null && resource.data.keys().hasAny(['userId']) && request.auth.uid == resource.data.userId; }
 
-        allow get: if isSignedIn() && (isAdmin() || isExistingResponseOwner());
-        allow list: if isSignedIn() && (
-                      isAdmin() ||
-                      // Non-admins can only list their own responses
-                      (request.query.keys().hasAny(['where']) &&
-                       request.query.where.field == 'userId' &&
-                       request.query.where.operator == '==' &&
-                       request.query.where.value == request.auth.uid)
-                    );
+        allow get: if isSignedIn();
+        allow list: if isSignedIn();
         allow create: if isSignedIn() && isResponseOwner();
-        allow update, delete: if isSignedIn() && isExistingResponseOwner();
+        allow update: if isSignedIn() && isResponseOwner();
+        allow delete: if isSignedIn() && isExistingResponseOwner();
     }
 
     // --- /appointmentExceptions/{exceptionId} ---
@@ -115,28 +104,26 @@ service cloud.firestore {
 
     // --- /polls/{pollId} ---
     match /polls/{pollId} {
-        // *** KORRIGIERTE Hilfsfunktion (ohne let/if) ***
         function isMemberOfVisibleTeamForPollResource() {
           let memberTeams = getUserTeams();
-          // Prüfe Existenz aller Daten und dann die Mitgliedschaft
-          return memberTeams != null && // User muss Teams haben
+          return memberTeams != null &&
                  resource.data != null &&
                  resource.data.keys().hasAny(['visibility']) &&
-                 resource.data.visibility.type == 'specificTeams' && // Nur relevant für specificTeams
+                 resource.data.visibility.type == 'specificTeams' &&
                  resource.data.visibility.keys().hasAny(['teamIds']) &&
                  resource.data.visibility.teamIds.hasAny(memberTeams);
         }
 
         allow get: if isSignedIn() && (
                      isAdmin() ||
-                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') || // Prüfe Existenz von visibility
+                     (resource.data.keys().hasAny(['visibility']) && resource.data.visibility.type == 'all') ||
                      isMemberOfVisibleTeamForPollResource()
                    );
-        allow list: if isSignedIn(); // Erlaube LIST für angemeldete Benutzer
+        allow list: if isSignedIn();
         allow create, delete: if isSignedIn() && isAdmin();
         allow update: if isSignedIn() && (
                       isAdmin() ||
-                      ( (resource.data != null && // Prüfe resource.data Existenz für Update
+                      ( (resource.data != null &&
                          (resource.data.visibility.type == 'all' || isMemberOfVisibleTeamForPollResource())) &&
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']) )
                     );

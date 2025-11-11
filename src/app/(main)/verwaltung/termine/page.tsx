@@ -1,9 +1,8 @@
-
 'use client';
 
 import React, { useMemo, useState } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, doc, query, where, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
@@ -15,6 +14,17 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 type UnrolledAppointment = Appointment & {
@@ -58,15 +68,17 @@ export default function TermineUebersichtPage() {
     return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
   }, [userTeamIds, teamsMap]);
 
-  const userResponsesQuery = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
-  }, [firestore, user]);
-  const { data: userResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(userResponsesQuery);
-  const userResponsesMap = useMemo(() => {
-    return new Map(userResponses?.map(r => [`${r.appointmentId}-${r.date}`, r.status]));
-  }, [userResponses]);
-
+  const allResponsesQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return collection(firestore, 'appointmentResponses');
+  }, [firestore]);
+  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
+  
+  const allMembersQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return collection(firestore, 'members');
+  }, [firestore]);
+  const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
   const unrolledAppointments = useMemo(() => {
     if (!appointments || !exceptions || !memberProfile) return [];
@@ -177,7 +189,7 @@ export default function TermineUebersichtPage() {
     }, {} as Record<string, UnrolledAppointment[]>);
   }, [filteredAppointments]);
   
-  const handleResponse = async (appointment: UnrolledAppointment, status: 'zugesagt' | 'abgesagt') => {
+  const handleResponse = async (appointment: UnrolledAppointment, status: 'zugesagt' | 'abgesagt' | 'unsicher') => {
       if (!firestore || !user) return;
       const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
       const responseId = `${appointment.originalId}_${user.uid}_${dateString}`;
@@ -203,7 +215,7 @@ export default function TermineUebersichtPage() {
       }
   };
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses;
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses || isLoadingMembers;
   const defaultOpenMonth = Object.keys(groupedAppointments)[0];
   
   return (
@@ -233,32 +245,47 @@ export default function TermineUebersichtPage() {
                           <div className="divide-y">
                               {appointmentsInMonth.map(app => {
                                   const dateKey = `${app.originalId}-${formatDate(app.instanceDate, 'yyyy-MM-dd')}`;
-                                  const userStatus = userResponsesMap.get(dateKey);
+                                  const userStatus = allResponses?.find(r => r.id.startsWith(app.originalId) && r.id.includes(user?.uid || '___') && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'))?.status;
+
                                   const location = app.locationId ? locationsMap.get(app.locationId) : null;
                                   
                                   return (
-                                    <div key={app.virtualId} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                      <div className="flex-1 space-y-1">
-                                        <p className="font-semibold">{app.title}</p>
-                                        <p className="text-sm text-muted-foreground">{formatDate(app.instanceDate, 'eeee, dd.MM.yyyy', {locale: de})} - {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}</p>
-                                        {location && (
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <Button variant="link" className="p-0 h-auto font-normal text-sm text-muted-foreground"><MapPin className="h-4 w-4 mr-1" /> {location.name}</Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-64 text-sm">
-                                                    {location.name}{location.address && `, ${location.address}`}
-                                                </PopoverContent>
-                                            </Popover>
-                                        )}
+                                    <div key={app.virtualId} className="p-4 flex flex-col gap-4">
+                                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                                        <div className="flex-1 space-y-1">
+                                          <p className="font-semibold text-lg">{app.title}</p>
+                                          <p className="text-sm text-muted-foreground">{formatDate(app.instanceDate, 'eeee, dd.MM.yyyy', {locale: de})} - {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}</p>
+                                          {location && (
+                                              <Popover>
+                                                  <PopoverTrigger asChild>
+                                                      <Button variant="link" className="p-0 h-auto font-normal text-sm text-muted-foreground"><MapPin className="h-4 w-4 mr-1" /> {location.name}</Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-64 text-sm">
+                                                      {location.name}{location.address && `, ${location.address}`}
+                                                  </PopoverContent>
+                                              </Popover>
+                                          )}
+                                          {(app.meetingPoint || app.meetingTime) && (
+                                            <div className="text-xs text-muted-foreground pt-2">
+                                              {app.meetingPoint && <p><strong>Treffpunkt:</strong> {app.meetingPoint}</p>}
+                                              {app.meetingTime && <p><strong>Treffzeit:</strong> {app.meetingTime}</p>}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')} className="gap-2">
+                                              <ThumbsUp className="h-4 w-4"/> Zusagen
+                                          </Button>
+                                          <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')} className="gap-2">
+                                              <ThumbsDown className="h-4 w-4"/> Absagen
+                                          </Button>
+                                          <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')} className="gap-2">
+                                              <HelpCircle className="h-4 w-4"/> Unsicher
+                                          </Button>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')} className="gap-2">
-                                            <ThumbsUp className="h-4 w-4"/> Zusagen
-                                        </Button>
-                                        <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')} className="gap-2">
-                                            <ThumbsDown className="h-4 w-4"/> Absagen
-                                        </Button>
+                                      <div className="flex justify-end">
+                                          <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                       </div>
                                     </div>
                                   );
@@ -274,4 +301,63 @@ export default function TermineUebersichtPage() {
   );
 }
 
+
+interface ParticipantListDialogProps {
+  appointment: UnrolledAppointment;
+  allMembers: MemberProfile[] | null;
+  allResponses: AppointmentResponse[] | null;
+}
+
+const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointment, allMembers, allResponses }) => {
+
+  const { accepted, rejected, unsure, totalCount } = useMemo(() => {
+    if (!allMembers) return { accepted: [], rejected: [], unsure: [], totalCount: 0};
     
+    const relevantMemberIds = new Set<string>();
+    if (appointment.visibility.type === 'all') {
+      allMembers.forEach(m => relevantMemberIds.add(m.userId));
+    } else {
+      appointment.visibility.teamIds.forEach(teamId => {
+        allMembers.forEach(member => {
+          if (member.teams?.includes(teamId)) relevantMemberIds.add(member.userId);
+        });
+      });
+    }
+
+    const dateString = formatDate(appointment.instanceDate, 'yyyy-MM-dd');
+    const responsesForInstance = allResponses?.filter(r => r.appointmentId === appointment.originalId && r.date === dateString) || [];
+    
+    const accepted = responsesForInstance.filter(r => r.status === 'zugesagt');
+    const rejected = responsesForInstance.filter(r => r.status === 'abgesagt');
+    const unsure = responsesForInstance.filter(r => r.status === 'unsicher');
+
+    return { accepted, rejected, unsure, totalCount: relevantMemberIds.size };
+  }, [appointment, allMembers, allResponses]);
+
+  const membersMap = useMemo(() => new Map(allMembers?.map(m => [m.userId, m])), [allMembers]);
+  const respondedCount = accepted.length + rejected.length + unsure.length;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+            <Users className="h-4 w-4 mr-2" />
+            {respondedCount} von {totalCount} haben geantwortet
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+            <DialogTitle>Teilnehmerliste für "{appointment.title}"</DialogTitle>
+            <DialogDescription>{formatDate(appointment.instanceDate, "eeee, dd. MMMM yyyy 'um' HH:mm 'Uhr'", { locale: de })}</DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4 p-4">
+              <div><h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3><ul className="list-disc pl-5 text-sm">{accepted.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+              <div><h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3><ul className="list-disc pl-5 text-sm">{unsure.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+              <div><h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3><ul className="list-disc pl-5 text-sm">{rejected.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}{r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}</li>))}</ul></div>
+            </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
