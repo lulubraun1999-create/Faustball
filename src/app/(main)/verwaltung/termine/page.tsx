@@ -5,7 +5,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, errorEmi
 import { collection, doc, query, where, Timestamp, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds, startOfMonth, parse as parseDate } from 'date-fns';
+import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds, startOfMonth, endOfMonth, parse as parseDate } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, ClipboardCopy, CalendarIcon, BarChartHorizontal } from 'lucide-react';
@@ -89,11 +89,8 @@ export default function TermineUebersichtPage() {
 
   const responsesQuery = useMemoFirebase(() => {
       if (!firestore || !user) return null;
-      if (isAdmin) {
-          return collection(firestore, 'appointmentResponses');
-      }
       return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
-  }, [firestore, user, isAdmin]);
+  }, [firestore, user]);
 
   const { data: responses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
 
@@ -354,7 +351,7 @@ export default function TermineUebersichtPage() {
                                                               <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')}><ThumbsUp className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')}><HelpCircle className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')}><ThumbsDown className="h-4 w-4"/></Button>
-                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={responses} />
+                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                                           </>
                                                       ) : <p className="text-destructive font-semibold mr-4">Abgesagt</p>}
                                                     </div>
@@ -484,6 +481,7 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     if (!user || !responses || appointments.length === 0) return { userStats: {}, yearlyTotals: null };
 
     const now = new Date();
+    const currentMonthStart = startOfMonth(now);
     const oneYearAgo = startOfMonth(addMonths(now, -11));
 
     const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number }>> = {};
@@ -493,36 +491,41 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
 
     const relevantAppointments = appointments.filter(app => {
         const appDate = app.instanceDate;
-        // Include appointments from the beginning of the current month up to 11 months before that
-        return appDate >= oneYearAgo && appDate <= new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return appDate >= oneYearAgo && appDate <= endOfMonth(now);
     });
 
     for (const app of relevantAppointments) {
-        if(isBefore(app.instanceDate, now)){ // Nur vergangene Termine für die Statistik zählen
-            const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
-            const typeName = appointmentTypesMap.get(app.appointmentTypeId) || 'Unbekannt';
+        const appDate = app.instanceDate;
+        const isCurrentMonth = getYear(appDate) === getYear(now) && getMonth(appDate) === getMonth(now);
+        
+        // Count only past events for past months, but all events for the current month
+        if (!isCurrentMonth && isBefore(appDate, now) === false) {
+            continue;
+        }
 
-            if (!stats[monthYear]) stats[monthYear] = {};
-            if (!stats[monthYear][typeName]) stats[monthYear][typeName] = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
-            
-            stats[monthYear][typeName].total++;
-            yearSummary.total++;
-            
-            const responseStatus = userResponsesMap.get(`${app.originalId}-${formatDate(app.instanceDate, 'yyyy-MM-dd')}`);
-            
-            if (responseStatus) {
-                if (responseStatus === 'zugesagt') {
-                  stats[monthYear][typeName].zugesagt++;
-                  yearSummary.zugesagt++;
-                }
-                else if (responseStatus === 'abgesagt') {
-                  stats[monthYear][typeName].abgesagt++;
-                  yearSummary.abgesagt++;
-                }
-                else if (responseStatus === 'unsicher') {
-                  stats[monthYear][typeName].unsicher++;
-                  yearSummary.unsicher++;
-                }
+        const monthYear = formatDate(appDate, 'MMMM yyyy', { locale: de });
+        const typeName = appointmentTypesMap.get(app.appointmentTypeId) || 'Unbekannt';
+
+        if (!stats[monthYear]) stats[monthYear] = {};
+        if (!stats[monthYear][typeName]) stats[monthYear][typeName] = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
+        
+        stats[monthYear][typeName].total++;
+        yearSummary.total++;
+        
+        const responseStatus = userResponsesMap.get(`${app.originalId}-${formatDate(appDate, 'yyyy-MM-dd')}`);
+        
+        if (responseStatus) {
+            if (responseStatus === 'zugesagt') {
+              stats[monthYear][typeName].zugesagt++;
+              yearSummary.zugesagt++;
+            }
+            else if (responseStatus === 'abgesagt') {
+              stats[monthYear][typeName].abgesagt++;
+              yearSummary.abgesagt++;
+            }
+            else if (responseStatus === 'unsicher') {
+              stats[monthYear][typeName].unsicher++;
+              yearSummary.unsicher++;
             }
         }
     }
@@ -662,4 +665,3 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
   );
 };
     
-
