@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -36,7 +35,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell, Legend } from "recharts";
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 
 
 type UnrolledAppointment = Appointment & {
@@ -91,10 +90,13 @@ export default function TermineUebersichtPage() {
   const responsesQuery = useMemoFirebase(() => {
       if (!firestore || !user) return null;
       // Admin sees all responses, user sees only their own
-      return isAdmin ? collection(firestore, 'appointmentResponses') : query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
-  }, [firestore, user, isAdmin]);
-  const { data: responses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
-  const allResponses = isAdmin ? responses : null; // This is for the participant list dialog
+      return query(collection(firestore, 'appointmentResponses'));
+  }, [firestore, user]);
+  const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
+  const userResponses = useMemo(() => {
+    if (!allResponses || !user) return [];
+    return allResponses.filter(r => r.userId === user.uid);
+  }, [allResponses, user])
 
 
   const unrolledAppointments = useMemo(() => {
@@ -213,7 +215,7 @@ export default function TermineUebersichtPage() {
       const responseId = `${appointment.originalId}_${user.uid}_${dateString}`;
       const responseDocRef = doc(firestore, 'appointmentResponses', responseId);
 
-      const currentUserResponse = responses?.find(r => r.id === responseId);
+      const currentUserResponse = userResponses?.find(r => r.id === responseId);
 
       if (currentUserResponse?.status === status) {
           try {
@@ -259,7 +261,7 @@ export default function TermineUebersichtPage() {
             <StatisticsDialog 
               user={user} 
               appointments={unrolledAppointments} 
-              responses={responses} 
+              responses={userResponses} 
               appointmentTypesMap={appointmentTypesMap} 
             />
             <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter} disabled={userTeamsForFilter.length === 0}>
@@ -306,7 +308,7 @@ export default function TermineUebersichtPage() {
                                   </TableHeader>
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
-                                          const userStatus = responses?.find(r => r.id.startsWith(app.originalId) && r.id.includes(user?.uid || '___') && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'))?.status;
+                                          const userStatus = userResponses?.find(r => r.id.startsWith(app.originalId) && r.id.includes(user?.uid || '___') && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'))?.status;
                                           const location = app.locationId ? locationsMap.get(app.locationId) : null;
                                           const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                           const typeName = appointmentTypesMap.get(app.appointmentTypeId);
@@ -353,7 +355,7 @@ export default function TermineUebersichtPage() {
                                                               <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')}><ThumbsUp className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')}><HelpCircle className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')}><ThumbsDown className="h-4 w-4"/></Button>
-                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses ?? responses} />
+                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                                           </>
                                                       ) : <p className="text-destructive font-semibold mr-4">Abgesagt</p>}
                                                     </div>
@@ -497,8 +499,10 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
 
     for (const app of relevantAppointments) {
         const appDate = app.instanceDate;
+        
         const isCurrentMonth = getYear(appDate) === getYear(now) && getMonth(appDate) === getMonth(now);
         
+        // Count only past appointments for past months, and all for current month
         if (!isCurrentMonth && isBefore(appDate, now) === false) {
             continue;
         }
@@ -510,28 +514,26 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
         if (!stats[monthYear][typeName]) stats[monthYear][typeName] = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0, offen: 0 };
         
         stats[monthYear][typeName].total++;
-        if (isCurrentMonth || isBefore(appDate, now)) {
-          yearSummary.total++;
-        }
+        yearSummary.total++;
         
         const responseStatus = userResponsesMap.get(`${app.originalId}-${formatDate(appDate, 'yyyy-MM-dd')}`);
         
         if (responseStatus) {
             if (responseStatus === 'zugesagt') {
               stats[monthYear][typeName].zugesagt++;
-              if (isCurrentMonth || isBefore(appDate, now)) yearSummary.zugesagt++;
+              yearSummary.zugesagt++;
             }
             else if (responseStatus === 'abgesagt') {
               stats[monthYear][typeName].abgesagt++;
-              if (isCurrentMonth || isBefore(appDate, now)) yearSummary.abgesagt++;
+              yearSummary.abgesagt++;
             }
             else if (responseStatus === 'unsicher') {
               stats[monthYear][typeName].unsicher++;
-              if (isCurrentMonth || isBefore(appDate, now)) yearSummary.unsicher++;
+              yearSummary.unsicher++;
             }
         } else {
             stats[monthYear][typeName].offen++;
-             if (isCurrentMonth || isBefore(appDate, now)) yearSummary.offen++;
+            yearSummary.offen++;
         }
     }
     
@@ -547,6 +549,13 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
   }, [user, appointments, responses, appointmentTypesMap]);
   
   const renderYearlyChart = yearlyTotals && yearlyTotals.total > 0;
+  
+  const chartConfig = {
+    anwesend: { label: 'Anwesend', color: 'hsl(var(--chart-1))' },
+    abwesend: { label: 'Abwesend', color: 'hsl(var(--destructive))' },
+    unsicher: { label: 'Unsicher', color: 'hsl(var(--chart-3))' },
+    offen: { label: 'Offen', color: 'hsl(var(--muted-foreground))' },
+  } satisfies ChartConfig
 
   return (
     <Dialog>
@@ -571,16 +580,11 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                       {Object.entries(typeStats).sort(([a], [b]) => a.localeCompare(b)).map(([typeName, counts]) => {
                                           const { zugesagt, abgesagt, unsicher, offen, total } = counts;
                                           
-                                          const attendedPercent = total > 0 ? (zugesagt / total) * 100 : 0;
-                                          const absentPercent = total > 0 ? (abgesagt / total) * 100 : 0;
-                                          const unsurePercent = total > 0 ? (unsicher / total) * 100 : 0;
-                                          const notRespondedPercent = total > 0 ? (offen / total) * 100 : 0;
-
                                           const chartData = [
-                                            { name: 'Anwesend', value: zugesagt, fill: 'hsl(var(--chart-1))' },
-                                            { name: 'Abwesend', value: abgesagt, fill: 'hsl(var(--destructive))' },
-                                            { name: 'Unsicher', value: unsicher, fill: 'hsl(var(--chart-3))' },
-                                            { name: 'Offen', value: offen, fill: 'hsl(var(--muted-foreground))' },
+                                            { name: 'anwesend', value: zugesagt, fill: 'var(--color-anwesend)' },
+                                            { name: 'abwesend', value: abgesagt, fill: 'var(--color-abwesend)' },
+                                            { name: 'unsicher', value: unsicher, fill: 'var(--color-unsicher)' },
+                                            { name: 'offen', value: offen, fill: 'var(--color-offen)' },
                                           ].filter(item => item.value > 0);
 
                                           return (
@@ -588,35 +592,32 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                                   <CardHeader className="p-4 bg-muted/50">
                                                       <CardTitle className="text-base">{typeName} (Gesamt: {total})</CardTitle>
                                                   </CardHeader>
-                                                  <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
-                                                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center flex-1">
+                                                  <CardContent className="flex flex-col gap-4 p-4">
+                                                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center">
                                                           <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
                                                               <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
-                                                              <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({attendedPercent.toFixed(0)}%)</div>
+                                                              <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(total > 0 ? (zugesagt/total)*100 : 0).toFixed(0)}%)</div>
                                                           </div>
                                                           <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30">
                                                               <div className="text-2xl font-bold text-red-700 dark:text-red-400">{abgesagt}</div>
-                                                              <div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({absentPercent.toFixed(0)}%)</div>
+                                                              <div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({(total > 0 ? (abgesagt/total)*100 : 0).toFixed(0)}%)</div>
                                                           </div>
                                                           <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30">
                                                               <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unsicher}</div>
-                                                              <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({unsurePercent.toFixed(0)}%)</div>
+                                                              <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({(total > 0 ? (unsicher/total)*100 : 0).toFixed(0)}%)</div>
                                                           </div>
                                                           <div className="rounded-md bg-slate-100 p-2 dark:bg-slate-800/50">
                                                               <div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{offen}</div>
-                                                              <div className="text-xs text-slate-500 dark:text-slate-400/80">Offen ({notRespondedPercent.toFixed(0)}%)</div>
+                                                              <div className="text-xs text-slate-500 dark:text-slate-400/80">Offen ({(total > 0 ? (offen/total)*100 : 0).toFixed(0)}%)</div>
                                                           </div>
                                                       </div>
-                                                      <div className="h-40 w-full md:w-40">
+                                                      <div className="h-40 w-full">
                                                         {chartData.length > 0 ? (
-                                                          <ChartContainer config={{}} className="min-h-[150px]">
+                                                          <ChartContainer config={chartConfig} className="min-h-[150px]">
                                                               <PieChart>
                                                                   <Tooltip content={<ChartTooltipContent hideLabel />} />
-                                                                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                                                                      {chartData.map((entry) => (
-                                                                          <Cell key={`cell-${entry.name}`} fill={entry.fill} />
-                                                                      ))}
-                                                                  </Pie>
+                                                                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} />
+                                                                  <ChartLegend content={<ChartLegendContent />} />
                                                               </PieChart>
                                                           </ChartContainer>
                                                         ) : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Keine Daten</div>}
@@ -635,25 +636,24 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                              <CardHeader className="p-4 bg-muted/50">
                                 <CardTitle className="text-base">Jahresbilanz (Letzte 12 Monate)</CardTitle>
                              </CardHeader>
-                             <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center flex-1">
+                              <CardContent className="flex flex-col gap-4 p-4">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center">
                                     <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30"><div className="text-2xl font-bold text-green-700 dark:text-green-400">{yearlyTotals.zugesagt}</div><div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.zugesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30"><div className="text-2xl font-bold text-red-700 dark:text-red-400">{yearlyTotals.abgesagt}</div><div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.abgesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30"><div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{yearlyTotals.unsicher}</div><div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({(yearlyTotals.total > 0 ? (yearlyTotals.unsicher / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-slate-100 p-2 dark:bg-slate-800/50"><div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{yearlyTotals.offen}</div><div className="text-xs text-slate-500 dark:text-slate-400/80">Offen ({(yearlyTotals.total > 0 ? (yearlyTotals.offen / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                 </div>
-                                <div className="h-40 w-full md:w-40">
-                                  <ChartContainer config={{}} className="min-h-[150px]">
+                                <div className="h-40 w-full">
+                                  <ChartContainer config={chartConfig} className="min-h-[150px]">
                                       <PieChart>
                                           <Tooltip content={<ChartTooltipContent hideLabel />} />
                                           <Pie data={[
-                                              { name: 'Anwesend', value: yearlyTotals.zugesagt, fill: 'hsl(var(--chart-1))' },
-                                              { name: 'Abwesend', value: yearlyTotals.abgesagt, fill: 'hsl(var(--destructive))' },
-                                              { name: 'Unsicher', value: yearlyTotals.unsicher, fill: 'hsl(var(--chart-3))' },
-                                              { name: 'Offen', value: yearlyTotals.offen, fill: 'hsl(var(--muted-foreground))' },
-                                          ].filter(item => item.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                                              <Cell fill="hsl(var(--chart-1))" /><Cell fill="hsl(var(--destructive))" /><Cell fill="hsl(var(--chart-3))" /><Cell fill="hsl(var(--muted-foreground))" />
-                                          </Pie>
+                                              { name: 'anwesend', value: yearlyTotals.zugesagt, fill: 'var(--color-anwesend)' },
+                                              { name: 'abwesend', value: yearlyTotals.abgesagt, fill: 'var(--color-abwesend)' },
+                                              { name: 'unsicher', value: yearlyTotals.unsicher, fill: 'var(--color-unsicher)' },
+                                              { name: 'offen', value: yearlyTotals.offen, fill: 'var(--color-offen)' },
+                                          ].filter(item => item.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} />
+                                          <ChartLegend content={<ChartLegendContent />} />
                                       </PieChart>
                                   </ChartContainer>
                                 </div>
@@ -670,5 +670,7 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
 };
     
 
+
+    
 
     
