@@ -21,6 +21,13 @@ import { Newspaper, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import Link from 'next/link';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
 
 export default function VerwaltungNewsPage() {
   const firestore = useFirestore();
@@ -56,15 +63,37 @@ export default function VerwaltungNewsPage() {
           {sortedNews.map((article) => (
             <Card key={article.id} className="flex flex-col overflow-hidden">
               {article.imageUrls && article.imageUrls.length > 0 && (
-                <div className="relative h-48 w-full">
-                  <Image
-                    src={article.imageUrls[0]}
-                    alt={article.title}
-                    layout="fill"
-                    objectFit="cover"
-                    className="bg-muted"
-                  />
-                </div>
+                article.imageUrls.length > 1 ? (
+                  <Carousel className="w-full">
+                    <CarouselContent>
+                      {article.imageUrls.map((url, index) => (
+                        <CarouselItem key={index}>
+                          <div className="relative h-48 w-full">
+                            <Image
+                              src={url}
+                              alt={`${article.title} - Bild ${index + 1}`}
+                              layout="fill"
+                              objectFit="cover"
+                              className="bg-muted"
+                            />
+                          </div>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="left-2" />
+                    <CarouselNext className="right-2" />
+                  </Carousel>
+                ) : (
+                  <div className="relative h-48 w-full">
+                    <Image
+                      src={article.imageUrls[0]}
+                      alt={article.title}
+                      layout="fill"
+                      objectFit="cover"
+                      className="bg-muted"
+                    />
+                  </div>
+                )
               )}
               <CardHeader>
                 <CardTitle>{article.title}</CardTitle>
