@@ -354,9 +354,7 @@ export default function AppointmentManagementPage() {
         const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
         let rsvpTimestamp: Timestamp | null = null;
         if (data.rsvpDeadline) {
-            const [days, hours] = data.rsvpDeadline.split(':').map(Number);
-            const totalMillis = ((days * 24) + (hours || 0)) * 3600000;
-            rsvpTimestamp = Timestamp.fromMillis(new Date(data.startDate).getTime() - totalMillis);
+          rsvpTimestamp = Timestamp.fromDate(new Date(data.rsvpDeadline));
         }
 
         const newAppointmentData = {
@@ -432,7 +430,7 @@ export default function AppointmentManagementPage() {
                       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                           <FormField control={form.control} name="recurrence" render={({ field }) => (<FormItem><FormLabel>Wiederholung</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Keine</SelectItem><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="bi-weekly">Alle 2 Wochen</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select></FormItem>)}/>
                           <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (<FormItem><FormLabel>Ende der Wiederholung</FormLabel><FormControl><Input type="date" {...field} disabled={form.watch('recurrence') === 'none'} /></FormControl><FormMessage /></FormItem>)}/>
-                          <FormField control={form.control} name="rsvpDeadline" render={({ field }) => (<FormItem><FormLabel>Rückmeldefrist</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Frist für Rückmeldung" /></SelectTrigger></FormControl><SelectContent><SelectItem value="0:12">12 Stunden vorher</SelectItem><SelectItem value="1:0">1 Tag vorher</SelectItem><SelectItem value="2:0">2 Tage vorher</SelectItem><SelectItem value="3:0">3 Tage vorher</SelectItem></SelectContent></Select></FormItem>)}/>
+                          <FormField control={form.control} name="rsvpDeadline" render={({ field }) => (<FormItem><FormLabel>Rückmeldefrist</FormLabel><FormControl><Input type="datetime-local" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                       </div>
                       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                           <FormField control={form.control} name="meetingPoint" render={({ field }) => (<FormItem><FormLabel>Treffpunkt</FormLabel><FormControl><Input placeholder="z.B. Vor der Halle" {...field} /></FormControl></FormItem>)}/>
@@ -467,12 +465,14 @@ export default function AppointmentManagementPage() {
                                         const rsvpDeadline = appointments?.find(a => a.id === app.originalId)?.rsvpDeadline;
                                         let rsvpDeadlineString = '-';
                                         if (rsvpDeadline) {
-                                            const startMillis = app.startDate.toMillis();
-                                            const rsvpMillis = rsvpDeadline.toMillis();
-                                            const offset = startMillis - rsvpMillis;
-                                            const instanceStartMillis = app.instanceDate.getTime();
-                                            const instanceRsvpMillis = instanceStartMillis - offset;
-                                            rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                                            if (typeof rsvpDeadline === 'string') { // Old format
+                                                const [days, hours] = rsvpDeadline.split(':').map(Number);
+                                                const totalMillis = ((days * 24) + (hours || 0)) * 3600000;
+                                                const instanceRsvpMillis = app.instanceDate.getTime() - totalMillis;
+                                                rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                                            } else if (rsvpDeadline instanceof Timestamp) { // New format
+                                                rsvpDeadlineString = formatDate(rsvpDeadline.toDate(), 'dd.MM.yy HH:mm');
+                                            }
                                         }
 
                                         return (
@@ -498,11 +498,11 @@ export default function AppointmentManagementPage() {
                                                     </AlertDialog>
                                                   ) : (
                                                     <AlertDialog>
-                                                      <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><X className="h-4 w-4 text-orange-600" /></Button></AlertDialogTrigger>
-                                                      <AlertDialogContent>
+                                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><X className="h-4 w-4 text-orange-600" /></Button></AlertDialogTrigger>
+                                                        <AlertDialogContent>
                                                           <AlertDialogHeader><AlertDialogTitle>Diesen Termin absagen?</AlertDialogTitle><AlertDialogDescription>Möchten Sie wirklich nur diesen einen Termin absagen? Er wird für alle als "abgesagt" markiert. Dies kann rückgängig gemacht werden.</AlertDialogDescription></AlertDialogHeader>
                                                           <AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleCancelSingle(app)}>Ja, nur diesen Termin absagen</AlertDialogAction></AlertDialogFooter>
-                                                      </AlertDialogContent>
+                                                        </AlertDialogContent>
                                                     </AlertDialog>
                                                   )}
 
@@ -583,5 +583,3 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
-
-    

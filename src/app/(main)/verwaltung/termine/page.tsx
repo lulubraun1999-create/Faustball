@@ -47,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -552,15 +552,10 @@ export default function VerwaltungTerminePage() {
                                         const displayTitle = showTitle ? `${typeName} (${app.title})` : typeName;
                                         const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                         let rsvpDeadlineString = '-';
-                                        if (originalAppointment?.startDate && originalAppointment?.rsvpDeadline) {
-                                            const startMillis = originalAppointment.startDate.toMillis();
-                                            const rsvpMillis = originalAppointment.rsvpDeadline.toMillis();
-                                            const offset = startMillis - rsvpMillis;
-                                            const instanceStartMillis = app.instanceDate.getTime();
-                                            const instanceRsvpMillis = instanceStartMillis - offset;
-                                            rsvpDeadlineString = formatDate(new Date(instanceRsvpMillis), 'dd.MM.yy HH:mm');
+                                        if (originalAppointment?.rsvpDeadline) {
+                                            const deadline = originalAppointment.rsvpDeadline.toDate();
+                                            rsvpDeadlineString = formatDate(deadline, 'dd.MM.yy HH:mm');
                                         }
-
                                         return (
                                             <TableRow 
                                                 key={app.virtualId} 
@@ -776,6 +771,7 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Teilnehmerliste</DialogTitle>
+          <DialogDescription>{appointment.title}</DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[60vh]">
         <div className="space-y-4 p-4">
@@ -820,7 +816,3 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
-
-    
-
-    
