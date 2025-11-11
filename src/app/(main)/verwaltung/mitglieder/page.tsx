@@ -45,8 +45,11 @@ export default function VerwaltungMitgliederPage() {
   const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
   
   const membersQuery = useMemoFirebase(() => {
-      if (isMemberProfileLoading || !firestore || !user) return null; 
-      if (userTeamIds.length === 0) return null;
+      // WICHTIG: Die Abfrage nur dann erstellen, wenn der Benutzer Teams hat.
+      // Eine `array-contains-any`-Abfrage mit einem leeren Array ist ungültig und wird von den Regeln blockiert.
+      if (isMemberProfileLoading || !firestore || !user || userTeamIds.length === 0) {
+        return null;
+      }
       return query(collection(firestore, 'members'), where('teams', 'array-contains-any', userTeamIds));
   }, [firestore, user, userTeamIds, isMemberProfileLoading]);
 
@@ -75,6 +78,7 @@ export default function VerwaltungMitgliederPage() {
   }, [groups, memberProfile]);
 
   const filteredAndSortedMembers = useMemo(() => {
+    // Wenn es keine Mitglieder gibt (weil der Benutzer z.B. in keinem Team ist), eine leere Liste zurückgeben
     if (!members) return [];
     
     let filtered = [...members];
@@ -220,7 +224,7 @@ export default function VerwaltungMitgliederPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                        Keine Mitglieder entsprechen den aktuellen Filtern gefunden.
+                        Keine Mitglieder entsprechen den aktuellen Filtern oder Sie sind keinem Team zugewiesen.
                       </TableCell>
                     </TableRow>
                   )}
