@@ -75,6 +75,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -353,9 +354,8 @@ export default function AppointmentManagementPage() {
     try {
         const typeName = appointmentTypes?.find(t => t.id === data.appointmentTypeId)?.name || 'Termin';
         
-        // Umwandlung der RSVP-Frist in das String-Format
         const rsvpDeadlineString = (data.rsvpDeadlineDays && data.rsvpDeadlineTime) 
-          ? `${data.rsvpDeadlineDays}:${data.rsvpDeadlineTime}` 
+          ? `${data.rsvpDeadlineDays}:${data.rsvpDeadlineTime.replace(':',';')}` 
           : null;
 
         const newAppointmentData = {
@@ -608,6 +608,8 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    
 
     
 
