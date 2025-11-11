@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
-import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, CalendarClock, CalendarX2 } from 'lucide-react';
+import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, CalendarClock, CalendarX2, ClipboardCopy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
 
 
 type UnrolledAppointment = Appointment & {
@@ -85,10 +86,7 @@ export default function TermineUebersichtPage() {
   }, [firestore, isAdmin]);
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
-  const allResponsesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'appointmentResponses');
-  }, [firestore]);
+  const allResponsesQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
   const { data: allResponses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
 
 
@@ -253,7 +251,9 @@ export default function TermineUebersichtPage() {
                             <TableHead>Art</TableHead>
                             <TableHead>Datum</TableHead>
                             <TableHead>Zeit</TableHead>
-                            <TableHead>Details</TableHead>
+                            <TableHead>Ort</TableHead>
+                            <TableHead>Treffpunkt</TableHead>
+                            <TableHead>Treffzeit</TableHead>
                             <TableHead>Rückmeldung bis</TableHead>
                             <TableHead className="text-right">Aktion</TableHead>
                         </TableRow>
@@ -288,10 +288,12 @@ export default function TermineUebersichtPage() {
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        {location && <p><span className="font-semibold">Ort:</span> {location.name}</p>}
-                                        {app.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
-                                        {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
+                                        {location ? (
+                                            <LocationPopover location={location} />
+                                        ) : '-'}
                                     </TableCell>
+                                    <TableCell>{app.meetingPoint || '-'}</TableCell>
+                                    <TableCell>{app.meetingTime || '-'}</TableCell>
                                     <TableCell>
                                         {rsvpDate ? formatDate(rsvpDate, 'dd.MM.yy, HH:mm', { locale: de }) + ' Uhr' : '-'}
                                     </TableCell>
@@ -319,6 +321,42 @@ export default function TermineUebersichtPage() {
       }
     </div>
   );
+}
+
+const LocationPopover: React.FC<{location: Location}> = ({ location }) => {
+    const { toast } = useToast();
+    const copyAddress = () => {
+        if(location.address) {
+            navigator.clipboard.writeText(location.address);
+            toast({
+                title: "Adresse kopiert",
+                description: "Die Adresse wurde in die Zwischenablage kopiert."
+            })
+        }
+    }
+    
+    if(!location.address) {
+        return <>{location.name}</>
+    }
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="link" className="p-0 h-auto font-normal text-foreground">
+                    {location.name}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 text-sm">
+                <div className="space-y-2">
+                    <h4 className="font-medium leading-none">Adresse</h4>
+                    <p className="text-muted-foreground">{location.address}</p>
+                    <Button onClick={copyAddress} size="sm" className="w-full">
+                        <ClipboardCopy className="mr-2 h-4 w-4" /> Adresse kopieren
+                    </Button>
+                </div>
+            </PopoverContent>
+        </Popover>
+    )
 }
 
 
@@ -381,5 +419,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    
 
     
