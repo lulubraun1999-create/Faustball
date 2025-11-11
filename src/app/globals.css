@@ -87,6 +87,22 @@
         @apply text-sm font-medium text-muted-foreground text-center pt-2;
     }
 
+    .rbc-month-view, .rbc-month-row {
+        @apply flex flex-col flex-grow;
+    }
+    
+    .rbc-month-row {
+        @apply flex-row;
+    }
+
+    .rbc-row-content {
+        @apply h-full;
+    }
+
+    .rbc-day-bg {
+        @apply aspect-square;
+    }
+
     /* Mobile-specific calendar optimizations */
     @media (max-width: 768px) {
         .rbc-toolbar {
@@ -100,6 +116,9 @@
         }
         .rbc-event {
             @apply whitespace-normal text-xs p-0.5;
+        }
+        .rbc-header {
+            @apply text-center pb-1;
         }
     }
 }
