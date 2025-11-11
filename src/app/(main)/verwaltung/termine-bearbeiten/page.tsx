@@ -155,7 +155,7 @@ export default function AppointmentManagementPage() {
 
   const appointmentsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointments') : null), [firestore, user]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
-  const exceptionsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentExceptions') : null), [firestore, user]);
+  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore, user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
   
   const allMembersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
@@ -537,13 +537,13 @@ export default function AppointmentManagementPage() {
                           <div className="overflow-x-auto">
                               <Table>
                                   <TableHeader><TableRow>
-                                    <TableHead>Art (Titel)</TableHead>
-                                    <TableHead>Datum/Zeit</TableHead>
-                                    <TableHead>Ort</TableHead>
-                                    <TableHead>Treffpunkt</TableHead>
-                                    <TableHead>Treffzeit</TableHead>
-                                    <TableHead>Sichtbarkeit</TableHead>
-                                    <TableHead className="text-right">Aktionen</TableHead>
+                                    <TableHead className="px-2 py-2">Art (Titel)</TableHead>
+                                    <TableHead className="px-2 py-2">Datum/Zeit</TableHead>
+                                    <TableHead className="px-2 py-2">Ort</TableHead>
+                                    <TableHead className="px-2 py-2">Treffpunkt</TableHead>
+                                    <TableHead className="px-2 py-2">Treffzeit</TableHead>
+                                    <TableHead className="px-2 py-2">Sichtbarkeit</TableHead>
+                                    <TableHead className="text-right px-2 py-2">Aktionen</TableHead>
                                   </TableRow></TableHeader>
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
@@ -552,13 +552,13 @@ export default function AppointmentManagementPage() {
 
                                         return (
                                           <TableRow key={app.virtualId} className={cn(app.isCancelled && 'bg-red-50/50 text-muted-foreground line-through dark:bg-red-900/20')}>
-                                              <TableCell><div className="font-medium">{typeName}</div>{app.title !== typeName && <div className="text-xs text-muted-foreground">({app.title})</div>}</TableCell>
-                                              <TableCell>{formatDate(app.instanceDate, 'dd.MM.yy')}<br/>{app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm')}</TableCell>
-                                              <TableCell>{location ? location.name : '-'}</TableCell>
-                                              <TableCell>{app.meetingPoint || '-'}</TableCell>
-                                              <TableCell>{app.meetingTime || '-'}</TableCell>
-                                              <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ') || '-'}</TableCell>
-                                              <TableCell className="text-right">
+                                              <TableCell className="px-2 py-2"><div className="font-medium">{typeName}</div>{app.title !== typeName && <div className="text-xs text-muted-foreground">({app.title})</div>}</TableCell>
+                                              <TableCell className="px-2 py-2">{formatDate(app.instanceDate, 'dd.MM.yy')}<br/>{app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm')}</TableCell>
+                                              <TableCell className="px-2 py-2">{location ? location.name : '-'}</TableCell>
+                                              <TableCell className="px-2 py-2">{app.meetingPoint || '-'}</TableCell>
+                                              <TableCell className="px-2 py-2">{app.meetingTime || '-'}</TableCell>
+                                              <TableCell className="px-2 py-2">{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ') || '-'}</TableCell>
+                                              <TableCell className="text-right px-2 py-2">
                                                   <div className="flex items-center justify-end gap-0">
                                                     <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                                     
@@ -662,6 +662,7 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     
 
     
+
 
 
 
