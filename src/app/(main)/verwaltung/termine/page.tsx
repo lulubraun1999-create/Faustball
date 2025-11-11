@@ -87,12 +87,15 @@ export default function TermineUebersichtPage() {
   const allMembersQuery = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
-  const allResponsesQuery = useMemoFirebase(() => (firestore ? collection(firestore, isAdmin ? 'appointmentResponses' : undefined) : null), [firestore, isAdmin]);
-  const userResponsesQuery = useMemoFirebase(() => (firestore && !isAdmin && user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid)) : null), [firestore, isAdmin, user]);
+  const responsesQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    if (isAdmin) {
+      return collection(firestore, 'appointmentResponses');
+    }
+    return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
+  }, [firestore, user, isAdmin]);
 
-  const { data: allResponses, isLoading: isLoadingAllResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
-  const { data: userResponses, isLoading: isLoadingUserResponses } = useCollection<AppointmentResponse>(userResponsesQuery);
-  const responses = useMemo(() => isAdmin ? allResponses : userResponses, [isAdmin, allResponses, userResponses]);
+  const { data: responses, isLoading: isLoadingResponses } = useCollection<AppointmentResponse>(responsesQuery);
 
 
   const unrolledAppointments = useMemo(() => {
@@ -247,7 +250,7 @@ export default function TermineUebersichtPage() {
       }
   };
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingAllResponses || isLoadingUserResponses || isLoadingTypes || (isAdmin && isLoadingMembers);
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingResponses || isLoadingTypes || (isAdmin && isLoadingMembers);
   
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
