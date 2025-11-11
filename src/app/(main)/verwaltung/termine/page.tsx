@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -93,7 +92,6 @@ export default function TermineUebersichtPage() {
       if (isAdmin) {
           return collection(firestore, 'appointmentResponses');
       }
-      // Normale Benutzer laden nur ihre eigenen Antworten, um die Regeln einzuhalten.
       return query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid));
   }, [firestore, user, isAdmin]);
 
@@ -218,7 +216,6 @@ export default function TermineUebersichtPage() {
 
       const currentUserResponse = responses?.find(r => r.id === responseId);
 
-      // If user clicks the same status again, retract the vote
       if (currentUserResponse?.status === status) {
           try {
               await deleteDoc(responseDocRef);
@@ -231,7 +228,6 @@ export default function TermineUebersichtPage() {
           return;
       }
       
-      // Otherwise, create or update the vote
       const responseData: AppointmentResponse = {
           id: responseId,
           appointmentId: appointment.originalId,
@@ -493,11 +489,16 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
     const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number }>> = {};
     const yearSummary = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
 
-    const userResponses = responses.filter(r => r.userId === user.uid);
-    const userResponsesMap = new Map(userResponses.map(r => [`${r.appointmentId}-${r.date}`, r.status]));
+    const userResponsesMap = new Map(responses.filter(r => r.userId === user.uid).map(r => [`${r.appointmentId}-${r.date}`, r.status]));
 
-    for (const app of appointments) {
-        if (app.instanceDate >= oneYearAgo) {
+    const relevantAppointments = appointments.filter(app => {
+        const appDate = app.instanceDate;
+        // Include appointments from the beginning of the current month up to 11 months before that
+        return appDate >= oneYearAgo && appDate <= new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    });
+
+    for (const app of relevantAppointments) {
+        if(isBefore(app.instanceDate, now)){ // Nur vergangene Termine für die Statistik zählen
             const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
             const typeName = appointmentTypesMap.get(app.appointmentTypeId) || 'Unbekannt';
 
@@ -526,7 +527,6 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
         }
     }
     
-    // Sort months chronologically descending
     const sortedStats = Object.fromEntries(
         Object.entries(stats).sort(([a], [b]) => {
             const dateA = parseDate(a, 'MMMM yyyy', new Date(), { locale: de });
@@ -562,22 +562,27 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                       <div className="space-y-4 p-2">
                                       {Object.entries(typeStats).sort(([a], [b]) => a.localeCompare(b)).map(([typeName, counts]) => {
                                           const { zugesagt, abgesagt, unsicher, total } = counts;
+                                          const notResponded = total - (zugesagt + abgesagt + unsicher);
+                                          
                                           const attendedPercent = total > 0 ? (zugesagt / total) * 100 : 0;
                                           const absentPercent = total > 0 ? (abgesagt / total) * 100 : 0;
                                           const unsurePercent = total > 0 ? (unsicher / total) * 100 : 0;
+                                          const notRespondedPercent = total > 0 ? (notResponded / total) * 100 : 0;
+
                                           const chartData = [
                                             { name: 'Anwesend', value: zugesagt, fill: 'hsl(var(--chart-1))' },
                                             { name: 'Abwesend', value: abgesagt, fill: 'hsl(var(--destructive))' },
                                             { name: 'Unsicher', value: unsicher, fill: 'hsl(var(--chart-3))' },
+                                            { name: 'Offen', value: notResponded, fill: 'hsl(var(--muted-foreground))' },
                                           ].filter(item => item.value > 0);
 
                                           return (
                                               <Card key={typeName} className="overflow-hidden">
                                                   <CardHeader className="p-4 bg-muted/50">
-                                                      <CardTitle className="text-base">{typeName} ({total})</CardTitle>
+                                                      <CardTitle className="text-base">{typeName} (Gesamt: {total})</CardTitle>
                                                   </CardHeader>
                                                   <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
-                                                      <div className="grid grid-cols-3 gap-2 text-center flex-1">
+                                                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center flex-1">
                                                           <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
                                                               <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
                                                               <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({attendedPercent.toFixed(0)}%)</div>
@@ -589,6 +594,10 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                                           <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30">
                                                               <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unsicher}</div>
                                                               <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({unsurePercent.toFixed(0)}%)</div>
+                                                          </div>
+                                                          <div className="rounded-md bg-slate-100 p-2 dark:bg-slate-800/50">
+                                                              <div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{notResponded}</div>
+                                                              <div className="text-xs text-slate-500 dark:text-slate-400/80">Offen ({notRespondedPercent.toFixed(0)}%)</div>
                                                           </div>
                                                       </div>
                                                       <div className="h-40 w-full md:w-40">
@@ -620,10 +629,11 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                 <CardTitle className="text-base">Jahresbilanz (Letzte 12 Monate)</CardTitle>
                              </CardHeader>
                              <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
-                                <div className="grid grid-cols-3 gap-2 text-center flex-1">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center flex-1">
                                     <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30"><div className="text-2xl font-bold text-green-700 dark:text-green-400">{yearlyTotals.zugesagt}</div><div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.zugesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30"><div className="text-2xl font-bold text-red-700 dark:text-red-400">{yearlyTotals.abgesagt}</div><div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({(yearlyTotals.total > 0 ? (yearlyTotals.abgesagt / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                     <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30"><div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{yearlyTotals.unsicher}</div><div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({(yearlyTotals.total > 0 ? (yearlyTotals.unsicher / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
+                                    <div className="rounded-md bg-slate-100 p-2 dark:bg-slate-800/50"><div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{yearlyTotals.total - (yearlyTotals.zugesagt + yearlyTotals.abgesagt + yearlyTotals.unsicher)}</div><div className="text-xs text-slate-500 dark:text-slate-400/80">Offen ({(yearlyTotals.total > 0 ? ((yearlyTotals.total - (yearlyTotals.zugesagt + yearlyTotals.abgesagt + yearlyTotals.unsicher)) / yearlyTotals.total) * 100 : 0).toFixed(0)}%)</div></div>
                                 </div>
                                 <div className="h-40 w-full md:w-40">
                                   <ChartContainer config={{}} className="min-h-[150px]">
@@ -633,8 +643,9 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
                                               { name: 'Anwesend', value: yearlyTotals.zugesagt, fill: 'hsl(var(--chart-1))' },
                                               { name: 'Abwesend', value: yearlyTotals.abgesagt, fill: 'hsl(var(--destructive))' },
                                               { name: 'Unsicher', value: yearlyTotals.unsicher, fill: 'hsl(var(--chart-3))' },
+                                              { name: 'Offen', value: yearlyTotals.total - (yearlyTotals.zugesagt + yearlyTotals.abgesagt + yearlyTotals.unsicher), fill: 'hsl(var(--muted-foreground))' },
                                           ].filter(item => item.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                                              <Cell fill="hsl(var(--chart-1))" /><Cell fill="hsl(var(--destructive))" /><Cell fill="hsl(var(--chart-3))" />
+                                              <Cell fill="hsl(var(--chart-1))" /><Cell fill="hsl(var(--destructive))" /><Cell fill="hsl(var(--chart-3))" /><Cell fill="hsl(var(--muted-foreground))" />
                                           </Pie>
                                       </PieChart>
                                   </ChartContainer>
@@ -651,3 +662,4 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
   );
 };
     
+
