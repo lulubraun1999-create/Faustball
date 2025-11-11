@@ -427,34 +427,6 @@ export default function VerwaltungTerminePage() {
   const getTypeName = (typeId: string) =>
     appointmentTypes?.find((t) => t.id === typeId)?.name ?? "Unbekannt";
 
-  const formatDateTime = (app: UnrolledAppointment) => {
-    if (!app.instanceDate) return "Kein Datum";
-    const start = app.instanceDate;
-    const end = app.endDate ? app.endDate.toDate() : null;
-
-    const dateFormat = "dd.MM.yyyy";
-    const timeFormat = "HH:mm";
-    
-    let datePart = formatDate(start, dateFormat, { locale: de });
-    
-    if (app.isAllDay) {
-        if (end) {
-             const endDatePart = formatDate(end, dateFormat, { locale: de });
-             if (datePart !== endDatePart) {
-                 return `${datePart} - ${endDatePart}`;
-             }
-        }
-        return datePart;
-    }
-    
-    let timePart = `${formatDate(start, timeFormat, { locale: de })}`;
-    if (end) {
-        timePart += ` - ${formatDate(end, timeFormat, { locale: de })}`;
-    }
-    
-    return `${datePart} ${timePart} Uhr`;
-  };
-
   const accordionDefaultValue = Object.keys(groupedAppointments).length > 0 ? [Object.keys(groupedAppointments)[0]] : [];
 
   return (
@@ -528,9 +500,10 @@ export default function VerwaltungTerminePage() {
                                     <TableRow>
                                         <TableHead>Titel</TableHead>
                                         <TableHead>Datum & Uhrzeit</TableHead>
-                                        <TableHead>Mannschaft</TableHead>
-                                        <TableHead>Details</TableHead>
-                                        <TableHead>Rückmeldung bis</TableHead>
+                                        <TableHead className="hidden xl:table-cell">Ort</TableHead>
+                                        <TableHead className="hidden lg:table-cell">Treffpunkt</TableHead>
+                                        <TableHead className="hidden xl:table-cell">Treffzeit</TableHead>
+                                        <TableHead className="hidden lg:table-cell">Rückmeldung bis</TableHead>
                                         <TableHead>Teilnehmer</TableHead>
                                         <TableHead className="text-right min-w-[280px]">Aktionen</TableHead>
                                     </TableRow>
@@ -574,40 +547,22 @@ export default function VerwaltungTerminePage() {
                                                 ref={el => rowRefs.current[app.virtualId] = el}
                                                 className={cn(app.isCancelled && "text-muted-foreground line-through bg-red-50/50 dark:bg-red-900/20")}>
                                             <TableCell className="font-medium">
-                                                {displayTitle}
+                                               <div>{displayTitle}</div>
+                                                <div className="text-xs text-muted-foreground">{app.visibility.type === 'all' 
+                                                  ? 'Alle' 
+                                                  : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
-                                                {formatDateTime(app)}
+                                                <div>{formatDate(app.instanceDate, 'eeee, dd.MM.yy', { locale: de })}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}
+                                                </div>
                                             </TableCell>
-                                            <TableCell>
-                                                {app.visibility.type === 'all' 
-                                                ? 'Alle' 
-                                                : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
-                                            </TableCell>
-                                            <TableCell>
-                                              {location || app.meetingPoint || app.meetingTime ? (
-                                                <Popover>
-                                                  <PopoverTrigger asChild>
-                                                    <Button
-                                                      variant="link"
-                                                      className="flex items-center gap-2 p-0 h-auto font-normal text-foreground"
-                                                    >
-                                                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                                                      <span>{location ? location.name : 'Details'}</span>
-                                                    </Button>
-                                                  </PopoverTrigger>
-                                                  <PopoverContent className="w-64">
-                                                    {location && <p className="font-semibold">{location.name}</p>}
-                                                    {location?.address && <p className="text-sm text-muted-foreground">{location.address}</p>}
-                                                     {app.meetingPoint && <p className="text-sm mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
-                                                     {app.meetingTime && <p className="text-sm"><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
-                                                  </PopoverContent>
-                                                </Popover>
-                                              ) : (
-                                                '-'
-                                              )}
-                                            </TableCell>
-                                            <TableCell>{rsvpDeadlineString}</TableCell>
+                                            <TableCell className="hidden xl:table-cell">{location ? location.name : '-'}</TableCell>
+                                            <TableCell className="hidden lg:table-cell">{app.meetingPoint || '-'}</TableCell>
+                                            <TableCell className="hidden xl:table-cell">{app.meetingTime || '-'}</TableCell>
+                                            <TableCell className="hidden lg:table-cell">{rsvpDeadlineString}</TableCell>
                                             <TableCell>
                                                 <ResponseStatus
                                                 appointment={app}
