@@ -119,7 +119,7 @@ export default function DashboardPage() {
                 let isException = false;
                 if (exception?.status === 'modified' && exception.modifiedData) {
                     const modData = exception.modifiedData;
-                    finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? undefined : (modData.endDate || undefined), id: app.id };
+                    finalData = { ...app, ...modData, startDate: modData.startDate || app.startDate, endDate: modData.endDate === undefined ? app.endDate : (modData.endDate || undefined), id: app.id };
                     isException = true;
                 }
   
@@ -370,5 +370,7 @@ export default function DashboardPage() {
         </div>
     );
 }
+
+    
 
     
