@@ -1,9 +1,8 @@
-
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid, startOfDay, parseISO } from 'date-fns';
+import { addDays, isValid, startOfDay, parseISO } from 'date-fns'; 
 import { zonedTimeToUtc } from 'date-fns-tz';
 
 
@@ -375,4 +374,3 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         throw new HttpsError('internal', error.message || 'Terminserie konnte nicht aktualisiert werden.');
     }
 });
-    
