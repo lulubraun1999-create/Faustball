@@ -112,9 +112,10 @@ export default function VerwaltungTerminePage() {
   const exceptionsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentExceptions') : null), [firestore, auth.user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
+  // KORREKTUR: Diese Abfrage nur als Admin ausführen
   const allMembersRef = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'members') : null),
-    [firestore]
+    () => (firestore && auth.isAdmin ? collection(firestore, 'members') : null),
+    [firestore, auth.isAdmin]
   );
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
@@ -595,7 +596,7 @@ export default function VerwaltungTerminePage() {
                                             <TableCell className="px-1 py-3">
                                                 <ResponseStatus
                                                 appointment={app}
-                                                allMembers={allMembers || []}
+                                                allMembers={allMembers}
                                                 allResponses={allResponses || []}
                                                 />
                                             </TableCell>
@@ -714,12 +715,21 @@ export default function VerwaltungTerminePage() {
 
 interface ResponseStatusProps {
   appointment: UnrolledAppointment;
-  allMembers: MemberProfile[];
+  allMembers: MemberProfile[] | null; // Kann null sein, wenn der User kein Admin ist
   allResponses: AppointmentResponse[];
 }
 
 const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers, allResponses }) => {
   const { accepted, rejected, unsure, pending, relevantMemberCount } = useMemo(() => {
+    // Wenn allMembers null ist (Nicht-Admin), können wir keine volle Liste erstellen
+    if (!allMembers) {
+        const responsesForInstance = allResponses.filter(r => r.appointmentId === appointment.originalId && r.date === formatDate(appointment.instanceDate, 'yyyy-MM-dd'));
+        const acceptedCount = responsesForInstance.filter(r => r.status === 'zugesagt').length;
+        // Da wir nicht alle Mitglieder kennen, können wir die Gesamtzahl nicht genau bestimmen.
+        // Wir zeigen nur die Anzahl der Zusagen an.
+        return { accepted: [], rejected: [], unsure: [], pending: [], relevantMemberCount: acceptedCount };
+    }
+
     const relevantMemberIds = new Set<string>();
     const visibility = appointment.visibility;
 
@@ -748,8 +758,17 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     return { accepted, rejected, unsure, pending, relevantMemberCount: relevantMemberIds.size };
   }, [appointment, allMembers, allResponses]);
   
-  const membersMap = useMemo(() => new Map(allMembers.map(m => [m.userId, m])), [allMembers]);
+  const membersMap = useMemo(() => new Map(allMembers?.map(m => [m.userId, m])), [allMembers]);
 
+  // Wenn der Benutzer kein Admin ist und keine Mitgliederdaten vorhanden sind, nur die Zusagen anzeigen
+  if (!allMembers) {
+      return (
+        <div className="flex items-center text-xs">
+            <Users className="mr-1 h-3 w-3" />
+            {relevantMemberCount}
+        </div>
+      );
+  }
 
   return (
     <Dialog>
@@ -808,3 +827,4 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
   );
 }
 
+    
