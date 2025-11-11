@@ -239,9 +239,7 @@ export default function AdminMitgliederPage() {
             const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
             await revokeAdminRole({ uid: userId });
         }
-        if (forceRefresh && (newRole !== currentRole)) {
-            await forceRefresh(); // Force a refresh of the user's token to get the new claim
-        }
+        
         toast({
             title: 'Rolle aktualisiert',
             description: `Die Rolle von ${memberToEdit.firstName} ${memberToEdit.lastName} wurde zu ${newRole === 'admin' ? 'Trainer' : 'Spieler'} geändert.`,

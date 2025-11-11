@@ -312,14 +312,12 @@ export default function ProfileEditPage() {
       // For becoming the first admin, we don't need to pass a UID.
       // The function will use the caller's UID.
       await setAdminRole();
-
-      await forceRefresh(); // Force a refresh of the user's token to get the new claim
+      
       toast({
         title: 'Admin-Status erteilt',
-        description: 'Sie sind jetzt ein Administrator. Die Seite wird neu geladen.',
+        description: 'Sie sind jetzt ein Administrator. Die neuen Rechte sind in Kürze aktiv.',
       });
-      // A full page reload is often the most reliable way to ensure all components re-evaluate the new role.
-      window.location.reload();
+
     } catch (error: any) {
       toast({
         variant: 'destructive',

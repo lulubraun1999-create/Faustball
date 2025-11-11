@@ -1,9 +1,9 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore, Timestamp, FieldValue, WriteBatch } from 'firebase-admin/firestore';
+// KORRIGIERT: 'parseISO' entfernt, da es nicht verwendet wird
 import type { Appointment, AppointmentException, AppointmentType } from './types'; 
-import { addDays, isValid, startOfDay, parseISO } from 'date-fns'; 
-import { zonedTimeToUtc } from 'date-fns-tz';
+import { addDays, isValid, startOfDay } from 'date-fns'; 
 
 
 // Firebase Admin SDK initialisieren
@@ -11,7 +11,7 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 const db = getFirestore();
-const localTimeZone = 'Europe/Berlin';
+// KORRIGIERT: 'localTimeZone' entfernt, da es nicht verwendet wird
 
 /**
  * Prüft, ob bereits ein Admin-Benutzer im System existiert.
@@ -60,6 +60,8 @@ export const setAdminRole = onCall(async (request: CallableRequest) => {
 
   try {
     await admin.auth().setCustomUserClaims(targetUid, { admin: true });
+    // Force token refresh on client
+    await admin.auth().revokeRefreshTokens(targetUid);
 
     const batch: WriteBatch = db.batch();
     const userDocRef = db.collection('users').doc(targetUid);
@@ -103,6 +105,9 @@ export const revokeAdminRole = onCall(async (request: CallableRequest) => {
 
     try {
         await admin.auth().setCustomUserClaims(targetUid, { admin: null });
+        // Force token refresh on client
+        await admin.auth().revokeRefreshTokens(targetUid);
+
         const batch = db.batch();
         const userDocRef = db.collection('users').doc(targetUid);
         const memberDocRef = db.collection('members').doc(targetUid);
@@ -205,10 +210,10 @@ export const saveSingleAppointmentException = onCall(async (request: CallableReq
 
     let originalDate: Date, newStartDate: Date, newEndDate: Date | null;
     try {
-        originalDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
-        newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        originalDate = new Date(data.originalDateISO);
+        newStartDate = new Date(data.startDate);
         newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
-          ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+          ? new Date(data.endDate)
           : null;
 
         if (!isValid(originalDate) || !isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
@@ -296,10 +301,10 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         }
 
         const originalAppointmentData = originalAppointmentSnap.data() as Appointment;
-        const batch = writeBatch(db);
+        const batch = db.batch();
 
         // 1. Datum der aktuellen Instanz parsen
-        const instanceDate = zonedTimeToUtc(parseISO(data.originalDateISO), localTimeZone);
+        const instanceDate = new Date(data.originalDateISO);
         if(!isValid(instanceDate)) {
              throw new HttpsError('invalid-argument', `Ungültiges Datum der Instanz: ${data.originalDateISO}`);
         }
@@ -319,9 +324,9 @@ export const saveFutureAppointmentInstances = onCall(async (request: CallableReq
         }
         
         // 3. Neue Serie erstellen
-        const newStartDate = zonedTimeToUtc(parseISO(data.startDate), localTimeZone);
+        const newStartDate = new Date(data.startDate);
         const newEndDate = (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== '') 
-            ? zonedTimeToUtc(parseISO(data.endDate), localTimeZone)
+            ? new Date(data.endDate)
             : null;
 
         if (!isValid(newStartDate) || (newEndDate && !isValid(newEndDate))) {
