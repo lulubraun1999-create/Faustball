@@ -100,7 +100,7 @@
     }
     
     .rbc-day-bg {
-       @apply aspect-square;
+       aspect-ratio: 1 / 1;
     }
     
     .rbc-off-range-bg {
@@ -108,7 +108,7 @@
     }
 
     .rbc-day-bg.rbc-today {
-        background-color: transparent;
+        background-color: transparent !important;
         @apply border-2 border-primary;
     }
 
