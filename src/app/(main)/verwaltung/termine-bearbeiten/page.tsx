@@ -153,19 +153,19 @@ export default function AppointmentManagementPage() {
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
 
-  const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+  const appointmentsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointments') : null), [firestore, user]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
-  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  const exceptionsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentExceptions') : null), [firestore, user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
-  const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const allMembersRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'members') : null), [firestore, user]);
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
-  const allResponsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
+  const allResponsesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentResponses') : null), [firestore, user]);
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
-  const appointmentTypesRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointmentTypes') : null, [firestore]);
+  const appointmentTypesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentTypes') : null), [firestore, user]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
-  const locationsRef = useMemoFirebase(() => firestore ? collection(firestore, 'locations') : null, [firestore]);
+  const locationsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'locations') : null), [firestore, user]);
   const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
-  const groupsRef = useMemoFirebase(() => firestore ? collection(firestore, 'groups') : null, [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'groups') : null), [firestore, user]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
   
   const teams = useMemo(() => groups?.filter(g => g.type === 'team').sort((a,b) => a.name.localeCompare(b.name)) || [], [groups]);
@@ -409,7 +409,7 @@ export default function AppointmentManagementPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="w-full px-4 sm:px-6 lg:px-8">
        <div className="flex items-center justify-between mb-6">
             <h1 className="flex items-center gap-3 text-3xl font-bold">
                 <CalendarIcon className="h-8 w-8 text-primary" />
@@ -535,13 +535,10 @@ export default function AppointmentManagementPage() {
                           <div className="overflow-x-auto">
                               <Table>
                                   <TableHeader><TableRow>
-                                    <TableHead className="w-[15%]">Art (Titel)</TableHead>
-                                    <TableHead className="w-[15%]">Datum/Zeit</TableHead>
-                                    <TableHead>Sichtbarkeit</TableHead>
-                                    <TableHead>Details</TableHead>
-                                    <TableHead>Wiederholung</TableHead>
-                                    <TableHead>Frist</TableHead>
-                                    <TableHead className="text-right w-[180px]">Aktionen</TableHead>
+                                    <TableHead>Art (Titel)</TableHead>
+                                    <TableHead>Datum/Zeit</TableHead>
+                                    <TableHead className="hidden lg:table-cell">Details</TableHead>
+                                    <TableHead className="text-right">Aktionen</TableHead>
                                   </TableRow></TableHeader>
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
@@ -549,47 +546,26 @@ export default function AppointmentManagementPage() {
                                         const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                         const location = app.locationId ? locationsMap.get(app.locationId) : null;
 
-                                        let rsvpDeadlineString = '-';
-                                        if (originalAppointment?.rsvpDeadline) {
-                                            try {
-                                                const [daysBeforeStr, timeStr] = originalAppointment.rsvpDeadline.split(':');
-                                                const daysBefore = parseInt(daysBeforeStr, 10);
-                                                const [hours, minutes] = timeStr.split(';').map(Number);
-                                                
-                                                if (!isNaN(daysBefore) && !isNaN(hours) && !isNaN(minutes)) {
-                                                    const deadlineDate = addDays(app.instanceDate, -daysBefore);
-                                                    const finalDeadline = set(deadlineDate, { hours, minutes, seconds: 0, milliseconds: 0 });
-                                                    rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
-                                                }
-                                            } catch (e) {
-                                                console.error("Error parsing rsvpDeadline", e);
-                                            }
-                                        }
-
                                         return (
                                           <TableRow key={app.virtualId} className={cn(app.isCancelled && 'bg-red-50/50 text-muted-foreground line-through dark:bg-red-900/20')}>
                                               <TableCell><div className="font-medium">{typeName}</div>{app.title !== typeName && <div className="text-xs text-muted-foreground">({app.title})</div>}</TableCell>
                                               <TableCell>{formatDate(app.instanceDate, 'dd.MM.yy')}<br/>{app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm')}</TableCell>
-                                              <TableCell>{app.visibility.type === 'all' ? 'Alle' : app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</TableCell>
-                                              <TableCell>
-                                                {location || app.meetingPoint || app.meetingTime ? (
-                                                  <Popover>
-                                                    <PopoverTrigger asChild>
-                                                      <Button variant="link" className="p-0 h-auto font-normal"><MapPin className="h-4 w-4 mr-2" />Details</Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-64 text-sm">
-                                                      {location && <p className="font-semibold">{location.name}</p>}
-                                                      {location && <p className="text-muted-foreground">{location.address}</p>}
-                                                      {app.meetingPoint && <p className="mt-2"><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
-                                                      {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
-                                                    </PopoverContent>
-                                                  </Popover>
-                                                ) : '-'}
+                                              <TableCell className="hidden lg:table-cell">
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                      <Button variant="link" className="p-0 h-auto font-normal"><MapPin className="h-4 w-4 mr-2" />Details anzeigen</Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-64 text-sm">
+                                                    {location && <p><span className="font-semibold">Ort:</span> {location.name}</p>}
+                                                    {app.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {app.meetingPoint}</p>}
+                                                    {app.meetingTime && <p><span className="font-semibold">Treffzeit:</span> {app.meetingTime}</p>}
+                                                    {app.visibility.type !== 'all' && <p><span className="font-semibold">Sichtbar für:</span> {app.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</p>}
+                                                    {originalAppointment?.recurrence !== 'none' && <p><span className="font-semibold">Wiederholung:</span> bis {formatDate(originalAppointment!.recurrenceEndDate!.toDate(), 'dd.MM.yy')}</p>}
+                                                  </PopoverContent>
+                                                </Popover>
                                               </TableCell>
-                                              <TableCell>{app.recurrence !== 'none' ? `bis ${formatDate(app.recurrenceEndDate!.toDate(), 'dd.MM.yy')}` : '-'}</TableCell>
-                                              <TableCell>{rsvpDeadlineString}</TableCell>
                                               <TableCell className="text-right">
-                                                  <div className="flex items-center justify-end gap-1">
+                                                  <div className="flex items-center justify-end gap-0">
                                                     <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
                                                     
                                                     {app.isCancelled ? (
@@ -688,3 +664,5 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    

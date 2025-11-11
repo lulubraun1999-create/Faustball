@@ -104,19 +104,19 @@ export default function KalenderPage() {
     }
   }, [userTeamIds, selectedTeams.length]);
 
-  const allAppointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+  const allAppointmentsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointments') : null), [firestore, user]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(allAppointmentsRef);
 
-  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  const exceptionsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentExceptions') : null), [firestore, user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
+  const appointmentTypesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentTypes') : null), [firestore, user]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
 
-  const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'groups') : null), [firestore, user]);
   const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
+  const locationsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'locations') : null), [firestore, user]);
   const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
 
   const isLoading =
@@ -465,5 +465,7 @@ export default function KalenderPage() {
 }
 
 
+
+    
 
     

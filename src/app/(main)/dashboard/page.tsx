@@ -34,28 +34,28 @@ export default function DashboardPage() {
     const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
 
     // --- Vereinfachte Datenabfragen ---
-    const appointmentsRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointments') : null, [firestore]);
+    const appointmentsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointments') : null), [firestore, user]);
     const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
 
     const exceptionsRef = useMemoFirebase(
-      () => (firestore ? collection(firestore, 'appointmentExceptions') : null),
-      [firestore]
+      () => (firestore && user ? collection(firestore, 'appointmentExceptions') : null),
+      [firestore, user]
     );
     const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
     const latestNewsQuery = useMemoFirebase(
-        () => firestore ? query(collection(firestore, 'news'), orderBy('createdAt', 'desc'), limit(3)) : null,
-        [firestore]
+        () => (firestore && user ? query(collection(firestore, 'news'), orderBy('createdAt', 'desc'), limit(3)) : null),
+        [firestore, user]
     );
     const { data: latestNews, isLoading: isLoadingNews } = useCollection<NewsArticle>(latestNewsQuery);
 
-    const allPollsRef = useMemoFirebase(() => firestore ? collection(firestore, 'polls') : null, [firestore]);
+    const allPollsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'polls') : null), [firestore, user]);
     const { data: allPolls, isLoading: isLoadingPolls } = useCollection<Poll>(allPollsRef);
 
-    const allGroupsRef = useMemoFirebase(() => firestore ? collection(firestore, 'groups') : null, [firestore]);
+    const allGroupsRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'groups') : null), [firestore, user]);
     const { data: allGroups, isLoading: isLoadingGroups } = useCollection<Group>(allGroupsRef);
     
-    const appointmentTypesRef = useMemoFirebase(() => firestore ? collection(firestore, 'appointmentTypes') : null, [firestore]);
+    const appointmentTypesRef = useMemoFirebase(() => (firestore && user ? collection(firestore, 'appointmentTypes') : null), [firestore, user]);
     const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
     
     // --- Datenverarbeitung ---
@@ -370,3 +370,5 @@ export default function DashboardPage() {
         </div>
     );
 }
+
+    

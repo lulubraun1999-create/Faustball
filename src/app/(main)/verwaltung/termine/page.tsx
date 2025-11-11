@@ -106,25 +106,25 @@ export default function VerwaltungTerminePage() {
   );
   const { data: profile, isLoading: profileLoading } = useDoc<MemberProfile | null>(memberProfileRef);
 
-  const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
+  const appointmentsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointments') : null), [firestore, auth.user]);
   const { data: appointments, isLoading: appointmentsLoading } = useCollection<Appointment>(appointmentsRef);
   
-  const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
+  const exceptionsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentExceptions') : null), [firestore, auth.user]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  const allMembersRef = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const allMembersRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'members') : null), [firestore, auth.user]);
   const { data: allMembers, isLoading: membersLoading } = useCollection<MemberProfile>(allMembersRef);
 
-  const allResponsesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
+  const allResponsesRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentResponses') : null), [firestore, auth.user]);
   const { data: allResponses, isLoading: allResponsesLoading } = useCollection<AppointmentResponse>(allResponsesRef);
 
-  const appointmentTypesRef = useMemoFirebase(() => collection(firestore, 'appointmentTypes'), [firestore]);
+  const appointmentTypesRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'appointmentTypes') : null), [firestore, auth.user]);
   const { data: appointmentTypes, isLoading: typesLoading } = useCollection<AppointmentType>(appointmentTypesRef);
 
-  const groupsRef = useMemoFirebase(() => collection(firestore, 'groups'), [firestore]);
+  const groupsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'groups') : null), [firestore, auth.user]);
   const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsRef);
   
-  const locationsRef = useMemoFirebase(() => collection(firestore, 'locations'), [firestore]);
+  const locationsRef = useMemoFirebase(() => (firestore && auth.user ? collection(firestore, 'locations') : null), [firestore, auth.user]);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsRef);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -499,11 +499,11 @@ export default function VerwaltungTerminePage() {
                                     <TableHeader>
                                     <TableRow>
                                         <TableHead className="px-1 py-2">Titel</TableHead>
-                                        <TableHead className="px-1 py-2">Datum & Uhrzeit</TableHead>
-                                        <TableHead className="px-1 py-2">Ort</TableHead>
-                                        <TableHead className="px-1 py-2">Treffpunkt</TableHead>
-                                        <TableHead className="px-1 py-2">Treffzeit</TableHead>
-                                        <TableHead className="px-1 py-2">Rückmeldung bis</TableHead>
+                                        <TableHead className="px-1 py-2 hidden sm:table-cell">Datum & Uhrzeit</TableHead>
+                                        <TableHead className="px-1 py-2 hidden md:table-cell">Ort</TableHead>
+                                        <TableHead className="px-1 py-2 hidden lg:table-cell">Treffpunkt</TableHead>
+                                        <TableHead className="px-1 py-2 hidden lg:table-cell">Treffzeit</TableHead>
+                                        <TableHead className="px-1 py-2 hidden xl:table-cell">Rückmeldung bis</TableHead>
                                         <TableHead className="px-1 py-2">Teilnehmer</TableHead>
                                         <TableHead className="text-right min-w-[250px] px-1 py-2">Aktionen</TableHead>
                                     </TableRow>
@@ -553,13 +553,13 @@ export default function VerwaltungTerminePage() {
                                                   : app.visibility.teamIds.map(id => teamsMap.get(id) || id).join(', ')}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="px-1 py-3">
+                                            <TableCell className="px-1 py-3 hidden sm:table-cell">
                                                 <div>{formatDate(app.instanceDate, 'eee, dd.MM.yy', { locale: de })}</div>
                                                 <div className="text-xs text-muted-foreground">
                                                   {app.isAllDay ? 'Ganztägig' : formatDate(app.instanceDate, 'HH:mm \'Uhr\'')}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="px-1 py-3">
+                                            <TableCell className="px-1 py-3 hidden md:table-cell">
                                                 {location ? (
                                                     <Popover>
                                                         <PopoverTrigger asChild>
@@ -572,9 +572,9 @@ export default function VerwaltungTerminePage() {
                                                     </Popover>
                                                 ) : '-'}
                                             </TableCell>
-                                            <TableCell className="px-1 py-3">{app.meetingPoint || '-'}</TableCell>
-                                            <TableCell className="px-1 py-3">{app.meetingTime || '-'}</TableCell>
-                                            <TableCell className="px-1 py-3">{rsvpDeadlineString}</TableCell>
+                                            <TableCell className="px-1 py-3 hidden lg:table-cell">{app.meetingPoint || '-'}</TableCell>
+                                            <TableCell className="px-1 py-3 hidden lg:table-cell">{app.meetingTime || '-'}</TableCell>
+                                            <TableCell className="px-1 py-3 hidden xl:table-cell">{rsvpDeadlineString}</TableCell>
                                             <TableCell className="px-1 py-3">
                                                 <ResponseStatus
                                                 appointment={app}
@@ -793,3 +793,5 @@ const ResponseStatus: React.FC<ResponseStatusProps> = ({ appointment, allMembers
     </Dialog>
   );
 }
+
+    
