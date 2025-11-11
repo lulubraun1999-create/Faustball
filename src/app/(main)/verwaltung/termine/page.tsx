@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -10,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { format as formatDate, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, subDays, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
-import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, ClipboardCopy, CalendarIcon } from 'lucide-react';
+import { Loader2, ListTodo, ThumbsUp, ThumbsDown, HelpCircle, Users, MapPin, ClipboardCopy, CalendarIcon, BarChartHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,6 +34,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Pie, PieChart, ResponsiveContainer, Tooltip, Cell, Legend } from "recharts";
+import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 
 
 type UnrolledAppointment = Appointment & {
@@ -77,17 +77,22 @@ export default function TermineUebersichtPage() {
   
   const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
+  const appointmentTypesMap = useMemo(() => new Map(appointmentTypes?.map(t => [t.id, t.name])), [appointmentTypes]);
   
   const userTeamsForFilter = useMemo(() => {
     if (!userTeamIds || !teamsMap) return [];
     return userTeamIds.map(id => ({ id, name: teamsMap.get(id) || 'Unbekanntes Team' })).sort((a,b) => a.name.localeCompare(b.name));
   }, [userTeamIds, teamsMap]);
 
-  const allMembersQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'members') : null), [firestore]);
+  const allMembersQuery = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: allMembers, isLoading: isLoadingMembers } = useCollection<MemberProfile>(allMembersQuery);
 
-  const allResponsesQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentResponses') : null), [firestore]);
+  const allResponsesQuery = useMemoFirebase(() => (firestore ? collection(firestore, isAdmin ? 'appointmentResponses' : undefined) : null), [firestore, isAdmin]);
+  const userResponsesQuery = useMemoFirebase(() => (firestore && !isAdmin && user ? query(collection(firestore, 'appointmentResponses'), where('userId', '==', user.uid)) : null), [firestore, isAdmin, user]);
+
   const { data: allResponses, isLoading: isLoadingAllResponses } = useCollection<AppointmentResponse>(allResponsesQuery);
+  const { data: userResponses, isLoading: isLoadingUserResponses } = useCollection<AppointmentResponse>(userResponsesQuery);
+  const responses = useMemo(() => isAdmin ? allResponses : userResponses, [isAdmin, allResponses, userResponses]);
 
 
   const unrolledAppointments = useMemo(() => {
@@ -206,7 +211,7 @@ export default function TermineUebersichtPage() {
       const responseId = `${appointment.originalId}_${user.uid}_${dateString}`;
       const responseDocRef = doc(firestore, 'appointmentResponses', responseId);
 
-      const currentUserResponse = allResponses?.find(r => r.id === responseId);
+      const currentUserResponse = responses?.find(r => r.id === responseId);
 
       // If user clicks the same status again, retract the vote
       if (currentUserResponse?.status === status) {
@@ -242,7 +247,7 @@ export default function TermineUebersichtPage() {
       }
   };
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingAllResponses || isLoadingTypes || isLoadingMembers;
+  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember || isLoadingGroups || isLoadingAllResponses || isLoadingUserResponses || isLoadingTypes || (isAdmin && isLoadingMembers);
   
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -251,6 +256,12 @@ export default function TermineUebersichtPage() {
            <ListTodo className="h-8 w-8 text-primary" /> Deine Termine
         </h1>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <StatisticsDialog 
+              user={user} 
+              appointments={unrolledAppointments} 
+              responses={responses} 
+              appointmentTypesMap={appointmentTypesMap} 
+            />
             <Select value={selectedTeamFilter} onValueChange={setSelectedTeamFilter} disabled={userTeamsForFilter.length === 0}>
                 <SelectTrigger className="w-full sm:w-auto min-w-[180px]">
                     <SelectValue placeholder="Nach Mannschaft filtern..." />
@@ -295,10 +306,10 @@ export default function TermineUebersichtPage() {
                                   </TableHeader>
                                   <TableBody>
                                       {appointmentsInMonth.map(app => {
-                                          const userStatus = allResponses?.find(r => r.id.startsWith(app.originalId) && r.id.includes(user?.uid || '___') && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'))?.status;
+                                          const userStatus = responses?.find(r => r.id.startsWith(app.originalId) && r.id.includes(user?.uid || '___') && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'))?.status;
                                           const location = app.locationId ? locationsMap.get(app.locationId) : null;
                                           const originalAppointment = appointments?.find(a => a.id === app.originalId);
-                                          const typeName = appointmentTypes?.find(t => t.id === app.appointmentTypeId)?.name;
+                                          const typeName = appointmentTypesMap.get(app.appointmentTypeId);
                                           let rsvpDate: Date | null = null;
                                           if (originalAppointment?.rsvpDeadline) {
                                               const deadlineParts = originalAppointment.rsvpDeadline.split(':');
@@ -342,7 +353,7 @@ export default function TermineUebersichtPage() {
                                                               <Button size="sm" variant={userStatus === 'zugesagt' ? 'default' : 'outline'} onClick={() => handleResponse(app, 'zugesagt')}><ThumbsUp className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'unsicher' ? 'secondary' : 'outline'} onClick={() => handleResponse(app, 'unsicher')}><HelpCircle className="h-4 w-4"/></Button>
                                                               <Button size="sm" variant={userStatus === 'abgesagt' ? 'destructive' : 'outline'} onClick={() => handleResponse(app, 'abgesagt')}><ThumbsDown className="h-4 w-4"/></Button>
-                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={allResponses} />
+                                                              <ParticipantListDialog appointment={app} allMembers={allMembers} allResponses={responses} />
                                                           </>
                                                       ) : <p className="text-destructive font-semibold mr-4">Abgesagt</p>}
                                                     </div>
@@ -460,4 +471,116 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
   );
 }
 
+interface StatisticsDialogProps {
+  user: { uid: string } | null;
+  appointments: UnrolledAppointment[];
+  responses: AppointmentResponse[] | null;
+  appointmentTypesMap: Map<string, string>;
+}
+
+const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments, responses, appointmentTypesMap }) => {
+  const userStats = useMemo(() => {
+    if (!user || !responses || appointments.length === 0) return {};
+
+    const userResponses = responses.filter(r => r.userId === user.uid);
+    const stats: Record<string, Record<string, { zugesagt: number; abgesagt: number; unsicher: number; total: number }>> = {};
+
+    for (const app of appointments) {
+        if (isBefore(app.instanceDate, new Date())) { // Nur vergangene Termine zählen
+            const monthYear = formatDate(app.instanceDate, 'MMMM yyyy', { locale: de });
+            const typeName = appointmentTypesMap.get(app.appointmentTypeId) || 'Unbekannt';
+
+            if (!stats[monthYear]) stats[monthYear] = {};
+            if (!stats[monthYear][typeName]) stats[monthYear][typeName] = { zugesagt: 0, abgesagt: 0, unsicher: 0, total: 0 };
+            
+            stats[monthYear][typeName].total++;
+            
+            const response = userResponses.find(r => r.appointmentId === app.originalId && r.date === formatDate(app.instanceDate, 'yyyy-MM-dd'));
+            
+            if (response) {
+                if (response.status === 'zugesagt') stats[monthYear][typeName].zugesagt++;
+                else if (response.status === 'abgesagt') stats[monthYear][typeName].abgesagt++;
+                else if (response.status === 'unsicher') stats[monthYear][typeName].unsicher++;
+            }
+        }
+    }
+    return stats;
+  }, [user, appointments, responses, appointmentTypesMap]);
+
+  return (
+    <Dialog>
+        <DialogTrigger asChild>
+            <Button variant="outline"><BarChartHorizontal className="mr-2 h-4 w-4" />Deine Statistik</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-4xl">
+            <DialogHeader>
+                <DialogTitle>Deine Anwesenheitsstatistik</DialogTitle>
+                <DialogDescription>Übersicht deiner vergangenen Teilnahmen, gruppiert nach Monat und Terminart.</DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[70vh] p-1">
+                <div className="space-y-6 p-4">
+                  {Object.keys(userStats).length > 0 ? Object.entries(userStats).map(([month, typeStats]) => (
+                      <Accordion type="single" collapsible key={month} defaultValue={Object.keys(userStats)[0]}>
+                        <AccordionItem value={month}>
+                            <AccordionTrigger className="text-lg font-semibold">{month}</AccordionTrigger>
+                            <AccordionContent className="p-2">
+                                <div className="space-y-4">
+                                {Object.entries(typeStats).map(([typeName, counts]) => {
+                                    const { zugesagt, abgesagt, unsicher, total } = counts;
+                                    const attendedPercent = total > 0 ? (zugesagt / total) * 100 : 0;
+                                    const absentPercent = total > 0 ? (abgesagt / total) * 100 : 0;
+                                    const unsurePercent = total > 0 ? (unsicher / total) * 100 : 0;
+                                    const chartData = [
+                                      { name: 'Anwesend', value: zugesagt, fill: 'hsl(var(--chart-1))' },
+                                      { name: 'Abwesend', value: abgesagt, fill: 'hsl(var(--destructive))' },
+                                      { name: 'Unsicher', value: unsicher, fill: 'hsl(var(--chart-3))' },
+                                    ];
+
+                                    return (
+                                        <Card key={typeName} className="overflow-hidden">
+                                            <CardHeader className="p-4 bg-muted/50">
+                                                <CardTitle className="text-base">{typeName}</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="flex flex-col md:flex-row items-center gap-4 p-4">
+                                                <div className="grid grid-cols-3 gap-2 text-center flex-1">
+                                                    <div className="rounded-md bg-green-50 p-2 dark:bg-green-900/30">
+                                                        <div className="text-2xl font-bold text-green-700 dark:text-green-400">{zugesagt}</div>
+                                                        <div className="text-xs text-green-600 dark:text-green-400/80">Anwesend ({attendedPercent.toFixed(0)}%)</div>
+                                                    </div>
+                                                     <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/30">
+                                                        <div className="text-2xl font-bold text-red-700 dark:text-red-400">{abgesagt}</div>
+                                                        <div className="text-xs text-red-600 dark:text-red-400/80">Abwesend ({absentPercent.toFixed(0)}%)</div>
+                                                    </div>
+                                                     <div className="rounded-md bg-yellow-50 p-2 dark:bg-yellow-900/30">
+                                                        <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unsicher}</div>
+                                                        <div className="text-xs text-yellow-600 dark:text-yellow-400/80">Unsicher ({unsurePercent.toFixed(0)}%)</div>
+                                                    </div>
+                                                </div>
+                                                <div className="h-40 w-full md:w-40">
+                                                  <ChartContainer config={{}} className="min-h-[150px]">
+                                                      <PieChart>
+                                                          <Tooltip content={<ChartTooltipContent hideLabel />} />
+                                                          <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                                                              {chartData.map((entry) => (
+                                                                  <Cell key={`cell-${entry.name}`} fill={entry.fill} />
+                                                              ))}
+                                                          </Pie>
+                                                      </PieChart>
+                                                  </ChartContainer>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                  )) : <p className="text-center text-muted-foreground py-10">Keine vergangenen Termine mit Rückmeldungen gefunden.</p>}
+                </div>
+            </ScrollArea>
+        </DialogContent>
+    </Dialog>
+  );
+};
     
