@@ -138,7 +138,7 @@ export default function TermineUebersichtPage() {
               allEvents.push({
                 ...instanceData,
                 id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
-                instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromTimestamp(instanceEndDate) : undefined,
+                instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
                 isCancelled: false, isException,
               });
             }
