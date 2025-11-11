@@ -55,7 +55,8 @@ service cloud.firestore {
         allow get: if isSignedIn();
         allow list: if isSignedIn(); // Erlaubt das Lesen der Liste für alle angemeldeten Benutzer
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
-        allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
+        allow update: if isSignedIn() && (isOwner(memberId) || isAdmin());
+        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
     }
 
     // --- /groups/{groupId} ---
