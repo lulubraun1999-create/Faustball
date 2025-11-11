@@ -84,6 +84,7 @@ export function MobileNav() {
                         <Link href="/verwaltung/umfragen-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Umfragen bearbeiten</Link>
                         <Link href="/verwaltung/news-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>News bearbeiten</Link>
                         <Link href="/verwaltung/mannschaftskasse-bearbeiten" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaftskasse bearbeiten</Link>
+                        <Link href="/verwaltung/statistik" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Statistik</Link>
                     </div>
                 ) : null}
             </div>

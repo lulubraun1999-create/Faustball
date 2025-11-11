@@ -103,6 +103,9 @@ export function VerwaltungDropdown() {
                 <DropdownMenuItem asChild>
                   <Link href="/verwaltung/mannschaftskasse-bearbeiten">Mannschaftskasse bearbeiten</Link>
                 </DropdownMenuItem>
+                 <DropdownMenuItem asChild>
+                  <Link href="/verwaltung/statistik">Statistik</Link>
+                </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>
