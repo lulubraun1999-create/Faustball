@@ -1,5 +1,4 @@
-
-import { FieldValue, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 /**
  * Represents the core user data stored in Firestore under the /users collection.
@@ -25,7 +24,7 @@ export interface MemberProfile {
   email: string; // Denormalized for easier querying/display
   role: 'admin' | 'user'; // Denormalized for easier querying/display
   birthday?: string; // Date string (e.g., "YYYY-MM-DD")
-  gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
+  gender?: 'Männlich' | 'Weiblich' | 'Divers';
   position?: ('Angriff' | 'Abwehr' | 'Zuspiel')[]; // Array of positions
   teams?: string[]; // Array of Group IDs (where group.type is 'team')
   phone?: string;
@@ -97,12 +96,11 @@ export interface Appointment {
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'; // Recurrence rule
   recurrenceEndDate?: Timestamp; // End date for the recurrence
-  rsvpDeadline?: string | null; // Format: "daysBefore:HH;mm", e.g., "1:18;00" for 1 day before at 18:00
+  rsvpDeadline?: Timestamp; // Optional deadline for responses
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
-  createdAt?: Timestamp | FieldValue; // Optional: Server timestamp when created
-  lastUpdated?: Timestamp | FieldValue;
-  createdBy: string;
+  createdAt?: Timestamp; // Optional: Server timestamp when created
+  lastUpdated?: Timestamp;
 }
 
 /**
@@ -130,16 +128,16 @@ export interface AppointmentException {
   status: 'cancelled' | 'modified'; // Art der Ausnahme
   modifiedData?: { // Nur relevant, wenn status 'modified' ist
     startDate?: Timestamp; // Die neue Startzeit für diesen Tag
-    endDate?: Timestamp | null; // Die neue Endzeit für diesen Tag
+    // *** KORREKTUR HIER: 'null' entfernt ***
+    endDate?: Timestamp | undefined; // Die neue Endzeit für diesen Tag
+    isAllDay?: boolean;
     title?: string; // Der neue Titel für diesen Tag
     locationId?: string; // Der neue Ort für diesen Tag
     description?: string; // Die neue Beschreibung für diesen Tag
     meetingPoint?: string; // Der neue Treffpunkt für diesen Tag
     meetingTime?: string; // Die neue Treffzeit für diesen Tag
-    isAllDay?: boolean; // Das neue isAllDay für diesen Tag
   };
-  createdAt?: Timestamp | FieldValue; // Wann wurde die Ausnahme erstellt
-  lastUpdated?: Timestamp | FieldValue;
+  createdAt: Timestamp; // Wann wurde die Ausnahme erstellt
   userId: string; // Wer hat die Ausnahme erstellt (für Nachverfolgung)
 }
 
@@ -152,7 +150,7 @@ export interface Poll {
   id: string;
   title: string; 
   options: { id: string; text: string }[]; 
-  allowMultipleAnswers: boolean;
+  allowCustomAnswers: boolean;
   endDate: any; // Firestore Timestamp
   createdAt: any; // Firestore Timestamp
   visibility: { 
@@ -162,6 +160,7 @@ export interface Poll {
   votes: {
         userId: string;
         optionId: string;
+        customAnswer?: string;
     }[];
 }
 
@@ -202,18 +201,3 @@ export interface TreasuryTransaction {
     memberId?: string;
     status: 'paid' | 'unpaid';
 }
-
-/**
- * Represents a user's planned absence.
- * Stored in Firestore under the /absences collection.
- */
-export interface Absence {
-  id: string;
-  userId: string;
-  startDate: Timestamp;
-  endDate: Timestamp;
-  reason: string;
-  createdAt: Timestamp | FieldValue;
-}
-
-    

@@ -1,10 +1,9 @@
-
 'use client';
 
 import React, { useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
-import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentResponse } from '@/lib/types';
+import type { Appointment, AppointmentException, Location, Group, MemberProfile } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Calendar, dateFnsLocalizer, Event } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isEqual } from 'date-fns';
@@ -52,83 +51,61 @@ const messages = {
   showMore: (total: number) => `+ ${total} weitere`,
 };
 
-
-export default function TermineUebersichtPage() {
+function AdminAbwesenheitenPageContent() {
   const router = useRouter();
-  const { user, isUserLoading, isAdmin } = useUser();
+  const { user, isAdmin } = useUser();
   const firestore = useFirestore();
 
-  const memberRef = useMemoFirebase(
-    () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
-    [firestore, user]
-  );
-  const { data: memberProfile, isLoading: isLoadingMember } = useDoc<MemberProfile>(memberRef);
-  const userTeamIds = useMemo(() => memberProfile?.teams || [], [memberProfile]);
-  
   const appointmentsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointments') : null), [firestore]);
   const { data: appointments, isLoading: isLoadingAppointments } = useCollection<Appointment>(appointmentsRef);
   
   const exceptionsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentExceptions') : null), [firestore]);
   const { data: exceptions, isLoading: isLoadingExceptions } = useCollection<AppointmentException>(exceptionsRef);
 
-  const locationsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'locations') : null), [firestore]);
-  const { data: locations, isLoading: isLoadingLocations } = useCollection<Location>(locationsRef);
-  const locationsMap = useMemo(() => new Map(locations?.map(l => [l.id, l.name])), [locations]);
-
-  const unrolledAppointments = useMemo(() => {
-    if (!appointments || !exceptions || !memberProfile) return [];
+  // Logik zum Entfalten der Termine (Admin-Sicht: zeigt *nur* abgesagte)
+  const cancelledAppointments = useMemo(() => {
+    if (!appointments || !exceptions) return [];
     
     const exceptionsMap = new Map<string, AppointmentException>();
     exceptions.forEach(ex => {
-      if (ex.originalDate) {
+      if (ex.originalDate && ex.status === 'cancelled') {
         const key = `${ex.originalAppointmentId}-${startOfDay(ex.originalDate.toDate()).toISOString()}`;
         exceptionsMap.set(key, ex);
       }
     });
 
-    const allEvents: UnrolledAppointment[] = [];
+    const cancelledEvents: UnrolledAppointment[] = [];
     const now = new Date();
-    
-    const userTeamIdsSet = new Set(userTeamIds);
 
     appointments.forEach(app => {
       if (!app.startDate) return;
 
-      const isVisible = app.visibility.type === 'all' || (app.visibility.teamIds && app.visibility.teamIds.some(teamId => userTeamIdsSet.has(teamId)));
-      if (!isVisible) return;
-
-
       const originalDateStartOfDay = startOfDay(app.startDate.toDate());
       const originalDateStartOfDayISO = originalDateStartOfDay.toISOString();
       const key = `${app.id}-${originalDateStartOfDayISO}`;
-      const exception = exceptionsMap.get(key);
-      const isCancelled = exception?.status === 'cancelled';
+      
+      if (exceptionsMap.has(key)) {
+           cancelledEvents.push({ ...app, originalId: app.id, virtualId: app.id, isCancelled: true, originalDateISO: originalDateStartOfDayISO });
+      }
 
-      if (app.recurrence === 'none') {
-        const modifiedApp = exception?.status === 'modified' ? { ...app, ...(exception.modifiedData || {}), isException: true } : app;
-        allEvents.push({ ...modifiedApp, originalId: app.id, virtualId: app.id, isCancelled, originalDateISO: originalDateStartOfDayISO });
-      } else {
+      if (app.recurrence !== 'none') {
         let currentDate = app.startDate.toDate();
         const recurrenceEndDate = app.recurrenceEndDate ? addDays(app.recurrenceEndDate.toDate(), 1) : addDays(now, 365);
-        const recurrenceStartDate = addMonths(now, -3);
         
-        const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
         let iter = 0;
         const MAX_ITERATIONS = 1000;
 
         while (currentDate < recurrenceEndDate && iter < MAX_ITERATIONS) {
           const currentDateStartOfDay = startOfDay(currentDate);
+          const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
+          const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
           
-          if (currentDateStartOfDay >= recurrenceStartDate) {
-              const currentDateStartOfDayISO = currentDateStartOfDay.toISOString();
-              const instanceKey = `${app.id}-${currentDateStartOfDayISO}`;
-              const instanceException = exceptionsMap.get(instanceKey);
-              const instanceIsCancelled = instanceException?.status === 'cancelled';
-
+          if (exceptionsMap.has(instanceKey)) {
               const newStartDate = Timestamp.fromDate(currentDate);
+              const duration = app.endDate ? differenceInMilliseconds(app.endDate.toDate(), app.startDate.toDate()) : 0;
               const newEndDate = app.endDate ? Timestamp.fromMillis(currentDate.getTime() + duration) : undefined;
               
-              let instanceData: UnrolledAppointment = {
+              cancelledEvents.push({
                 ...app,
                 id: `${app.id}-${currentDate.toISOString()}`,
                 virtualId: instanceKey,
@@ -136,13 +113,8 @@ export default function TermineUebersichtPage() {
                 originalDateISO: currentDateStartOfDayISO,
                 startDate: newStartDate,
                 endDate: newEndDate,
-                isCancelled: instanceIsCancelled,
-              };
-
-              if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                  instanceData = { ...instanceData, ...instanceException.modifiedData, isException: true };
-              }
-              allEvents.push(instanceData);
+                isCancelled: true,
+              });
           }
 
           switch (app.recurrence) {
@@ -156,24 +128,24 @@ export default function TermineUebersichtPage() {
         }
       }
     });
-    return allEvents;
-  }, [appointments, exceptions, userTeamIds, memberProfile]);
+    return cancelledEvents.sort((a, b) => a.startDate.toMillis() - b.startDate.toMillis());
+  }, [appointments, exceptions]);
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return unrolledAppointments.map(app => {
+    return cancelledAppointments.map(app => {
       const start = app.startDate.toDate();
       const end = app.isAllDay ? start : (app.endDate ? app.endDate.toDate() : start);
       return {
-        title: app.title,
+        title: `${app.title} (Abgesagt)`,
         start: start,
         end: end,
         allDay: app.isAllDay,
         resource: app,
       };
     });
-  }, [unrolledAppointments]);
+  }, [cancelledAppointments]);
 
-  const isLoading = isUserLoading || isLoadingAppointments || isLoadingExceptions || isLoadingLocations || isLoadingMember;
+  const isLoading = isLoadingAppointments || isLoadingExceptions;
 
   if (isLoading) {
     return (
@@ -183,52 +155,29 @@ export default function TermineUebersichtPage() {
     );
   }
 
-  // Event-Styling (inkl. Abgesagt)
-  const eventStyleGetter = (event: CalendarEvent) => {
-    const style: React.CSSProperties = {
-      backgroundColor: 'var(--primary)',
-      borderRadius: '4px',
-      opacity: 1,
-      color: 'var(--primary-foreground)',
-      border: '0px',
-      display: 'block',
-    };
-    if (isAdmin) {
-        if (event.resource.isCancelled) {
-            style.backgroundColor = 'var(--destructive)';
-            style.color = 'var(--destructive-foreground)';
-            style.textDecoration = 'line-through';
-            style.opacity = 0.7;
-        } else if (event.resource.isException) {
-            style.backgroundColor = 'var(--secondary)';
-            style.color = 'var(--secondary-foreground)';
-        }
-    }
+  // Event-Styling (alle rot)
+  const eventStyleGetter = (event: CalendarEvent) => { // Expliziter Typ
     return {
-      style: style,
+      style: {
+        backgroundColor: 'var(--destructive)',
+        borderRadius: '4px',
+        opacity: 0.8,
+        color: 'var(--destructive-foreground)',
+        border: '0px',
+        display: 'block',
+      } as React.CSSProperties, // Typ-Assertion
     };
   };
-
-  const handleSelectEvent = (event: CalendarEvent) => {
-    if (isAdmin) {
-        router.push('/verwaltung/termine-bearbeiten');
-    }
-    // Ansonsten keine Aktion für normale Spieler
-  };
-
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
-             <ListTodo className="h-6 w-6" /> {isAdmin ? 'Admin: Terminübersicht' : 'Deine Terminübersicht'}
+             <ListTodo className="h-6 w-6" /> Abgesagte Termine
           </CardTitle>
           <CardDescription>
-            {isAdmin 
-                ? "Dies ist die Admin-Ansicht. Alle Termine, inklusive abgesagter (rot durchgestrichen) und geänderter (grau), werden angezeigt."
-                : "Eine Übersicht aller für dich relevanten Termine."
-            }
+            Dies ist eine Übersicht aller einzeln abgesagten Termine.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6">
@@ -242,11 +191,26 @@ export default function TermineUebersichtPage() {
               culture="de-DE"
               style={{ height: '100%' }}
               eventPropGetter={eventStyleGetter}
-              onSelectEvent={handleSelectEvent}
+              onSelectEvent={(event: CalendarEvent) => { // Expliziter Typ
+                router.push('/verwaltung/termine-bearbeiten');
+              }}
             />
           </div>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+// *** Admin-Wrapper ***
+export default function AdminAbwesenheitenPage() {
+    const { isAdmin, isUserLoading } = useUser();
+    
+    if (isUserLoading) { 
+        return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ); 
+    }
+    if (!isAdmin) { 
+        return ( <div className="container mx-auto p-4 sm:p-6 lg:p-8"><Card className="border-destructive/50"><CardHeader><CardTitle className="flex items-center gap-3 text-destructive"><ListTodo className="h-8 w-8" /><span className="text-2xl font-headline">Zugriff verweigert</span></CardTitle></CardHeader><CardContent><p className="text-muted-foreground">Sie verfügen nicht über die erforderlichen Berechtigungen, um auf diesen Bereich zuzugreifen.</p></CardContent></Card></div> ); 
+    }
+    return <AdminAbwesenheitenPageContent />;
 }
