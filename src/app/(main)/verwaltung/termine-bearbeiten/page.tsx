@@ -68,17 +68,16 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Table,
@@ -487,11 +486,15 @@ export default function AppointmentManagementPage() {
 
                                         let rsvpDeadlineString = '-';
                                         if (originalAppointment?.rsvpDeadline && typeof originalAppointment.rsvpDeadline === 'string') {
-                                            const [days, time] = originalAppointment.rsvpDeadline.split(':');
-                                            const deadlineDate = addDays(app.instanceDate, -parseInt(days, 10));
-                                            const [hours, minutes] = time.split(';').map(Number);
-                                            const finalDeadline = set(deadlineDate, { hours, minutes });
-                                            rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
+                                            const [daysBeforeStr, timeStr] = originalAppointment.rsvpDeadline.split(':');
+                                            const daysBefore = parseInt(daysBeforeStr, 10);
+                                            const [hours, minutes] = timeStr.split(';').map(Number);
+
+                                            if (!isNaN(daysBefore) && !isNaN(hours) && !isNaN(minutes)) {
+                                                const deadlineDate = addDays(app.instanceDate, -daysBefore);
+                                                const finalDeadline = set(deadlineDate, { hours, minutes });
+                                                rsvpDeadlineString = formatDate(finalDeadline, 'dd.MM.yy HH:mm');
+                                            }
                                         }
 
                                         return (
@@ -602,3 +605,5 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
     </Dialog>
   );
 }
+
+    
