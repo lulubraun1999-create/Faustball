@@ -28,7 +28,6 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -71,7 +70,10 @@
         @apply font-body;
     }
     .rbc-toolbar {
-        @apply flex items-center justify-between p-2 mb-2;
+        @apply flex items-center justify-between p-2 mb-2 text-foreground;
+    }
+    .rbc-toolbar .rbc-btn-group button {
+        @apply text-foreground;
     }
     .rbc-toolbar .rbc-btn-group {
         @apply flex items-center gap-2;
