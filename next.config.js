@@ -12,6 +12,13 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    turbopack: {
+      // This option is used to silence the warning about multiple lockfiles.
+      // It tells Turbopack the root of the project.
+      root: __dirname,
+    },
+  },
 };
 
 module.exports = nextConfig;
