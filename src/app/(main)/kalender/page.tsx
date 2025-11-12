@@ -66,18 +66,20 @@ const formats = {
 
 const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
   return (
-    <div className="rbc-toolbar">
+    <div className="rbc-toolbar !mb-0">
         <div className="rbc-btn-group">
-            <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')}>Heute</Button>
-            <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')} className="h-9 w-9">
-                <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')} className="h-9 w-9">
-                <ChevronRight className="h-4 w-4" />
-            </Button>
+             <button type="button" onClick={() => onNavigate('PREV')} className="p-1 text-foreground/80 hover:text-foreground transition-colors disabled:text-foreground/30">
+                <ChevronLeft className="h-5 w-5" />
+                <span className="sr-only">Previous</span>
+             </button>
         </div>
         <span className="rbc-toolbar-label">{label}</span>
-      <div className="rbc-btn-group"></div>
+      <div className="rbc-btn-group">
+            <button type="button" onClick={() => onNavigate('NEXT')} className="p-1 text-foreground/80 hover:text-foreground transition-colors disabled:text-foreground/30">
+                <ChevronRight className="h-5 w-5" />
+                <span className="sr-only">Next</span>
+            </button>
+      </div>
     </div>
   );
 };

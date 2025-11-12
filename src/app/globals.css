@@ -67,91 +67,34 @@
 /* Custom styles for react-big-calendar */
 @layer components {
     .rbc-toolbar {
-        @apply mb-4 flex items-center justify-between gap-4;
+        @apply mb-4 flex flex-row items-center justify-between gap-2;
     }
 
-    .rbc-toolbar .rbc-btn-group {
-        @apply flex items-center gap-1;
-    }
-    
     .rbc-toolbar .rbc-toolbar-label {
-        @apply text-xl font-bold text-center;
-        flex-grow: 0;
+        @apply text-xl font-bold font-body;
     }
 
-    /* We hide the default buttons and use our own custom toolbar */
-    .rbc-toolbar button {
-        @apply hidden; 
-    }
-    
-    /* Style our custom toolbar buttons to look like the rest of the app */
-    .rbc-toolbar .rbc-btn-group button {
-        @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
-        @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground;
-        @apply h-9 px-3; /* Use size 'sm' equivalent */
-        @apply m-0;
-    }
-    
-    .dark .rbc-toolbar button {
-        @apply text-foreground;
-    }
-
-    .rbc-toolbar button.rbc-active {
-        @apply bg-primary text-primary-foreground;
-    }
-    
-    .dark .rbc-toolbar button.rbc-active {
-        background-color: hsl(var(--primary-foreground));
-        color: hsl(var(--background));
-    }
-
-    /* Style for days not in the current month */
     .rbc-off-range-bg {
-        @apply bg-muted/50;
-    }
-    .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted)/0.5);
+        @apply bg-muted/20;
     }
     
-    /* Style for the 'today' background in month view */
-    .rbc-day-bg.rbc-today {
-        background-color: transparent !important;
+    .dark .rbc-off-range-bg {
+        background-color: hsl(var(--muted));
     }
-
-    /* Style for the 'today' background in week/day view */
-    .rbc-time-view .rbc-today {
-      background-color: transparent !important;
-    }
-
+    
     .rbc-date-cell.rbc-current a {
-      font-weight: bold;
       color: hsl(var(--primary));
+      font-weight: 600; /* Etwas dicker als normal */
     }
 
     .rbc-header {
-      @apply text-center pb-2 capitalize;
+      @apply text-center pb-2 capitalize font-medium;
     }
 
-    .dark .rbc-day-slot {
-      background-color: hsl(var(--background));
+    .rbc-day-bg.rbc-today {
+      background-color: transparent !important;
     }
 
-    .rbc-day-bg + .rbc-day-bg {
-        border-left-color: hsl(var(--border));
-    }
-    .rbc-month-row {
-        border-bottom-color: hsl(var(--border));
-    }
-    .rbc-month-view, .rbc-time-view, .rbc-agenda-view {
-      border-color: hsl(var(--border));
-    }
-    .rbc-header, .rbc-time-header-content, .rbc-time-gutter {
-      border-color: hsl(var(--border));
-    }
-    .rbc-time-slot, .rbc-day-slot .rbc-time-slot {
-       border-top-color: hsl(var(--border));
-    }
-    
     /* Mobile-specific calendar optimizations */
     @media (max-width: 768px) {
         .rbc-toolbar {
@@ -162,6 +105,12 @@
         }
         .rbc-header {
             @apply text-xs;
+        }
+        .rbc-month-view {
+          @apply !border-0;
+        }
+        .rbc-month-row {
+           @apply !min-h-0;
         }
     }
 }
