@@ -6,7 +6,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Views, Event as CalendarEvent, ToolbarProps } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer, Views, type Event as CalendarEvent, type ToolbarProps } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -40,33 +40,25 @@ const formats = {
 const CustomToolbar = (props: ToolbarProps) => {
     const { onNavigate, label, onView, view } = props;
 
-    const navigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
-        onNavigate(action);
-    };
-
-    const handleViewChange = (newView: 'month' | 'week' | 'day' | 'agenda') => {
-        onView(newView);
-    };
-
     return (
         <div className="rbc-toolbar">
             <div className="rbc-btn-group">
-                <Button variant="outline" onClick={() => navigate('TODAY')}>Heute</Button>
-                <Button variant="outline" onClick={() => navigate('PREV')}>
+                <Button variant="outline" onClick={() => onNavigate('TODAY')}>Heute</Button>
+                <Button variant="outline" onClick={() => onNavigate('PREV')}>
                     <ChevronLeft className="h-4 w-4" />
                     Zurück
                 </Button>
-                <Button variant="outline" onClick={() => navigate('NEXT')}>
+                <Button variant="outline" onClick={() => onNavigate('NEXT')}>
                     Weiter
                     <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
             <span className="rbc-toolbar-label">{label}</span>
             <div className="rbc-btn-group">
-                <Button variant={view === 'month' ? 'default' : 'outline'} onClick={() => handleViewChange('month')}>Monat</Button>
-                <Button variant={view === 'week' ? 'default' : 'outline'} onClick={() => handleViewChange('week')}>Woche</Button>
-                <Button variant={view === 'day' ? 'default' : 'outline'} onClick={() => handleViewChange('day')}>Tag</Button>
-                <Button variant={view === 'agenda' ? 'default' : 'outline'} onClick={() => handleViewChange('agenda')}>Agenda</Button>
+                <Button variant={view === 'month' ? 'default' : 'outline'} onClick={() => onView('month')}>Monat</Button>
+                <Button variant={view === 'week' ? 'default' : 'outline'} onClick={() => onView('week')}>Woche</Button>
+                <Button variant={view === 'day' ? 'default' : 'outline'} onClick={() => onView('day')}>Tag</Button>
+                <Button variant={view === 'agenda' ? 'default' : 'outline'} onClick={() => onView('agenda')}>Agenda</Button>
             </div>
         </div>
     );
@@ -395,3 +387,5 @@ export default function KalenderSeite() {
     </div>
   );
 }
+
+    
