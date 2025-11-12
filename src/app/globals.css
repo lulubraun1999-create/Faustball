@@ -67,7 +67,7 @@
 /* Custom styles for react-big-calendar */
 @layer components {
     .rbc-toolbar {
-        @apply mb-4 flex items-center justify-center gap-4;
+        @apply mb-4 flex items-center justify-between gap-4;
     }
 
     .rbc-toolbar .rbc-btn-group {
@@ -80,6 +80,11 @@
     }
 
     .rbc-toolbar button {
+        @apply hidden; /* Hide all default buttons */
+    }
+    
+    /* Make specific buttons in our custom toolbar visible */
+    .rbc-toolbar .rbc-btn-group button {
         @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
         @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground;
         @apply h-10 px-4 py-2;
@@ -116,10 +121,12 @@
     }
     
     .rbc-time-view .rbc-today,
-    .rbc-time-column .rbc-today,
-    .rbc-day-slot .rbc-today,
-    .rbc-date-cell .rbc-today {
+    .rbc-day-bg.rbc-today {
       background-color: transparent !important;
+    }
+
+    .dark .rbc-day-slot {
+      background-color: hsl(var(--background));
     }
 
     .rbc-day-bg + .rbc-day-bg {
@@ -129,10 +136,6 @@
         border-bottom: 1px solid hsl(var(--border));
     }
     
-    .dark .rbc-day-slot {
-      background-color: hsl(var(--background));
-    }
-
     /* Mobile-specific calendar optimizations */
     @media (max-width: 768px) {
         .rbc-toolbar {
@@ -155,4 +158,3 @@
         }
     }
 }
-

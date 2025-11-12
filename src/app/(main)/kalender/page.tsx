@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { saveAs } from 'file-saver';
 
 
 // date-fns Localizer
@@ -66,15 +67,16 @@ const formats = {
 const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
   return (
     <div className="rbc-toolbar justify-between">
-      <span className="rbc-toolbar-label">{label}</span>
-      <div className="rbc-btn-group">
-        <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+        <div className="rbc-btn-group">
+            <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')}>
+                <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')}>
+                <ChevronRight className="h-4 w-4" />
+            </Button>
+        </div>
+        <span className="rbc-toolbar-label">{label}</span>
+      <div className="rbc-btn-group"></div>
     </div>
   );
 };
@@ -309,6 +311,8 @@ export default function KalenderPage() {
             console.error(error);
             return;
         }
+        const blob = new Blob([value], { type: 'text/calendar;charset=utf-8' });
+        saveAs(blob, 'faustball-kalender.ics');
     });
   }
 
@@ -500,4 +504,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
