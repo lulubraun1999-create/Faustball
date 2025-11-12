@@ -1,24 +1,23 @@
 
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, FC } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Event, Views, NavigateAction, View } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer, Event, Views, NavigateAction, View, ToolbarProps } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
-import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin, Users as UsersIcon, Clock, Info } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin, Users as UsersIcon, Clock, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createEvents, type EventAttributes } from 'ics';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { saveAs } from 'file-saver';
 
 
 // date-fns Localizer
@@ -62,6 +61,22 @@ const messages = {
 
 const formats = {
     weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EEEEEE', culture),
+};
+
+const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
+  return (
+    <div className="rbc-toolbar justify-between">
+      <span className="rbc-toolbar-label">{label}</span>
+      <div className="rbc-btn-group">
+        <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 };
 
 
@@ -294,8 +309,6 @@ export default function KalenderPage() {
             console.error(error);
             return;
         }
-        const blob = new Blob([value], { type: 'text/calendar;charset=utf-8' });
-        saveAs(blob, 'faustball_kalender.ics');
     });
   }
 
@@ -408,6 +421,9 @@ export default function KalenderPage() {
                           view={view}
                           date={date}
                           showWeekNumbers
+                          components={{
+                            toolbar: CustomToolbar
+                          }}
                       />
                   </div>
                 </CardContent>
@@ -484,3 +500,4 @@ export default function KalenderPage() {
     </div>
   );
 }
+
