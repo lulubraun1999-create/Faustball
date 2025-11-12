@@ -348,7 +348,6 @@ export default function KalenderSeite() {
                     views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
                     view={view}
                     onView={newView => setView(newView)}
-                    defaultView={Views.MONTH}
                     messages={{
                       allDay: 'Ganztägig', previous: 'Zurück', next: 'Weiter', today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', date: 'Datum', time: 'Uhrzeit', event: 'Termin', noEventsInRange: 'Keine Termine in diesem Zeitraum.', showMore: total => `+ ${total} weitere`,
                     }}
