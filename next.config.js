@@ -1,3 +1,4 @@
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -12,12 +13,12 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    turbopack: {
-      // This option is used to silence the warning about multiple lockfiles.
-      // It tells Turbopack the root of the project.
-      root: __dirname,
-    },
+  experimental: {},
+  // The turbopack-specific configuration is now a top-level property.
+  turbopack: {
+    // This option is used to silence the warning about multiple lockfiles.
+    // It tells Turbopack the root of the project.
+    root: __dirname,
   },
 };
 
