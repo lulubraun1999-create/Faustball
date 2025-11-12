@@ -67,43 +67,108 @@
 
 /* Custom styles for react-big-calendar */
 @layer components {
+    /* General Container */
+    .rbc-calendar {
+        @apply h-full;
+    }
+
+    /* Toolbar */
     .rbc-toolbar {
         @apply mb-4 flex flex-row items-center justify-between gap-2;
     }
-
     .rbc-toolbar .rbc-toolbar-label {
-        @apply text-xl font-bold font-body;
+        @apply text-xl font-bold text-foreground;
     }
-    
-    .rbc-toolbar .rbc-btn-group > button {
-        @apply px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50;
-    }
-    
-    .rbc-toolbar .rbc-btn-group > button.rbc-active {
-        @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    .rbc-toolbar .rbc-btn-group button {
+        @apply cursor-pointer border-none bg-transparent text-foreground;
     }
 
-    .rbc-off-range-bg {
-        @apply bg-muted/20;
-    }
-    
-    .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted)) !important;
-    }
-    
-    .rbc-date-cell.rbc-current a {
-      color: hsl(var(--primary));
-      font-weight: 600;
-    }
-
+    /* Header (Tage der Woche) */
     .rbc-header {
-      @apply text-center pb-2 capitalize font-medium;
+        @apply border-b border-border py-2 text-center text-sm font-medium text-muted-foreground;
+    }
+    .rbc-header + .rbc-header {
+        @apply border-l border-border;
     }
 
+    /* Zeit-Spalte (links in der Wochenansicht) */
+    .rbc-time-gutter {
+        @apply border-t border-border;
+    }
+    .rbc-time-gutter, .rbc-header {
+        @apply bg-background; /* Ensure it matches the page background */
+    }
+
+    /* Kalender-Grid */
+    .rbc-month-view, .rbc-time-view {
+        @apply border-l border-r border-b border-border rounded-b-lg;
+    }
+    
+    .rbc-month-row, .rbc-day-bg {
+        @apply border-t border-border;
+    }
+    
+    .rbc-row-content {
+        @apply z-10;
+    }
+    
+    .rbc-day-bg + .rbc-day-bg {
+        @apply border-l border-border;
+    }
+    
+    .rbc-time-view .rbc-time-gutter, .rbc-time-view .rbc-day-slot {
+      border-color: transparent;
+    }
+    
+    .rbc-time-column, .rbc-day-slot .rbc-time-slot {
+        @apply border-t-0;
+    }
+    .rbc-time-column, .rbc-time-view .rbc-day-bg, .rbc-day-slot .rbc-timeslot-group {
+        @apply border-l border-border;
+    }
+
+
+    /* Hintergrund der "off-range" Tage (Vormonat/Nachmonat) */
+    .rbc-off-range-bg {
+        @apply bg-muted/30;
+    }
+    .dark .rbc-off-range-bg {
+        @apply bg-muted/50;
+    }
+    
+    .rbc-off-range .rbc-date-cell {
+        @apply text-muted-foreground/50;
+    }
+
+    /* WICHTIG: Hintergrund für "heute" entfernen */
     .rbc-day-bg.rbc-today,
-    .rbc-time-view .rbc-today,
-    .rbc-month-view .rbc-today {
+    .rbc-time-view .rbc-today {
         background-color: transparent !important;
+    }
+    
+    /* Heutiges Datum nur als Text hervorheben */
+    .rbc-date-cell.rbc-current a {
+      @apply text-primary font-semibold;
+    }
+    
+
+    /* Termine (Events) */
+    .rbc-event {
+        @apply p-1 text-xs rounded-md;
+    }
+    .rbc-event.rbc-selected {
+        @apply ring-2 ring-ring;
+    }
+
+    /* Agenda-Ansicht */
+    .rbc-agenda-view table {
+        @apply w-full border-collapse;
+    }
+    .rbc-agenda-view table tr {
+        @apply border-b border-border;
+    }
+    .rbc-agenda-date-cell, .rbc-agenda-time-cell {
+        @apply px-4 py-2 font-semibold;
     }
 
     /* Mobile-specific calendar optimizations */
@@ -117,13 +182,5 @@
         .rbc-header {
             @apply text-xs;
         }
-        .rbc-month-view {
-          @apply !border-0;
-        }
-        .rbc-month-row {
-           @apply !min-h-0;
-        }
     }
 }
-
-    

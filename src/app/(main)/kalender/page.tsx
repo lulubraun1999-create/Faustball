@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Calendar, dateFnsLocalizer, Event, Views, NavigateAction, View, ToolbarProps } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
 import { Loader2, Calendar as CalendarIcon, Download, Filter as FilterIcon, X, MapPin, Users as UsersIcon, Clock, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -506,5 +505,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
