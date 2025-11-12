@@ -73,6 +73,9 @@
     .rbc-toolbar {
         @apply flex items-center justify-between p-2 mb-2;
     }
+    .rbc-toolbar .rbc-btn-group {
+        @apply flex items-center gap-2;
+    }
     .rbc-toolbar-label {
         @apply text-lg font-headline font-semibold;
     }
@@ -100,11 +103,15 @@
     .dark .rbc-off-range-bg {
         @apply bg-muted/20;
     }
-     .rbc-day-bg.rbc-today {
-       background-color: hsl(var(--primary) / 0.1);
+    .rbc-day-bg.rbc-today {
+       background-color: transparent !important;
+       border-color: hsl(var(--primary)) !important;
+       border-width: 1px;
     }
     .dark .rbc-day-bg.rbc-today {
        background-color: hsl(220 80% 30%) !important;
+       border-color: hsl(var(--primary)) !important;
+       border-width: 1px;
     }
     .rbc-date-cell.rbc-now > a {
         @apply text-primary-foreground font-bold;

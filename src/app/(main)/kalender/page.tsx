@@ -38,15 +38,30 @@ const formats = {
 
 // Custom Toolbar
 const CustomToolbar = (props: ToolbarProps) => {
-    const { onNavigate, label } = props;
+    const { onNavigate, label, onView, view } = props;
+
+    const navigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
+        onNavigate(action);
+    };
+
+    const handleViewChange = (newView: 'month' | 'week' | 'day' | 'agenda') => {
+        onView(newView);
+    };
+
     return (
         <div className="rbc-toolbar">
             <div className="rbc-btn-group">
-                <Button variant="ghost" size="icon" onClick={() => onNavigate('PREV')}><ChevronLeft className="h-5 w-5" /></Button>
-                <Button variant="ghost" size="icon" onClick={() => onNavigate('NEXT')}><ChevronRight className="h-5 w-5" /></Button>
+                <Button variant="outline" onClick={() => navigate('TODAY')}>Heute</Button>
+                <Button variant="outline" onClick={() => navigate('PREV')}>Zurück</Button>
+                <Button variant="outline" onClick={() => navigate('NEXT')}>Weiter</Button>
             </div>
             <span className="rbc-toolbar-label">{label}</span>
-            <div className="rbc-btn-group"></div>
+            <div className="rbc-btn-group">
+                <Button variant={view === 'month' ? 'default' : 'outline'} onClick={() => handleViewChange('month')}>Monat</Button>
+                <Button variant={view === 'week' ? 'default' : 'outline'} onClick={() => handleViewChange('week')}>Woche</Button>
+                <Button variant={view === 'day' ? 'default' : 'outline'} onClick={() => handleViewChange('day')}>Tag</Button>
+                <Button variant={view === 'agenda' ? 'default' : 'outline'} onClick={() => handleViewChange('agenda')}>Agenda</Button>
+            </div>
         </div>
     );
 };
@@ -333,7 +348,7 @@ export default function KalenderSeite() {
                     startAccessor="start"
                     endAccessor="end"
                     culture='de-DE'
-                    views={['month', 'week', 'day']}
+                    views={['month', 'week', 'day', 'agenda']}
                     defaultView={Views.MONTH}
                     messages={{
                       allDay: 'Ganztägig', previous: 'Zurück', next: 'Weiter', today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', date: 'Datum', time: 'Uhrzeit', event: 'Termin', noEventsInRange: 'Keine Termine in diesem Zeitraum.', showMore: total => `+ ${total} weitere`,
