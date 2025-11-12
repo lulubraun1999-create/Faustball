@@ -64,3 +64,66 @@
     @apply border-border;
   }
 }
+
+@layer components {
+    /* react-big-calendar custom styles */
+    .rbc-calendar {
+        @apply font-body;
+    }
+    .rbc-toolbar {
+        @apply flex items-center justify-between p-2 mb-2;
+    }
+    .rbc-toolbar-label {
+        @apply text-lg font-headline font-semibold;
+    }
+    .rbc-header {
+        @apply p-2 text-center text-sm font-medium text-muted-foreground border-b;
+    }
+    .rbc-month-view, .rbc-time-view {
+        @apply border-none;
+    }
+    .rbc-day-bg {
+        @apply border-l;
+    }
+    .rbc-day-bg:first-child {
+        @apply border-l-0;
+    }
+    .rbc-month-row {
+        @apply border-b min-h-[100px] flex-grow;
+    }
+    .rbc-month-row:last-child {
+        @apply border-b-0;
+    }
+    .rbc-off-range-bg {
+        @apply bg-muted/50;
+    }
+    .dark .rbc-off-range-bg {
+        @apply bg-muted/20;
+    }
+    /* This is the crucial rule to remove the today background */
+    .rbc-day-bg.rbc-today {
+        background-color: transparent !important;
+    }
+
+    .rbc-event {
+        @apply rounded-md p-1 text-xs cursor-pointer;
+    }
+    .rbc-event-custom {
+      @apply text-white;
+    }
+    .rbc-event-primary {
+      @apply bg-primary/80;
+    }
+    .dark .rbc-event-primary {
+      @apply bg-primary;
+    }
+    .rbc-event-secondary {
+      @apply bg-secondary text-secondary-foreground;
+    }
+     .dark .rbc-event-secondary {
+      @apply bg-accent;
+    }
+    .rbc-event-label {
+        @apply font-semibold;
+    }
+}
