@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
@@ -84,7 +84,10 @@ export default function KalenderSeite() {
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [eventDetails, setEventDetails] = useState<CustomCalendarEvent | null>(null);
+  
+  // State for calendar view and date
   const [view, setView] = useState<View>(Views.MONTH);
+  const [date, setDate] = useState(new Date());
 
   // Data fetching
   const memberRef = useMemoFirebase(() => (firestore && user ? doc(firestore, 'members', user.uid) : null), [firestore, user]);
@@ -347,7 +350,9 @@ export default function KalenderSeite() {
                     culture='de-DE'
                     views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
                     view={view}
-                    onView={newView => setView(newView)}
+                    onView={setView}
+                    date={date}
+                    onNavigate={setDate}
                     messages={{
                       allDay: 'Ganztägig', previous: 'Zurück', next: 'Weiter', today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', date: 'Datum', time: 'Uhrzeit', event: 'Termin', noEventsInRange: 'Keine Termine in diesem Zeitraum.', showMore: total => `+ ${total} weitere`,
                     }}
@@ -388,3 +393,5 @@ export default function KalenderSeite() {
     </div>
   );
 }
+
+    
