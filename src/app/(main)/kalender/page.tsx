@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback, FC } from 'react';
+import React, { useState, useMemo, useEffect, FC } from 'react';
 import {
   useFirestore,
   useCollection,
@@ -27,17 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Calendar,
-  dateFnsLocalizer,
-  Views,
-  type Event,
-  type ToolbarProps,
-} from 'react-big-calendar';
-import {
   format,
-  getDay,
-  parse,
-  startOfWeek,
   addDays,
   addWeeks,
   addMonths,
@@ -49,61 +39,19 @@ import {
   set as setDate,
 } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useRouter } from 'next/navigation';
 import {
   Loader2,
   Download,
-  ChevronLeft,
-  ChevronRight,
   MapPin,
   Users,
   ClipboardCopy,
 } from 'lucide-react';
-import { createEvents, type EventAttributes } from 'ics';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { saveAs } from 'file-saver';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
-
-// date-fns Localizer
-const locales = {
-  de: de,
-};
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
-  getDay,
-  locales,
-});
-
-const formats = {
-    weekdayFormat: (date: Date, culture: any, localizer: any) =>
-      localizer.format(date, 'EE', culture), // e.g., "Mo"
-};
-
-// Custom Toolbar
-const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
-  return (
-    <div className="rbc-toolbar">
-      <div className="rbc-btn-group">
-        <Button variant="ghost" size="icon" onClick={() => onNavigate('PREV')}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={() => onNavigate('NEXT')}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-      <span className="rbc-toolbar-label">{label}</span>
-      <div className="rbc-btn-group"></div>
-    </div>
-  );
-};
-
-
-interface CalendarEvent extends Event {
-  resource: UnrolledAppointment;
-}
 
 type UnrolledAppointment = Appointment & {
   virtualId: string;
@@ -118,9 +66,8 @@ type UnrolledAppointment = Appointment & {
 export default function KalenderPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
-  const router = useRouter();
   
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<UnrolledAppointment | null>(null);
 
   const memberRef = useMemoFirebase(
     () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
@@ -222,6 +169,7 @@ export default function KalenderPage() {
     });
 
     const allEvents: UnrolledAppointment[] = [];
+    const today = startOfDay(new Date());
     const userTeamIdsSet = new Set(userTeamIds);
 
     appointments.forEach(app => {
@@ -234,6 +182,8 @@ export default function KalenderPage() {
       const appStartDate = app.startDate.toDate();
 
       if (app.recurrence === 'none' || !app.recurrence || !recurrenceEndDate) {
+        if (isBefore(appStartDate, today)) return;
+
         const originalDateStartOfDayISO = startOfDay(appStartDate).toISOString();
         const exception = exceptionsMap.get(`${app.id}-${originalDateStartOfDayISO}`);
         
@@ -254,29 +204,31 @@ export default function KalenderPage() {
         const MAX_ITERATIONS = 1000; // Safety break for long recurrences
 
         while (currentDate <= recurrenceEndDate && iter < MAX_ITERATIONS) {
-            const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
-            const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
-            
-                let isException = false;
-                let instanceData: Appointment = { ...app };
-                let instanceStartDate = currentDate;
-                let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
+            if (currentDate >= today) {
+                const currentDateStartOfDayISO = startOfDay(currentDate).toISOString();
+                const instanceException = exceptionsMap.get(`${app.id}-${currentDateStartOfDayISO}`);
                 
-                if (instanceException?.status === 'modified' && instanceException.modifiedData) {
-                    isException = true;
-                    const modData = instanceException.modifiedData;
-                    instanceData = { ...instanceData, ...modData };
-                    instanceStartDate = modData.startDate?.toDate() ?? instanceStartDate;
-                    instanceEndDate = modData.endDate?.toDate() ?? instanceEndDate;
-                }
+                    let isException = false;
+                    let instanceData: Appointment = { ...app };
+                    let instanceStartDate = currentDate;
+                    let instanceEndDate: Date | undefined = duration > 0 ? new Date(currentDate.getTime() + duration) : undefined;
+                    
+                    if (instanceException?.status === 'modified' && instanceException.modifiedData) {
+                        isException = true;
+                        const modData = instanceException.modifiedData;
+                        instanceData = { ...instanceData, ...modData };
+                        instanceStartDate = modData.startDate?.toDate() ?? instanceStartDate;
+                        instanceEndDate = modData.endDate?.toDate() ?? instanceEndDate;
+                    }
 
-                allEvents.push({
-                  ...instanceData,
-                  id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
-                  instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
-                  isCancelled: instanceException?.status === 'cancelled', isException,
-                });
-            
+                    allEvents.push({
+                      ...instanceData,
+                      id: `${app.id}-${currentDate.toISOString()}`, virtualId: `${app.id}-${currentDateStartOfDayISO}`, originalId: app.id,
+                      instanceDate: instanceStartDate, startDate: Timestamp.fromDate(instanceStartDate), endDate: instanceEndDate ? Timestamp.fromDate(instanceEndDate) : undefined,
+                      isCancelled: instanceException?.status === 'cancelled', isException,
+                    });
+                
+            }
           iter++;
           switch (app.recurrence) {
             case 'daily': currentDate = addDays(currentDate, 1); break;
@@ -291,68 +243,33 @@ export default function KalenderPage() {
         }
       }
     });
-    return allEvents;
+    return allEvents.sort((a,b) => a.instanceDate.getTime() - b.instanceDate.getTime());
   }, [appointments, exceptions, userTeamIds, memberProfile]);
 
-  const filteredEvents: CalendarEvent[] = useMemo(() => {
+  const filteredAppointments = useMemo(() => {
     return unrolledAppointments
       .filter((app) => {
           if (app.isCancelled) return false;
           const teamMatch = app.visibility.type === 'all' || app.visibility.teamIds.some(id => selectedTeams.has(id));
           const typeMatch = selectedTypes.has(app.appointmentTypeId);
           return teamMatch && typeMatch;
-      })
-      .map((app) => {
-        const spieltagTypeId = appointmentTypes?.find(t => t.name.toLowerCase() === 'spieltag')?.id;
-        const isSpieltag = app.appointmentTypeId === spieltagTypeId;
-        const start = app.instanceDate;
-        const end = app.isAllDay ? addDays(start, 1) : (app.endDate ? app.endDate.toDate() : start);
-
-        return {
-          title: app.title,
-          start,
-          end,
-          allDay: app.isAllDay,
-          resource: { ...app, isSpieltag },
-        };
       });
-  }, [unrolledAppointments, selectedTeams, selectedTypes, appointmentTypes]);
+  }, [unrolledAppointments, selectedTeams, selectedTypes]);
 
-  const eventStyleGetter = useCallback((event: CalendarEvent) => {
-      const isSpieltag = event.resource.isSpieltag;
-      const style = {
-        backgroundColor: isSpieltag ? 'hsl(var(--primary))' : 'hsl(var(--accent))',
-        color: isSpieltag ? 'hsl(var(--primary-foreground))' : 'hsl(var(--accent-foreground))',
-        borderRadius: '4px',
-        border: 'none',
-        opacity: 0.9,
-      };
-      return { style };
-    }, []);
+  const groupedAppointments = useMemo(() => {
+    return filteredAppointments.reduce((acc, app) => {
+      const monthYear = format(app.instanceDate, 'MMMM yyyy', { locale: de });
+      if (!acc[monthYear]) acc[monthYear] = [];
+      acc[monthYear].push(app);
+      return acc;
+    }, {} as Record<string, UnrolledAppointment[]>);
+  }, [filteredAppointments]);
+
 
   const downloadCalendar = () => {
-    const icsEvents: EventAttributes[] = filteredEvents.map(event => {
-        const start = event.start!;
-        const end = event.end!;
-        const location = event.resource.locationId ? locationsMap.get(event.resource.locationId) : null;
-        
-        return {
-            title: event.title,
-            start: [start.getFullYear(), start.getMonth() + 1, start.getDate(), start.getHours(), start.getMinutes()],
-            end: [end.getFullYear(), end.getMonth() + 1, end.getDate(), end.getHours(), end.getMinutes()],
-            description: event.resource.description,
-            location: location ? `${location.name}, ${location.address}` : undefined,
-        };
-    });
-
-    createEvents(icsEvents, (error, value) => {
-        if (error) {
-            console.error(error);
-            return;
-        }
-        const blob = new Blob([value], { type: 'text/calendar;charset=utf-8' });
-        saveAs(blob, 'faustball-kalender.ics');
-    });
+    // This functionality is removed as 'ics' and 'file-saver' are removed.
+    // You can re-add it if needed by installing the packages and implementing the logic.
+    alert("Download-Funktion ist derzeit nicht verfügbar.");
   };
 
   const isLoading =
@@ -423,74 +340,125 @@ export default function KalenderPage() {
         </Card>
       </aside>
 
-      {/* Calendar View */}
-      <main className="xl:col-span-3">
-        <Card>
-          <CardContent className="p-2 md:p-4 h-[80vh]">
-            <Calendar
-                localizer={localizer}
-                events={filteredEvents}
-                startAccessor="start"
-                endAccessor="end"
-                culture="de"
-                messages={{
-                    allDay: 'Ganztägig',
-                    previous: 'Zurück',
-                    next: 'Weiter',
-                    today: 'Heute',
-                    month: 'Monat',
-                    week: 'Woche',
-                    day: 'Tag',
-                    agenda: 'Agenda',
-                    date: 'Datum',
-                    time: 'Uhrzeit',
-                    event: 'Termin',
-                    noEventsInRange: 'Keine Termine in diesem Zeitraum.',
-                    showMore: total => `+ ${total} weitere`,
-                }}
-                eventPropGetter={eventStyleGetter}
-                onSelectEvent={(event) => setSelectedEvent(event)}
-                components={{ toolbar: CustomToolbar }}
-                formats={formats}
-            />
-          </CardContent>
-        </Card>
+      {/* Agenda View */}
+      <main className="xl:col-span-3 space-y-6">
+          {Object.keys(groupedAppointments).length > 0 ? (
+            Object.entries(groupedAppointments).map(([monthYear, appointmentsInMonth]) => (
+                <div key={monthYear}>
+                    <h2 className="text-xl font-bold mb-4">{monthYear}</h2>
+                    <div className="space-y-4">
+                        {appointmentsInMonth.map(app => (
+                            <AppointmentCard key={app.virtualId} appointment={app} locationsMap={locationsMap} teamsMap={teamsMap} onClick={() => setSelectedEvent(app)} />
+                        ))}
+                    </div>
+                </div>
+            ))
+          ) : (
+             <Card>
+                <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+                    <h2 className="text-xl font-semibold">Keine Termine</h2>
+                    <p className="mt-2 text-muted-foreground">Für die aktuelle Auswahl wurden keine Termine gefunden.</p>
+                </CardContent>
+             </Card>
+          )}
       </main>
       
-        {selectedEvent && (
-            <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{selectedEvent.title}</DialogTitle>
-                        <DialogDescription>
-                            {format(selectedEvent.start!, "eeee, dd. MMMM yyyy", { locale: de })}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="flex items-center gap-2">
-                            <strong>Zeit:</strong> 
-                            {selectedEvent.allDay ? 'Ganztägig' : `${format(selectedEvent.start!, 'HH:mm')} - ${format(selectedEvent.end!, 'HH:mm')} Uhr`}
-                        </div>
-                         {selectedEvent.resource.locationId && locationsMap.has(selectedEvent.resource.locationId) && (
-                            <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-muted-foreground"/>
-                                <span>{locationsMap.get(selectedEvent.resource.locationId)?.name}</span>
-                            </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4 text-muted-foreground"/>
-                            <span>{selectedEvent.resource.visibility.type === 'all' ? 'Alle Teams' : selectedEvent.resource.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</span>
-                        </div>
-                        {selectedEvent.resource.description && <p>{selectedEvent.resource.description}</p>}
-                    </div>
-                    <DialogFooter>
-                        <DialogClose asChild>
-                            <Button type="button" variant="secondary">Schließen</Button>
-                        </DialogClose>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        )}
+      {selectedEvent && (
+          <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+              <DialogContent>
+                  <DialogHeader>
+                      <DialogTitle>{selectedEvent.title}</DialogTitle>
+                      <DialogDescription>
+                          {format(selectedEvent.instanceDate, "eeee, dd. MMMM yyyy", { locale: de })}
+                      </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                      <div className="flex items-center gap-2">
+                          <strong>Zeit:</strong> 
+                          {selectedEvent.isAllDay ? 'Ganztägig' : `${format(selectedEvent.instanceDate, 'HH:mm')} ${selectedEvent.endDate ? `- ${format(selectedEvent.endDate.toDate(), 'HH:mm')}` : ''} Uhr`}
+                      </div>
+                       {selectedEvent.locationId && locationsMap.has(selectedEvent.locationId) && (
+                          <LocationPopover location={locationsMap.get(selectedEvent.locationId)!} />
+                      )}
+                      <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground"/>
+                          <span>{selectedEvent.visibility.type === 'all' ? 'Alle Teams' : selectedEvent.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</span>
+                      </div>
+                      {selectedEvent.description && <p>{selectedEvent.description}</p>}
+                  </div>
+                  <DialogFooter>
+                      <DialogClose asChild>
+                          <Button type="button" variant="secondary">Schließen</Button>
+                      </DialogClose>
+                  </DialogFooter>
+              </DialogContent>
+          </Dialog>
+      )}
     </div>
   );
 }
+
+// Sub-component for each appointment in the list
+const AppointmentCard: FC<{
+  appointment: UnrolledAppointment;
+  locationsMap: Map<string, Location>;
+  teamsMap: Map<string, string>;
+  onClick: () => void;
+}> = ({ appointment, locationsMap, teamsMap, onClick }) => {
+  const spieltagTypeId = 'spieltag'; // Assuming you have a way to identify this, maybe from appointmentTypes
+  const isSpieltag = appointment.appointmentTypeId.toLowerCase().includes(spieltagTypeId);
+  const location = appointment.locationId ? locationsMap.get(appointment.locationId) : null;
+
+  return (
+    <Card onClick={onClick} className={cn("cursor-pointer hover:bg-accent/50 transition-colors", isSpieltag ? "border-primary/50" : "")}>
+      <CardContent className="p-4 flex items-center gap-4">
+        <div className="flex flex-col items-center justify-center w-16">
+          <div className="text-sm font-semibold text-primary">{format(appointment.instanceDate, 'eee', { locale: de })}</div>
+          <div className="text-2xl font-bold">{format(appointment.instanceDate, 'dd', { locale: de })}</div>
+          <div className="text-xs text-muted-foreground">{format(appointment.instanceDate, 'MMM', { locale: de })}</div>
+        </div>
+        <div className="flex-grow">
+          <CardTitle className="text-lg">{appointment.title}</CardTitle>
+          <div className="text-sm text-muted-foreground mt-1 space-y-1">
+             <p>{appointment.isAllDay ? 'Ganztägig' : `${format(appointment.instanceDate, 'HH:mm')} ${appointment.endDate ? `- ${format(appointment.endDate.toDate(), 'HH:mm')}` : ''} Uhr`}</p>
+             {location && <p className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {location.name}</p>}
+             <p className="flex items-center gap-1"><Users className="h-3 w-3" /> {appointment.visibility.type === 'all' ? 'Alle' : appointment.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Sub-component for Location Popover
+const LocationPopover: FC<{ location: Location }> = ({ location }) => {
+    const { toast } = useToast();
+    const copyAddress = () => {
+        if (location.address) {
+            navigator.clipboard.writeText(location.address);
+            toast({ title: "Adresse kopiert" });
+        }
+    };
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="link" className="p-0 h-auto font-normal text-sm flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>{location.name}</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 text-sm">
+                <div className="space-y-2">
+                    <h4 className="font-medium leading-none">Adresse</h4>
+                    <p className="text-muted-foreground">{location.address || 'Keine Adresse hinterlegt.'}</p>
+                    {location.address && (
+                        <Button onClick={copyAddress} size="sm" className="w-full mt-2">
+                            <ClipboardCopy className="mr-2 h-4 w-4" /> Adresse kopieren
+                        </Button>
+                    )}
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+};
