@@ -6,7 +6,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, dateFnsLocalizer, Views, type Event as CalendarEvent, type ToolbarProps } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer, Views, type Event as CalendarEvent, type ToolbarProps, type View } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -84,6 +84,7 @@ export default function KalenderSeite() {
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [eventDetails, setEventDetails] = useState<CustomCalendarEvent | null>(null);
+  const [view, setView] = useState<View>(Views.MONTH);
 
   // Data fetching
   const memberRef = useMemoFirebase(() => (firestore && user ? doc(firestore, 'members', user.uid) : null), [firestore, user]);
@@ -344,7 +345,9 @@ export default function KalenderSeite() {
                     startAccessor="start"
                     endAccessor="end"
                     culture='de-DE'
-                    views={['month', 'week', 'day', 'agenda']}
+                    views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
+                    view={view}
+                    onView={newView => setView(newView)}
                     defaultView={Views.MONTH}
                     messages={{
                       allDay: 'Ganztägig', previous: 'Zurück', next: 'Weiter', today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', date: 'Datum', time: 'Uhrzeit', event: 'Termin', noEventsInRange: 'Keine Termine in diesem Zeitraum.', showMore: total => `+ ${total} weitere`,
