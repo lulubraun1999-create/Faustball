@@ -42,9 +42,9 @@ export function MainHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between">
+      <div className="container mx-auto flex h-16 items-center">
         {/* Left Section */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 flex-1">
           <MobileNav />
           <Link href="/dashboard" className="hidden items-center space-x-2 md:flex">
             <span className="hidden font-bold sm:inline-block font-headline">
@@ -54,12 +54,12 @@ export function MainHeader() {
         </div>
 
         {/* Center Section (Desktop) */}
-        <div className="hidden md:flex">
+        <div className="hidden md:flex justify-center flex-1">
            <MainNav />
         </div>
         
         {/* Right Section */}
-        <div className="flex items-center justify-self-end space-x-2">
+        <div className="flex items-center justify-end space-x-2 flex-1">
           <a
             href="https://www.faustball.com/#/club/460/info"
             target="_blank"
