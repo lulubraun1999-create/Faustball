@@ -52,8 +52,14 @@ const CustomToolbar = (props: ToolbarProps) => {
         <div className="rbc-toolbar">
             <div className="rbc-btn-group">
                 <Button variant="outline" onClick={() => navigate('TODAY')}>Heute</Button>
-                <Button variant="outline" onClick={() => navigate('PREV')}>Zurück</Button>
-                <Button variant="outline" onClick={() => navigate('NEXT')}>Weiter</Button>
+                <Button variant="outline" onClick={() => navigate('PREV')}>
+                    <ChevronLeft className="h-4 w-4" />
+                    Zurück
+                </Button>
+                <Button variant="outline" onClick={() => navigate('NEXT')}>
+                    Weiter
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
             </div>
             <span className="rbc-toolbar-label">{label}</span>
             <div className="rbc-btn-group">
