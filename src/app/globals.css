@@ -100,7 +100,7 @@
     }
 
     .rbc-toolbar button.rbc-active {
-      @apply bg-primary text-primary-foreground;
+      @apply bg-primary-foreground text-background;
     }
     
     .dark .rbc-toolbar button.rbc-active {
