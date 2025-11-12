@@ -100,12 +100,11 @@
     .dark .rbc-off-range-bg {
         @apply bg-muted/20;
     }
-    /* This is the crucial rule to remove the today background */
     .rbc-day-bg.rbc-today {
-        background-color: transparent !important;
+      background-color: hsl(var(--primary) / 0.9) !important;
     }
     .rbc-date-cell.rbc-now > a {
-        @apply text-primary font-bold;
+        @apply text-primary-foreground font-bold;
     }
 
     .rbc-event {
