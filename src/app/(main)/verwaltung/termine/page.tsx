@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -312,7 +311,9 @@ export default function TermineUebersichtPage() {
                                           const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                           const typeName = appointmentTypesMap.get(app.appointmentTypeId);
                                           let rsvpDate: Date | null = null;
-                                          if (originalAppointment?.rsvpDeadline) {
+                                          // Note: The logic for rsvpDeadline is complex and might need server-side logic in a real app
+                                          // This is a simplified client-side interpretation
+                                          if (originalAppointment?.rsvpDeadline && typeof originalAppointment.rsvpDeadline === 'string') {
                                               try {
                                                   const [days, time] = originalAppointment.rsvpDeadline.split(':');
                                                   const [hours, minutes] = time.split(';').map(Number);
@@ -456,12 +457,14 @@ const ParticipantListDialog: React.FC<ParticipantListDialogProps> = ({ appointme
       <DialogTrigger asChild><Button variant="ghost" size="icon" title="Teilnehmerliste anzeigen"><Users className="h-4 w-4" /></Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Teilnehmerliste für "{appointment.title}"</DialogTitle><DialogDescription>{formatDate(appointment.instanceDate, "eeee, dd. MMMM yyyy 'um' HH:mm 'Uhr'", { locale: de })}</DialogDescription></DialogHeader>
-        <ScrollArea className="max-h-[60vh]"><div className="space-y-4 p-4">
-          <div><h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3><ul className="list-disc pl-5 text-sm">{accepted.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
-          <div><h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3><ul className="list-disc pl-5 text-sm">{rejected.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}{r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}</li>))}</ul></div>
-          <div><h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3><ul className="list-disc pl-5 text-sm">{unsure.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
-          <div><h3 className="font-semibold text-muted-foreground mb-2">Ausstehend ({pending.length})</h3><ul className="list-disc pl-5 text-sm">{pending.map(m => (<li key={m.userId}>{m.firstName} {m.lastName}</li>))}</ul></div>
-        </div></ScrollArea>
+        <ScrollArea className="max-h-[60vh] p-1">
+            <div className="space-y-4 p-4">
+            <div><h3 className="font-semibold text-green-600 mb-2">Zusagen ({accepted.length})</h3><ul className="list-disc pl-5 text-sm">{accepted.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+            <div><h3 className="font-semibold text-destructive mb-2">Absagen ({rejected.length})</h3><ul className="list-disc pl-5 text-sm">{rejected.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}{r.reason && <span className="text-muted-foreground italic"> - "{r.reason}"</span>}</li>))}</ul></div>
+            <div><h3 className="font-semibold text-yellow-600 mb-2">Unsicher ({unsure.length})</h3><ul className="list-disc pl-5 text-sm">{unsure.map(r => (<li key={r.userId}>{membersMap.get(r.userId)?.firstName} {membersMap.get(r.userId)?.lastName}</li>))}</ul></div>
+            <div><h3 className="font-semibold text-muted-foreground mb-2">Ausstehend ({pending.length})</h3><ul className="list-disc pl-5 text-sm">{pending.map(m => (<li key={m.userId}>{m.firstName} {m.lastName}</li>))}</ul></div>
+            </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
@@ -692,10 +695,5 @@ const StatisticsDialog: React.FC<StatisticsDialogProps> = ({ user, appointments,
   );
 };
     
-
-
     
-
-    
-
-
+  

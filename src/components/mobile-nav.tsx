@@ -54,13 +54,6 @@ export function MobileNav() {
                 >
                     Dashboard
                 </Link>
-                 <Link
-                    href="/kalender"
-                    className="text-muted-foreground"
-                    onClick={() => setOpen(false)}
-                >
-                    Kalender
-                </Link>
                 {/* We can't use the dropdown directly here, so we recreate the links */}
                  <div className="flex flex-col space-y-3 pt-6">
                     <h4 className="font-medium">Verwaltung</h4>
