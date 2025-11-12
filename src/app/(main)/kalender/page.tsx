@@ -350,8 +350,8 @@ export default function KalenderSeite() {
                       allDay: 'Ganztägig', previous: 'Zurück', next: 'Weiter', today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', date: 'Datum', time: 'Uhrzeit', event: 'Termin', noEventsInRange: 'Keine Termine in diesem Zeitraum.', showMore: total => `+ ${total} weitere`,
                     }}
                     formats={formats}
-                    onSelectEvent={(event) => setEventDetails(event)}
-                    eventPropGetter={(event) => ({ className: event.className })}
+                    onSelectEvent={(event) => setEventDetails(event as CustomCalendarEvent)}
+                    eventPropGetter={(event) => ({ className: (event as CustomCalendarEvent).className })}
                     components={{ toolbar: CustomToolbar }}
                     style={{ height: '75vh' }}
                 />
