@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -128,6 +129,10 @@
     }
 
     .dark .rbc-day-slot {
+      background-color: hsl(var(--background));
+    }
+    
+    .dark .rbc-time-column.rbc-today {
       background-color: hsl(var(--background));
     }
 
