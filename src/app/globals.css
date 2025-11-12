@@ -93,26 +93,34 @@
         @apply m-0;
     }
     
+    .dark .rbc-toolbar button {
+        @apply text-foreground;
+    }
+
     .rbc-toolbar button.rbc-active {
         @apply bg-transparent text-foreground shadow-none;
         @apply ring-2 ring-foreground;
     }
 
-    .rbc-day-bg {
-       aspect-ratio: 1 / 1;
+    .rbc-off-range .rbc-date-cell {
+      visibility: hidden;
     }
-    
+
     .dark .rbc-off-range-bg {
         background-color: hsl(var(--muted));
     }
-
+    
     .rbc-day-bg.rbc-today {
        background-color: transparent !important;
        @apply border-2 border-primary rounded-md;
     }
 
     .rbc-header {
-      @apply text-center pb-1 capitalize; /* Wochentage zentrieren und großschreiben */
+      @apply text-center pb-1 capitalize;
+    }
+    
+    .rbc-day-bg {
+       aspect-ratio: 1 / 1;
     }
 
     /* Mobile-specific calendar optimizations */
