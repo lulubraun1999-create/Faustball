@@ -46,10 +46,8 @@ const CustomToolbar = (props: ToolbarProps) => {
                 <Button variant="outline" onClick={() => onNavigate('TODAY')}>Heute</Button>
                 <Button variant="outline" onClick={() => onNavigate('PREV')}>
                     <ChevronLeft className="h-4 w-4" />
-                    Zurück
                 </Button>
                 <Button variant="outline" onClick={() => onNavigate('NEXT')}>
-                    Weiter
                     <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
@@ -339,7 +337,7 @@ export default function KalenderSeite() {
           </div>
           <div className="lg:col-span-3">
             <Card>
-              <CardContent className="p-2 md:p-4 h-[85vh]">
+              <CardContent className="p-2 md:p-4">
                 <Calendar
                     localizer={localizer}
                     events={filteredEvents}
@@ -355,6 +353,7 @@ export default function KalenderSeite() {
                     onSelectEvent={(event) => setEventDetails(event)}
                     eventPropGetter={(event) => ({ className: event.className })}
                     components={{ toolbar: CustomToolbar }}
+                    style={{ height: '75vh' }}
                 />
               </CardContent>
             </Card>
@@ -387,5 +386,3 @@ export default function KalenderSeite() {
     </div>
   );
 }
-
-    
