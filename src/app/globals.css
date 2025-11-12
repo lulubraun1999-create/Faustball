@@ -8,25 +8,25 @@
   }
  
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --background: 0 0% 3.9%;
+    --foreground: 210 20% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 210 20% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 210 20% 98%;
     --primary: 220 70% 50%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 220 20% 7%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 217.2 91.2% 59.8%;
     --radius: 0.5rem;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -67,23 +67,25 @@
 /* Custom styles for react-big-calendar */
 @layer components {
     .rbc-toolbar {
-        @apply mb-4 flex flex-wrap items-center justify-between gap-2;
+        @apply mb-4 flex flex-col md:flex-row items-center justify-between gap-2;
     }
 
     .rbc-toolbar .rbc-btn-group {
         @apply flex items-center gap-1;
     }
     
-    .rbc-toolbar .rbc-btn-group:first-child {
-        @apply order-2 md:order-1;
+    .rbc-toolbar .rbc-btn-group:nth-child(1) {
+        @apply order-1;
+    }
+    .rbc-toolbar .rbc-btn-group:nth-child(2) {
+        @apply order-3 md:order-2;
+    }
+     .rbc-toolbar .rbc-btn-group:nth-child(3) {
+        @apply order-2 md:order-3;
     }
 
     .rbc-toolbar .rbc-toolbar-label {
-        @apply text-xl font-bold order-1 md:order-2;
-    }
-
-    .rbc-toolbar .rbc-btn-group:last-child {
-        @apply order-3;
+        @apply text-xl font-bold;
     }
 
     .rbc-toolbar button {
@@ -100,21 +102,17 @@
     .rbc-toolbar button.rbc-active {
       @apply bg-primary text-primary-foreground;
     }
-
+    
     .dark .rbc-toolbar button.rbc-active {
         @apply bg-primary-foreground text-background;
     }
 
     .rbc-off-range-bg {
-        @apply bg-transparent;
+        @apply bg-muted/50;
     }
 
     .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted) / 0.5);
-    }
-    
-    .rbc-day-bg.rbc-today {
-       background-color: transparent !important;
+        background-color: hsl(var(--muted));
     }
     
     .rbc-date-cell.rbc-current a {
