@@ -95,15 +95,15 @@
     
     .rbc-toolbar button.rbc-active {
         @apply bg-transparent text-foreground shadow-none;
-        @apply ring-2 ring-foreground; /* Weißer Rand im hellen und dunklen Modus */
+        @apply ring-2 ring-foreground;
     }
 
     .rbc-day-bg {
-        aspect-ratio: 1 / 1;
+       aspect-ratio: 1 / 1;
     }
     
-    .rbc-off-range-bg {
-        visibility: hidden;
+    .dark .rbc-off-range-bg {
+        background-color: hsl(var(--muted));
     }
 
     .rbc-day-bg.rbc-today {
@@ -125,6 +125,15 @@
         }
         .rbc-header {
             @apply text-xs;
+        }
+        .rbc-month-view {
+          @apply !border-0;
+        }
+        .rbc-month-row {
+           @apply !min-h-0;
+        }
+        .rbc-day-bg {
+            aspect-ratio: auto;
         }
     }
 }
