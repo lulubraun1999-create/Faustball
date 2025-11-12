@@ -404,7 +404,7 @@ export default function KalenderSeite() {
                 </DialogClose>
                 {isAdmin && (
                   <Button asChild>
-                      <Link href="/verwaltung/termine-bearbeiten">
+                      <Link href="/verwaltung/termine">
                           <Edit className="mr-2 h-4 w-4" /> Zum Termin
                       </Link>
                   </Button>
@@ -416,5 +416,7 @@ export default function KalenderSeite() {
     </div>
   );
 }
+
+    
 
     
