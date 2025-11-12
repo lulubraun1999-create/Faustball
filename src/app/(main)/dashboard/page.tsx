@@ -243,7 +243,7 @@ export default function DashboardPage() {
                                 </p>
                             </div>
                              <Button variant="outline" asChild>
-                                <Link href="/kalender">Zum Kalender</Link>
+                                <Link href="/verwaltung/termine">Zu den Terminen</Link>
                             </Button>
                         </div>
                     ) : (
@@ -259,7 +259,7 @@ export default function DashboardPage() {
                             <CalendarDays className="h-5 w-5 text-primary" /> Nächste Termine
                         </CardTitle>
                         <Button variant="outline" size="sm" asChild>
-                            <Link href="/kalender">Alle anzeigen</Link>
+                            <Link href="/verwaltung/termine">Alle anzeigen</Link>
                         </Button>
                     </CardHeader>
                     <CardContent>
