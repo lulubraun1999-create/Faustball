@@ -12,12 +12,12 @@ export function MainNav() {
   return (
     <nav className="flex items-center space-x-6 text-sm font-medium">
       <Link
-        href="/dashboard"
+        href="/kalender"
         className={cn("transition-colors hover:text-foreground/80", 
-          pathname.startsWith('/dashboard') ? "text-foreground" : "text-foreground/60"
+          pathname.startsWith('/kalender') ? "text-foreground" : "text-foreground/60"
         )}
       >
-        Dashboard
+        Kalender
       </Link>
       <Link
         href="/verwaltung/termine"

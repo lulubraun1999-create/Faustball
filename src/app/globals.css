@@ -77,11 +77,15 @@
         @apply mb-4 flex flex-row items-center justify-between gap-2;
     }
     .rbc-toolbar .rbc-toolbar-label {
-        @apply text-xl font-bold text-foreground;
+        @apply text-xl font-bold text-foreground capitalize;
     }
     .rbc-toolbar .rbc-btn-group button {
         @apply cursor-pointer border-none bg-transparent text-foreground;
     }
+    .rbc-toolbar button:hover, .rbc-toolbar button:focus {
+        @apply bg-accent text-accent-foreground;
+    }
+
 
     /* Header (Tage der Woche) */
     .rbc-header {
@@ -104,27 +108,33 @@
         @apply border-l border-r border-b border-border rounded-b-lg;
     }
     
-    .rbc-month-row, .rbc-day-bg {
+    .rbc-month-row {
         @apply border-t border-border;
+    }
+
+    .rbc-day-bg {
+       @apply border-t border-border;
+    }
+
+    .rbc-day-bg + .rbc-day-bg {
+        @apply border-l border-border;
     }
     
     .rbc-row-content {
         @apply z-10;
     }
-    
-    .rbc-day-bg + .rbc-day-bg {
+
+    /* Time view specific borders */
+    .rbc-time-view .rbc-day-bg, .rbc-time-view .rbc-day-slot .rbc-timeslot-group {
         @apply border-l border-border;
     }
-    
-    .rbc-time-view .rbc-time-gutter, .rbc-time-view .rbc-day-slot {
-      border-color: transparent;
+
+    .rbc-time-slot, .rbc-time-header-slot {
+      @apply border-t-0;
     }
-    
-    .rbc-time-column, .rbc-day-slot .rbc-time-slot {
-        @apply border-t-0;
-    }
-    .rbc-time-column, .rbc-time-view .rbc-day-bg, .rbc-day-slot .rbc-timeslot-group {
-        @apply border-l border-border;
+
+    .rbc-time-header-content {
+        @apply border-b-0;
     }
 
 
@@ -140,9 +150,9 @@
         @apply text-muted-foreground/50;
     }
 
-    /* WICHTIG: Hintergrund für "heute" entfernen */
+    /* WICHTIG: Hintergrund für "heute" entfernen. Gilt für alle Ansichten. */
     .rbc-day-bg.rbc-today,
-    .rbc-time-view .rbc-today {
+    .rbc-time-view .rbc-today .rbc-day-bg {
         background-color: transparent !important;
     }
     
