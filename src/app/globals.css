@@ -79,15 +79,16 @@
         flex-grow: 0;
     }
 
+    /* We hide the default buttons and use our own custom toolbar */
     .rbc-toolbar button {
-        @apply hidden; /* Hide all default buttons */
+        @apply hidden; 
     }
     
-    /* Make specific buttons in our custom toolbar visible */
+    /* Style our custom toolbar buttons to look like the rest of the app */
     .rbc-toolbar .rbc-btn-group button {
         @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
         @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground;
-        @apply h-10 px-4 py-2;
+        @apply h-9 px-3; /* Use size 'sm' equivalent */
         @apply m-0;
     }
     
@@ -104,25 +105,31 @@
         color: hsl(var(--background));
     }
 
+    /* Style for days not in the current month */
     .rbc-off-range-bg {
-        @apply bg-muted/20;
+        @apply bg-muted/50;
+    }
+    .dark .rbc-off-range-bg {
+        background-color: hsl(var(--muted)/0.5);
     }
     
-    .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted));
+    /* Style for the 'today' background in month view */
+    .rbc-day-bg.rbc-today {
+        background-color: transparent !important;
+    }
+
+    /* Style for the 'today' background in week/day view */
+    .rbc-time-view .rbc-today {
+      background-color: transparent !important;
     }
 
     .rbc-date-cell.rbc-current a {
       font-weight: bold;
+      color: hsl(var(--primary));
     }
 
     .rbc-header {
       @apply text-center pb-2 capitalize;
-    }
-    
-    .rbc-time-view .rbc-today,
-    .rbc-day-bg.rbc-today {
-      background-color: transparent !important;
     }
 
     .dark .rbc-day-slot {
@@ -130,10 +137,19 @@
     }
 
     .rbc-day-bg + .rbc-day-bg {
-        border-left: 1px solid hsl(var(--border));
+        border-left-color: hsl(var(--border));
     }
     .rbc-month-row {
-        border-bottom: 1px solid hsl(var(--border));
+        border-bottom-color: hsl(var(--border));
+    }
+    .rbc-month-view, .rbc-time-view, .rbc-agenda-view {
+      border-color: hsl(var(--border));
+    }
+    .rbc-header, .rbc-time-header-content, .rbc-time-gutter {
+      border-color: hsl(var(--border));
+    }
+    .rbc-time-slot, .rbc-day-slot .rbc-time-slot {
+       border-top-color: hsl(var(--border));
     }
     
     /* Mobile-specific calendar optimizations */
@@ -146,15 +162,6 @@
         }
         .rbc-header {
             @apply text-xs;
-        }
-        .rbc-month-view {
-          @apply !border-0;
-        }
-        .rbc-month-row {
-           @apply !min-h-0;
-        }
-        .rbc-day-bg {
-            aspect-ratio: auto;
         }
     }
 }

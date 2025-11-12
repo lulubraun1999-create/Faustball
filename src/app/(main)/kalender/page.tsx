@@ -5,7 +5,7 @@ import React, { useMemo, useState, FC } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Calendar, dateFnsLocalizer, Event, Views, NavigateAction, View, ToolbarProps } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -61,17 +61,18 @@ const messages = {
 };
 
 const formats = {
-    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EEEEEE', culture),
+    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EE', culture),
 };
 
 const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
   return (
-    <div className="rbc-toolbar justify-between">
+    <div className="rbc-toolbar">
         <div className="rbc-btn-group">
-            <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')}>
+            <Button variant="outline" size="sm" onClick={() => onNavigate('TODAY')}>Heute</Button>
+            <Button variant="outline" size="icon" onClick={() => onNavigate('PREV')} className="h-9 w-9">
                 <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')}>
+            <Button variant="outline" size="icon" onClick={() => onNavigate('NEXT')} className="h-9 w-9">
                 <ChevronRight className="h-4 w-4" />
             </Button>
         </div>
@@ -424,7 +425,6 @@ export default function KalenderPage() {
                           onView={setView}
                           view={view}
                           date={date}
-                          showWeekNumbers
                           components={{
                             toolbar: CustomToolbar
                           }}
