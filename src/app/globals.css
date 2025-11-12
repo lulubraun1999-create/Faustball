@@ -100,14 +100,11 @@
     }
 
     .rbc-toolbar button.rbc-active {
-        background-color: hsl(var(--primary-foreground));
-        color: hsl(var(--background));
-        border: 1px solid hsl(var(--foreground));
+        @apply bg-primary text-primary-foreground;
     }
     
     .dark .rbc-toolbar button.rbc-active {
-        background-color: hsl(var(--primary-foreground));
-        color: hsl(var(--background));
+        @apply bg-primary text-primary-foreground;
     }
 
     .rbc-off-range-bg {
@@ -126,20 +123,15 @@
       @apply text-center pb-1 capitalize;
     }
     
+    .rbc-time-view .rbc-today,
+    .rbc-time-column .rbc-today,
+    .rbc-day-slot .rbc-today,
+    .rbc-date-cell .rbc-today {
+      background-color: transparent !important;
+    }
+    
     .dark .rbc-day-slot {
       background-color: hsl(var(--background));
-    }
-
-    /*
-     * KORREKTUR: Entfernt die "heute" Hervorhebung
-     * Gilt für die Spalte in der Wochen/Tag-Ansicht (.rbc-day-slot)
-     * und die Zelle in der Monats-Ansicht (.rbc-date-cell).
-     * Wir setzen die Farbe explizit auf die Standard-Hintergrundfarbe
-     * (die via CSS-Variable --background hell oder dunkel sein kann).
-     */
-    .rbc-day-slot.rbc-today,
-    .rbc-date-cell.rbc-today {
-      background-color: hsl(var(--background)) !important;
     }
 
     /* Mobile-specific calendar optimizations */

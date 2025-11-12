@@ -61,7 +61,7 @@ const messages = {
 };
 
 const formats = {
-    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EEE', culture),
+    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'EEEEEE', culture),
 };
 
 
