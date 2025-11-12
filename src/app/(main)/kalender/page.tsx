@@ -46,8 +46,8 @@ type UnrolledAppointment = Appointment & {
 
 const messages = {
   allDay: 'Ganztägig',
-  previous: '<',
-  next: '>',
+  previous: 'Zurück',
+  next: 'Weiter',
   today: 'Heute',
   month: 'Monat',
   week: 'Woche',
@@ -66,7 +66,7 @@ const formats = {
 
 const CustomToolbar: FC<ToolbarProps> = ({ label, onNavigate }) => {
   return (
-    <div className="rbc-toolbar !mb-0">
+    <div className="rbc-toolbar !mb-4">
         <div className="rbc-btn-group">
              <button type="button" onClick={() => onNavigate('PREV')} className="p-1 text-foreground/80 hover:text-foreground transition-colors disabled:text-foreground/30">
                 <ChevronLeft className="h-5 w-5" />
@@ -506,3 +506,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    

@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -73,26 +74,36 @@
     .rbc-toolbar .rbc-toolbar-label {
         @apply text-xl font-bold font-body;
     }
+    
+    .rbc-toolbar .rbc-btn-group > button {
+        @apply px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50;
+    }
+    
+    .rbc-toolbar .rbc-btn-group > button.rbc-active {
+        @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    }
 
     .rbc-off-range-bg {
         @apply bg-muted/20;
     }
     
     .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted));
+        background-color: hsl(var(--muted)) !important;
     }
     
     .rbc-date-cell.rbc-current a {
       color: hsl(var(--primary));
-      font-weight: 600; /* Etwas dicker als normal */
+      font-weight: 600;
     }
 
     .rbc-header {
       @apply text-center pb-2 capitalize font-medium;
     }
 
-    .rbc-day-bg.rbc-today {
-      background-color: transparent !important;
+    .rbc-day-bg.rbc-today,
+    .rbc-time-view .rbc-today,
+    .rbc-month-view .rbc-today {
+        background-color: transparent !important;
     }
 
     /* Mobile-specific calendar optimizations */
@@ -114,3 +125,5 @@
         }
     }
 }
+
+    
