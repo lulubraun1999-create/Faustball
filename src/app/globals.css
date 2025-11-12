@@ -100,8 +100,11 @@
     .dark .rbc-off-range-bg {
         @apply bg-muted/20;
     }
-    .rbc-day-bg.rbc-today {
-      background-color: hsl(var(--primary) / 0.9) !important;
+     .rbc-day-bg.rbc-today {
+       background-color: hsl(var(--primary) / 0.1);
+    }
+    .dark .rbc-day-bg.rbc-today {
+       background-color: hsl(220 80% 30%) !important;
     }
     .rbc-date-cell.rbc-now > a {
         @apply text-primary-foreground font-bold;
