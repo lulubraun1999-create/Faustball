@@ -76,13 +76,13 @@
     }
     
     .rbc-toolbar .rbc-btn-group:nth-child(1) {
-        @apply order-1;
+        @apply order-2 md:order-1;
     }
     .rbc-toolbar .rbc-btn-group:nth-child(2) {
-        @apply order-3 md:order-2;
+        @apply order-1 md:order-2;
     }
      .rbc-toolbar .rbc-btn-group:nth-child(3) {
-        @apply order-2 md:order-3;
+        @apply order-3;
     }
 
     .rbc-toolbar .rbc-toolbar-label {
@@ -91,7 +91,7 @@
 
     .rbc-toolbar button {
         @apply inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
-        @apply border border-input bg-background hover:bg-accent hover:text-accent-foreground;
+        @apply border border-input bg-transparent hover:bg-accent hover:text-accent-foreground;
         @apply h-10 px-4 py-2;
         @apply m-0;
     }
@@ -101,17 +101,19 @@
     }
 
     .rbc-toolbar button.rbc-active {
-      @apply bg-primary-foreground text-background;
+        @apply bg-primary-foreground text-card-foreground;
+        @apply border-primary-foreground;
     }
     
     .dark .rbc-toolbar button.rbc-active {
         @apply bg-primary-foreground text-background;
+        @apply border-primary-foreground;
     }
 
     .rbc-off-range-bg {
-        @apply bg-muted/50;
+        @apply bg-muted/20;
     }
-
+    
     .dark .rbc-off-range-bg {
         background-color: hsl(var(--muted));
     }
@@ -124,15 +126,11 @@
       @apply text-center pb-1 capitalize;
     }
     
-    .rbc-day-bg {
-       aspect-ratio: 1 / 1;
-    }
-
     .dark .rbc-day-slot {
       background-color: hsl(var(--background));
     }
     
-    .dark .rbc-time-column.rbc-today {
+    .dark .rbc-time-view .rbc-today {
       background-color: hsl(var(--background));
     }
 
