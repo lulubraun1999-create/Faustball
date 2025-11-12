@@ -111,20 +111,18 @@
     .rbc-event {
         @apply rounded-md p-1 text-xs cursor-pointer;
     }
-    .rbc-event-custom {
-      @apply text-white;
-    }
+    
     .rbc-event-primary {
-      @apply bg-primary/80;
+      @apply bg-primary/80 text-primary-foreground;
     }
     .dark .rbc-event-primary {
-      @apply bg-primary;
+      @apply bg-primary text-primary-foreground;
     }
     .rbc-event-secondary {
-      @apply bg-accent text-accent-foreground;
+      @apply bg-secondary text-secondary-foreground;
     }
      .dark .rbc-event-secondary {
-      @apply bg-accent;
+      @apply bg-secondary text-secondary-foreground;
     }
     .rbc-event-label {
         @apply font-semibold;

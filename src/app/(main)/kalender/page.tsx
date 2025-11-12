@@ -5,9 +5,9 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
 import type { Appointment, AppointmentException, Location, Group, MemberProfile, AppointmentType } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar, dateFnsLocalizer, Views, Event as CalendarEvent, ToolbarProps } from 'react-big-calendar';
-import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set, isSameDay } from 'date-fns';
+import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, Info } from 'lucide-react';
@@ -18,6 +18,7 @@ import * as ics from 'ics';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { saveAs } from 'file-saver';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 
 // date-fns Localizer
@@ -61,6 +62,7 @@ type UnrolledAppointment = Appointment & {
 
 interface CustomCalendarEvent extends CalendarEvent {
     resource: UnrolledAppointment;
+    className?: string;
 }
 
 
