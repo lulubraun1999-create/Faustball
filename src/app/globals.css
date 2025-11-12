@@ -98,16 +98,23 @@
     }
 
     .rbc-toolbar button.rbc-active {
-        @apply bg-transparent text-foreground shadow-none;
-        @apply ring-2 ring-foreground;
+        background-color: hsl(var(--primary-foreground));
+        color: hsl(var(--background));
+        box-shadow: none;
     }
 
-    .rbc-off-range .rbc-date-cell {
-      visibility: hidden;
+    .dark .rbc-toolbar button.rbc-active {
+        background-color: hsl(var(--primary-foreground));
+        color: hsl(var(--background));
+    }
+
+
+    .rbc-off-range-bg {
+        background-color: transparent;
     }
 
     .dark .rbc-off-range-bg {
-        background-color: hsl(var(--muted));
+        background-color: hsl(var(--muted) / 0.5);
     }
     
     .rbc-day-bg.rbc-today {
