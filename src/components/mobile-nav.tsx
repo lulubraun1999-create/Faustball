@@ -55,15 +55,16 @@ export function MobileNav() {
                     Dashboard
                 </Link>
                  <Link
-                    href="/verwaltung/termine"
+                    href="/kalender"
                     className="text-muted-foreground"
                     onClick={() => setOpen(false)}
                 >
-                    Termine
+                    Kalender
                 </Link>
                 {/* We can't use the dropdown directly here, so we recreate the links */}
                  <div className="flex flex-col space-y-3 pt-6">
                     <h4 className="font-medium">Verwaltung</h4>
+                     <Link href="/verwaltung/termine" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Termine</Link>
                      <Link href="/verwaltung/gruppen" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mannschaften</Link>
                      <Link href="/verwaltung/mitglieder" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Mitglieder</Link>
                      <Link href="/verwaltung/umfragen" className="text-muted-foreground/70" onClick={() => setOpen(false)}>Umfragen</Link>

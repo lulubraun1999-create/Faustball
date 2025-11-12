@@ -20,12 +20,12 @@ export function MainNav() {
         Dashboard
       </Link>
       <Link
-        href="/verwaltung/termine"
+        href="/kalender"
         className={cn("transition-colors hover:text-foreground/80", 
-          pathname.startsWith('/verwaltung/termine') ? "text-foreground" : "text-foreground/60"
+          pathname.startsWith('/kalender') ? "text-foreground" : "text-foreground/60"
         )}
       >
-        Termine
+        Kalender
       </Link>
       <VerwaltungDropdown />
     </nav>

@@ -243,7 +243,7 @@ export default function DashboardPage() {
                                 </p>
                             </div>
                              <Button variant="outline" asChild>
-                                <Link href="/verwaltung/termine">Zu den Terminen</Link>
+                                <Link href="/kalender">Zum Kalender</Link>
                             </Button>
                         </div>
                     ) : (
@@ -377,5 +377,3 @@ export default function DashboardPage() {
         </div>
     );
 }
-
-    

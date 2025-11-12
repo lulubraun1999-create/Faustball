@@ -29,7 +29,7 @@ export function VerwaltungDropdown() {
     setIsClient(true);
   }, []);
 
-  const isVerwaltungActive = pathname.startsWith('/verwaltung') && !pathname.startsWith('/verwaltung/termine');
+  const isVerwaltungActive = pathname.startsWith('/verwaltung');
 
   // Do not render anything on the server or during the initial client render
   // to avoid hydration mismatch. The useEffect above will trigger a re-render
@@ -51,6 +51,9 @@ export function VerwaltungDropdown() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem asChild>
+          <Link href="/verwaltung/termine">Termine</Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/verwaltung/gruppen">Mannschaften</Link>
         </DropdownMenuItem>
