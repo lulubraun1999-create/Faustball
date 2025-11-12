@@ -113,6 +113,7 @@ export default function KalenderSeite() {
   
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
+  const teamsMap = useMemo(() => new Map(groups?.filter(g => g.type === 'team').map(t => [t.id, t.name])), [groups]);
   
   const appointmentTypesRef = useMemoFirebase(() => (firestore ? collection(firestore, 'appointmentTypes') : null), [firestore]);
   const { data: appointmentTypes, isLoading: isLoadingTypes } = useCollection<AppointmentType>(appointmentTypesRef);
@@ -232,9 +233,19 @@ export default function KalenderSeite() {
       .map(app => {
           const start = app.instanceDate;
           const end = (app.endDate && !app.isAllDay) ? app.endDate.toDate() : start;
-          const isSpieltag = appointmentTypes?.find(t => t.id === app.appointmentTypeId)?.name.toLowerCase() === 'spieltag';
+          const appType = appointmentTypes?.find(t => t.id === app.appointmentTypeId);
+          const isSpieltag = appType?.name.toLowerCase() === 'spieltag';
+          
+          let title = app.title;
+          if (isSpieltag && app.visibility.type === 'specificTeams' && app.visibility.teamIds.length > 0) {
+              const teamNames = app.visibility.teamIds.map(id => teamsMap.get(id)).filter(Boolean).join(', ');
+              if (teamNames) {
+                  title = `${title} (${teamNames})`;
+              }
+          }
+
           return {
-              title: app.title,
+              title: title,
               start,
               end,
               allDay: app.isAllDay,
@@ -242,7 +253,7 @@ export default function KalenderSeite() {
               className: isSpieltag ? 'rbc-event-primary' : 'rbc-event-secondary'
           };
       });
-  }, [unrolledAppointments, selectedTeams, selectedTypes, appointmentTypes]);
+  }, [unrolledAppointments, selectedTeams, selectedTypes, appointmentTypes, teamsMap]);
 
   const handleDownloadIcs = () => {
     const icsEvents = filteredEvents.map(event => {
@@ -382,6 +393,8 @@ export default function KalenderSeite() {
                 {eventDetails.resource.locationId && locationsMap.has(eventDetails.resource.locationId) && (
                     <p><strong>Ort:</strong> {locationsMap.get(eventDetails.resource.locationId)!.name}</p>
                 )}
+                {eventDetails.resource.meetingPoint && <p><strong>Treffpunkt:</strong> {eventDetails.resource.meetingPoint}</p>}
+                {eventDetails.resource.meetingTime && <p><strong>Treffzeit:</strong> {eventDetails.resource.meetingTime}</p>}
                 {eventDetails.resource.description && <p><strong>Details:</strong> {eventDetails.resource.description}</p>}
             </div>
             <DialogFooter>

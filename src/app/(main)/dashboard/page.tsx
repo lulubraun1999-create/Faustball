@@ -216,6 +216,16 @@ export default function DashboardPage() {
             </div>
         );
     }
+    
+    const getMatchDayTitle = (matchDay: UnrolledAppointment) => {
+        let title = matchDay.title;
+        const teamNames = matchDay.visibility.teamIds.map(id => teamsMap.get(id)).filter(Boolean).join(', ');
+        if (teamNames) {
+            title = `${title} (${teamNames})`;
+        }
+        return title;
+    };
+
 
     return (
         <div className="container mx-auto grid grid-cols-1 gap-6 p-4 sm:p-6 lg:p-8">
@@ -229,12 +239,7 @@ export default function DashboardPage() {
                     {nextMatchDay ? (
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div className="space-y-1">
-                                <p className="text-2xl font-bold">{nextMatchDay.title}</p>
-                                {nextMatchDay.visibility.type === 'specificTeams' && (
-                                    <p className="text-sm font-medium text-primary">
-                                        {nextMatchDay.visibility.teamIds.map(id => teamsMap.get(id)).join(', ')}
-                                    </p>
-                                )}
+                                <p className="text-2xl font-bold">{getMatchDayTitle(nextMatchDay)}</p>
                                 <p className="text-muted-foreground text-lg">
                                     {format(nextMatchDay.instanceDate, 'eeee, dd. MMMM yyyy', { locale: de })}
                                 </p>
