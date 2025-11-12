@@ -10,7 +10,7 @@ import { Calendar, dateFnsLocalizer, Views, type Event as CalendarEvent, type To
 import { format, getDay, parse, startOfWeek, addDays, addWeeks, addMonths, differenceInMilliseconds, startOfDay, isBefore, getYear, getMonth, set } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
-import { Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, Info } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, Info, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { saveAs } from 'file-saver';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import Link from 'next/link';
 
 
 // date-fns Localizer
@@ -78,7 +79,7 @@ interface CustomCalendarEvent extends CalendarEvent {
 
 
 export default function KalenderSeite() {
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, isAdmin } = useUser();
   const firestore = useFirestore();
 
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
@@ -397,8 +398,17 @@ export default function KalenderSeite() {
                 {eventDetails.resource.meetingTime && <p><strong>Treffzeit:</strong> {eventDetails.resource.meetingTime}</p>}
                 {eventDetails.resource.description && <p><strong>Details:</strong> {eventDetails.resource.description}</p>}
             </div>
-            <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Schließen</Button></DialogClose>
+            <DialogFooter className="sm:justify-between">
+                <DialogClose asChild>
+                  <Button variant="outline">Schließen</Button>
+                </DialogClose>
+                {isAdmin && (
+                  <Button asChild>
+                      <Link href="/verwaltung/termine-bearbeiten">
+                          <Edit className="mr-2 h-4 w-4" /> Zum Termin
+                      </Link>
+                  </Button>
+                )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
