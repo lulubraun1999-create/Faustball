@@ -58,7 +58,7 @@ export default function VerwaltungGruppenPage() {
     setSelectedTeam(null);
   }, [selectedClass]);
 
-  const sortedMembers = groupMembers?.sort((a, b) => a.lastName.localeCompare(b.lastName));
+  const sortedMembers = groupMembers?.slice().sort((a, b) => a.lastName.localeCompare(b.lastName));
 
 
   return (
