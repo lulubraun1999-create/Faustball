@@ -560,7 +560,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
-
+                  
                   <FormField
                     control={profileForm.control}
                     name="birthday"
@@ -598,7 +598,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <div className="md:col-span-2">
                     <FormItem>
                       <FormLabel>Position</FormLabel>
