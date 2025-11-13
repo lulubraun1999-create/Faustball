@@ -294,7 +294,7 @@ export default function ProfileEditPage() {
     }
   };
   
-    const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
+  const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
     if (!firestore || !auth || !auth.currentUser) {
       toast({ variant: "destructive", title: "Fehler", description: "Benutzer nicht korrekt angemeldet." });
       return;
@@ -303,13 +303,9 @@ export default function ProfileEditPage() {
     const currentUser = auth.currentUser;
 
     try {
-      // Create credential first
       const credential = EmailAuthProvider.credential(currentUser.email!, data.password);
-      
-      // Reauthenticate user
       await reauthenticateWithCredential(currentUser, credential);
 
-      // Proceed with deletion after successful reauthentication
       const batch = writeBatch(firestore);
       const userDocRef = doc(firestore, 'users', currentUser.uid);
       const memberDocRef = doc(firestore, 'members', currentUser.uid);
