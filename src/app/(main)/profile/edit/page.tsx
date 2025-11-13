@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -222,10 +223,10 @@ export default function ProfileEditPage() {
   };
 
   const reauthenticate = async (password: string) => {
-    if (!auth || !auth.currentUser) {
+    if (!auth || !auth.currentUser || !auth.currentUser.email) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
-    const credential = EmailAuthProvider.credential(auth.currentUser.email!, password);
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
     await reauthenticateWithCredential(auth.currentUser, credential);
   };
 
