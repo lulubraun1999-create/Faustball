@@ -233,7 +233,7 @@ export default function ProfileEditPage() {
     if (!authUser || !authUser.email) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
-    const credential = EmailAuthProvider.credential(authUser.email, password);
+    const credential = EmailAuthProvider.credential(authUser.email!, password);
     await reauthenticateWithCredential(authUser, credential);
   };
 
@@ -794,7 +794,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
-
-    
