@@ -93,7 +93,13 @@ import { cn } from '@/lib/utils';
 import type { Penalty, TreasuryTransaction, MemberProfile, Group } from '@/lib/types';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useEffect } from 'react'; 
+import { useEffect } from 'react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // Zod Schemas (bleiben unverändert)
 const penaltySchema = z.object({
