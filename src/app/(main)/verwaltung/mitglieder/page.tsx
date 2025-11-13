@@ -176,10 +176,6 @@ export default function VerwaltungMitgliederPage() {
                     <TableHead>Vorname</TableHead>
                     <TableHead>Rolle</TableHead>
                     <TableHead>Mannschaften</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Telefon</TableHead>
-                    <TableHead>Geburtstag</TableHead>
-                    <TableHead>Wohnort</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -212,18 +208,12 @@ export default function VerwaltungMitgliederPage() {
                             '-'
                           )}
                         </TableCell>
-                        <TableCell>{member.email || '-'}</TableCell>
-                        <TableCell>{member.phone || '-'}</TableCell>
-                        <TableCell>
-                            {member.birthday ? format(new Date(member.birthday), 'dd.MM.yyyy', { locale: de }) : '-'}
-                        </TableCell>
-                        <TableCell>{member.location || '-'}</TableCell>
                       </TableRow>
                       )
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                         Keine Mitglieder entsprechen den aktuellen Filtern oder Sie sind keinem Team zugewiesen.
                       </TableCell>
                     </TableRow>
