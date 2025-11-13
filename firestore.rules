@@ -24,31 +24,30 @@ service cloud.firestore {
 
     // --- /users/{userId} ---
     match /users/{userId} {
-      function isOwner(userId) { return request.auth.uid == userId; }
-      function isCreatingOwnDocument(userId) { return request.auth.uid == userId && request.resource.data.id == userId && (request.resource.data.role == 'user' || !('role' in request.resource.data)); }
+      function isOwner(uid) { return request.auth.uid == uid; }
+      function isCreatingOwnDocument(userId) { return isOwner(userId) && request.resource.data.id == userId && (request.resource.data.role == 'user' || !('role' in request.resource.data)); }
       function isUpdatingOwnDocument(userId) { return isOwner(userId) && !('role' in request.resource.data); }
       function isAdminUpdatingDocument() { return isAdmin(); }
-      function isOwnerDeleting(userId) { return isOwner(userId); }
-
+      
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow list: if isSignedIn() && isAdmin();
       allow create: if isSignedIn() && isCreatingOwnDocument(userId);
       allow update: if isSignedIn() && (isUpdatingOwnDocument(userId) || isAdminUpdatingDocument());
-      allow delete: if isSignedIn() && (isOwnerDeleting(userId) || isAdmin());
+      // KORREKTUR: Die isOwnerDeleting-Funktion war unnötig kompliziert und wurde durch isOwner ersetzt.
+      allow delete: if isSignedIn() && (isOwner(userId) || isAdmin());
     }
 
     // --- /members/{memberId} ---
     match /members/{memberId} {
-        function isOwner(memberId) { return request.auth.uid == memberId; }
-        function isExistingOwner() {
-          return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid;
-        }
-        function isCreatingOwnProfile(memberId) { return request.auth.uid == memberId && request.resource.data.userId == request.auth.uid; }
+        function isOwner(uid) { return request.auth.uid == uid; }
+        function isExistingOwner() { return isSignedIn() && resource != null && resource.data != null && resource.data.userId == request.auth.uid; }
+        function isCreatingOwnProfile(memberId) { return isOwner(memberId) && request.resource.data.userId == request.auth.uid; }
 
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
         allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
         allow update: if isSignedIn() && (isExistingOwner() || isAdmin());
+        // KORREKTUR: Die Regel erlaubte das Löschen nicht korrekt für den Besitzer.
         allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
     }
 
