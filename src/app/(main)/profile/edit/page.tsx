@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -41,7 +42,7 @@ import {
   FirestorePermissionError,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, getDoc } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -302,15 +303,29 @@ export default function ProfileEditPage() {
       const credential = EmailAuthProvider.credential(currentUser.email!, data.password);
       await reauthenticateWithCredential(currentUser, credential);
 
-      // 2. Delete Firestore data after re-authentication
-      const userDocRef = doc(firestore, 'users', currentUser.uid);
+      // 2. Get team memberships before deleting data
       const memberDocRef = doc(firestore, 'members', currentUser.uid);
+      const memberDocSnap = await getDoc(memberDocRef);
+      const memberTeams = (memberDocSnap.data() as MemberProfile)?.teams || [];
+
+      // 3. Delete all user-related Firestore data in a batch
+      const userDocRef = doc(firestore, 'users', currentUser.uid);
       const batch = writeBatch(firestore);
+
       batch.delete(userDocRef);
       batch.delete(memberDocRef);
+      
+      // Also delete from all denormalized group member lists
+      if (memberTeams.length > 0) {
+        memberTeams.forEach(teamId => {
+          const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', currentUser.uid);
+          batch.delete(groupMemberDocRef);
+        });
+      }
+
       await batch.commit();
 
-      // 3. Delete Auth user
+      // 4. Delete Auth user
       await deleteUser(currentUser);
 
       toast({
