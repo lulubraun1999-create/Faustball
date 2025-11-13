@@ -247,7 +247,7 @@ export default function ProfileEditPage() {
         variant: 'destructive',
         title: 'Fehler beim Ändern des Passworts',
         description:
-          error.code === 'auth/wrong-password'
+          error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
             ? 'Das aktuelle Passwort ist falsch.'
             : 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.',
       });
@@ -284,7 +284,7 @@ export default function ProfileEditPage() {
         variant: 'destructive',
         title: 'Fehler beim Ändern der E-Mail',
         description:
-          error.code === 'auth/wrong-password'
+          error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
             ? 'Das aktuelle Passwort ist falsch.'
             : 'Diese E-Mail wird möglicherweise bereits verwendet oder ein anderer Fehler ist aufgetreten.',
       });
@@ -799,7 +799,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
-
-    
