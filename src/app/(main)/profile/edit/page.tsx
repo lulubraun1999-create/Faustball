@@ -563,7 +563,7 @@ export default function ProfileEditPage() {
 
                   <FormItem>
                     <FormLabel>Position</FormLabel>
-                    <div className="flex space-x-4">
+                    <div className="flex space-x-4 pt-2">
                       {positionOptions.map((position) => (
                         <FormField
                           key={position}
