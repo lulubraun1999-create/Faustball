@@ -257,20 +257,26 @@ export default function KalenderSeite() {
   }, [unrolledAppointments, selectedTeams, selectedTypes, appointmentTypes, teamsMap]);
 
   const handleDownloadIcs = () => {
-    const icsEvents = filteredEvents.map(event => {
+    const icsEvents: ics.EventAttributes[] = filteredEvents.map(event => {
+      if (!event.start || !event.end) return null;
       const startArray = [event.start.getFullYear(), event.start.getMonth() + 1, event.start.getDate(), event.start.getHours(), event.start.getMinutes()] as ics.DateArray;
       const endArray = [event.end.getFullYear(), event.end.getMonth() + 1, event.end.getDate(), event.end.getHours(), event.end.getMinutes()] as ics.DateArray;
       const location = event.resource.locationId ? locationsMap.get(event.resource.locationId) : null;
-
+  
       return {
-        title: event.title,
+        title: typeof event.title === 'string' ? event.title : 'Termin',
         start: startArray,
         end: endArray,
         description: event.resource.description,
         location: location?.name,
       };
-    });
-
+    }).filter((e): e is ics.EventAttributes => e !== null);
+  
+    if (icsEvents.length === 0) {
+      console.error("No valid events to create ICS file.");
+      return;
+    }
+  
     const { error, value } = ics.createEvents(icsEvents);
     if (error) {
       console.error(error);
@@ -386,11 +392,11 @@ export default function KalenderSeite() {
             <DialogHeader>
               <DialogTitle>{eventDetails.title}</DialogTitle>
               <DialogDescription>
-                {format(eventDetails.start!, "eeee, dd. MMMM yyyy", { locale: de })}
+                {eventDetails.start && format(eventDetails.start, "eeee, dd. MMMM yyyy", { locale: de })}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 py-4 text-sm">
-                <p><strong>Zeit:</strong> {eventDetails.allDay ? 'Ganztägig' : `${format(eventDetails.start!, "HH:mm", { locale: de })} - ${format(eventDetails.end!, "HH:mm", { locale: de })} Uhr`}</p>
+                <p><strong>Zeit:</strong> {eventDetails.allDay ? 'Ganztägig' : `${eventDetails.start && format(eventDetails.start, "HH:mm", { locale: de })} - ${eventDetails.end && format(eventDetails.end, "HH:mm", { locale: de })} Uhr`}</p>
                 {eventDetails.resource.locationId && locationsMap.has(eventDetails.resource.locationId) && (
                     <p><strong>Ort:</strong> {locationsMap.get(eventDetails.resource.locationId)!.name}</p>
                 )}
@@ -415,8 +421,5 @@ export default function KalenderSeite() {
       )}
     </div>
   );
-}
-
-    
 
     
