@@ -379,6 +379,8 @@ export default function ProfileEditPage() {
     );
   }
 
+  const positionOptions: ('Abwehr' | 'Zuspiel' | 'Angriff')[] = ['Abwehr', 'Zuspiel', 'Angriff'];
+
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 gap-12 md:grid-cols-4">
@@ -520,7 +522,7 @@ export default function ProfileEditPage() {
                   <FormItem>
                     <FormLabel>Position</FormLabel>
                     <div className="flex space-x-4">
-                      {['Abwehr', 'Zuspiel', 'Angriff'].map((position) => (
+                      {positionOptions.map((position) => (
                         <FormField
                           key={position}
                           control={profileForm.control}
@@ -538,7 +540,7 @@ export default function ProfileEditPage() {
                                       return checked
                                         ? field.onChange([
                                             ...(field.value || []),
-                                            position as 'Abwehr' | 'Zuspiel' | 'Angriff',
+                                            position,
                                           ])
                                         : field.onChange(
                                             field.value?.filter(
