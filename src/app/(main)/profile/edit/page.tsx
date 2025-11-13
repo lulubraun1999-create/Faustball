@@ -42,7 +42,7 @@ import {
   FirestorePermissionError,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -56,7 +56,7 @@ import type { MemberProfile } from '@/lib/types';
 import { Loader2, ShieldQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { Card, CardContent } from '@/components/ui/card';
 
 const profileFormSchema = z.object({
@@ -434,7 +434,7 @@ export default function ProfileEditPage() {
               </Button>
             </div>
           )}
-
+          
            <div className="mt-8">
               <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
                 <DialogTrigger asChild>
@@ -800,5 +800,7 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
 
     
