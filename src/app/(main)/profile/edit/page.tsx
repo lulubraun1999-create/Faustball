@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -74,9 +73,7 @@ const profileFormSchema = z.object({
 const passwordFormSchema = z
   .object({
     currentPassword: z.string().min(1, 'Aktuelles Passwort ist erforderlich.'),
-    newPassword: z
-      .string()
-      .min(6, 'Das neue Passwort muss mindestens 6 Zeichen lang sein.'),
+    newPassword: z.string().min(6, 'Das neue Passwort muss mindestens 6 Zeichen lang sein.'),
     confirmPassword: z.string(),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -117,11 +114,10 @@ export default function ProfileEditPage() {
     return doc(firestore, 'members', authUser.uid);
   }, [firestore, authUser]);
 
-  const { data: member, isLoading: isMemberDocLoading } =
-    useDoc<MemberProfile>(memberDocRef);
+  const { data: member, isLoading: isMemberDocLoading } = useDoc<MemberProfile>(memberDocRef);
 
   useEffect(() => {
-    if (isUserLoading) return; // Wait until user auth state is resolved
+    if (isUserLoading) return;
 
     const checkAdminExistence = async () => {
       setIsCheckingAdmin(true);
@@ -132,8 +128,7 @@ export default function ProfileEditPage() {
         const result = await anyAdminExistsFn();
         setNoAdminExists(!(result.data as { isAdminPresent: boolean }).isAdminPresent);
       } catch (error) {
-        console.error('Error checking for admin existence:', error);
-        // Assume an admin exists to be on the safe side, hiding the button.
+        console.error("Error checking for admin existence:", error);
         setNoAdminExists(false);
       } finally {
         setIsCheckingAdmin(false);
@@ -223,10 +218,10 @@ export default function ProfileEditPage() {
   };
 
   const reauthenticate = async (password: string) => {
-    if (!auth || !auth.currentUser || !auth.currentUser.email) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
-    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    const credential = EmailAuthProvider.credential(auth.currentUser.email!, password);
     await reauthenticateWithCredential(auth.currentUser, credential);
   };
 
@@ -237,8 +232,7 @@ export default function ProfileEditPage() {
       await updatePassword(auth.currentUser, data.newPassword);
       toast({
         title: 'Passwort erfolgreich geändert',
-        description:
-          'Sie werden nun ausgeloggt. Bitte melden Sie sich mit Ihrem neuen Passwort an.',
+        description: 'Sie werden nun ausgeloggt. Bitte melden Sie sich mit Ihrem neuen Passwort an.',
       });
       await handleLogout();
     } catch (error: any) {
@@ -285,7 +279,7 @@ export default function ProfileEditPage() {
         description:
           error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
             ? 'Das aktuelle Passwort ist falsch.'
-            : 'Diese E-Mail wird möglicherweise bereits verwendet oder ein anderer Fehler ist aufgetreten.',
+            : 'Diese E-Mail wird bereits verwendet oder ein anderer Fehler ist aufgetreten.',
       });
     } finally {
       setIsEmailOpen(false);
@@ -298,18 +292,17 @@ export default function ProfileEditPage() {
       toast({
         variant: 'destructive',
         title: 'Fehler',
-        description: 'Benutzer nicht korrekt angemeldet oder Datenbank nicht verfügbar.',
+        description: 'Benutzer ist nicht korrekt angemeldet.',
       });
       return;
     }
-    
     const currentUser = auth.currentUser;
-
     try {
+      // 1. Re-authenticate user
       const credential = EmailAuthProvider.credential(currentUser.email!, data.password);
       await reauthenticateWithCredential(currentUser, credential);
 
-      // Firestore data deletion
+      // 2. Delete Firestore data after re-authentication
       const userDocRef = doc(firestore, 'users', currentUser.uid);
       const memberDocRef = doc(firestore, 'members', currentUser.uid);
       const batch = writeBatch(firestore);
@@ -317,24 +310,26 @@ export default function ProfileEditPage() {
       batch.delete(memberDocRef);
       await batch.commit();
 
-      // Auth user deletion
+      // 3. Delete Auth user
       await deleteUser(currentUser);
-      
-      toast({
-        title: 'Konto erfolgreich gelöscht',
-        description: 'Ihr Konto wurde dauerhaft entfernt.',
-      });
 
+      toast({
+        title: 'Konto gelöscht',
+        description: 'Ihr Konto wurde vollständig entfernt.',
+      });
       router.push('/login');
     } catch (error: any) {
-      console.error('Error deleting account:', error);
+      console.error('Delete error:', error);
+      let errorMessage = 'Ein Fehler ist aufgetreten. Das Konto konnte nicht gelöscht werden.';
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = 'Das eingegebene Passwort ist falsch.';
+      } else if (error.code === 'auth/requires-recent-login') {
+        errorMessage = 'Ihre Anmeldung ist zu alt. Bitte loggen Sie sich erneut ein und versuchen Sie es dann erneut.';
+      }
       toast({
         variant: 'destructive',
-        title: 'Fehler beim Löschen des Kontos',
-        description:
-          error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
-            ? 'Das eingegebene Passwort ist falsch.'
-            : 'Ein Fehler ist aufgetreten. Das Konto konnte nicht gelöscht werden.',
+        title: 'Fehler beim Löschen',
+        description: errorMessage,
       });
     } finally {
       setIsDeleteOpen(false);
@@ -362,12 +357,12 @@ export default function ProfileEditPage() {
       toast({
         title: 'Admin-Status erteilt',
         description:
-          'Sie sind jetzt ein Administrator. Die neuen Rechte sind in Kürze aktiv.',
+          'Sie sind jetzt Administrator. Die neuen Rechte werden in Kürze aktiv.',
       });
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Fehler beim Zuweisen der Admin-Rolle',
+        title: 'Fehler beim Admin-Assign',
         description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
       });
     } finally {
@@ -419,23 +414,22 @@ export default function ProfileEditPage() {
               Logout
             </Button>
 
+            {/* DELETE ACCOUNT */}
             <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
               <DialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  className="w-full justify-start text-left"
-                >
+                <Button variant="destructive" className="w-full justify-start text-left">
                   Konto dauerhaft löschen
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Konto dauerhaft löschen?</DialogTitle>
+                  <DialogTitle>Konto endgültig löschen?</DialogTitle>
                   <DialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Geben Sie
-                    zur Bestätigung Ihr Passwort ein.
+                    Diese Aktion kann NICHT rückgängig gemacht werden.
+                    Bitte geben Sie Ihr Passwort zur Bestätigung ein.
                   </DialogDescription>
                 </DialogHeader>
+
                 <Form {...deleteAccountForm}>
                   <form
                     onSubmit={deleteAccountForm.handleSubmit(handleDeleteAccount)}
@@ -454,6 +448,7 @@ export default function ProfileEditPage() {
                         </FormItem>
                       )}
                     />
+
                     <DialogFooter>
                       <Button
                         type="button"
@@ -470,7 +465,7 @@ export default function ProfileEditPage() {
                         {deleteAccountForm.formState.isSubmitting && (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         )}
-                        Konto endgültig löschen
+                        Endgültig löschen
                       </Button>
                     </DialogFooter>
                   </form>
@@ -478,40 +473,33 @@ export default function ProfileEditPage() {
               </DialogContent>
             </Dialog>
 
+            {/* ADMIN BLOCK */}
+            {!isAdmin && noAdminExists && (
+              <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+                <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
+                  <ShieldQuestion className="h-5 w-5" />
+                  Admin-Status
+                </h3>
+                <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                  Es gibt noch keinen Admin. Werden Sie der erste.
+                </p>
+                <Button onClick={handleMakeAdmin} disabled={isMakingAdmin} className="mt-4 w-full">
+                  {isMakingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Erster Admin werden
+                </Button>
+              </div>
+            )}
           </nav>
-
-          {!isAdmin && noAdminExists && (
-            <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
-              <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
-                <ShieldQuestion className="h-5 w-5" />
-                Admin-Status
-              </h3>
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
-                Es existiert noch kein Administrator. Werden Sie der erste, um
-                alle Funktionen freizuschalten.
-              </p>
-              <Button
-                onClick={handleMakeAdmin}
-                disabled={isMakingAdmin}
-                className="mt-4 w-full"
-              >
-                {isMakingAdmin && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Erster Admin werden
-              </Button>
-            </div>
-          )}
         </aside>
 
+        {/* MAIN */}
         <main className="md:col-span-3 space-y-8">
+          {/* PROFILE FORM */}
           <div>
             <h1 className="mb-6 text-2xl font-bold">Daten ändern</h1>
+
             <Form {...profileForm}>
-              <form
-                onSubmit={profileForm.handleSubmit(onProfileSubmit)}
-                className="space-y-8"
-              >
+              <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-8">
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <FormField
                     control={profileForm.control}
@@ -526,6 +514,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={profileForm.control}
                     name="lastName"
@@ -539,6 +528,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={profileForm.control}
                     name="phone"
@@ -552,6 +542,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={profileForm.control}
                     name="location"
@@ -565,6 +556,7 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormItem>
                     <FormLabel>Position</FormLabel>
                     <div className="flex space-x-4">
@@ -573,35 +565,23 @@ export default function ProfileEditPage() {
                           key={position}
                           control={profileForm.control}
                           name="position"
-                          render={({ field }) => {
-                            return (
-                              <FormItem
-                                key={position}
-                                className="flex flex-row items-start space-x-2 space-y-0"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(position)}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([
-                                            ...(field.value || []),
-                                            position,
-                                          ])
-                                        : field.onChange(
-                                            field.value?.filter(
-                                              (value) => value !== position
-                                            )
-                                          );
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                  {position}
-                                </FormLabel>
-                              </FormItem>
-                            );
-                          }}
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(position)}
+                                  onCheckedChange={(checked) => {
+                                    checked
+                                      ? field.onChange([...(field.value || []), position])
+                                      : field.onChange(
+                                          field.value?.filter((p: any) => p !== position)
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal">{position}</FormLabel>
+                            </FormItem>
+                          )}
                         />
                       ))}
                     </div>
@@ -614,10 +594,7 @@ export default function ProfileEditPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Geschlecht</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value ?? ''}
-                        >
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Geschlecht auswählen" />
@@ -626,18 +603,15 @@ export default function ProfileEditPage() {
                           <SelectContent>
                             <SelectItem value="weiblich">weiblich</SelectItem>
                             <SelectItem value="männlich">männlich</SelectItem>
-                            <SelectItem value="divers (Damenteam)">
-                              divers (Damenteam)
-                            </SelectItem>
-                            <SelectItem value="divers (Herrenteam)">
-                              divers (Herrenteam)
-                            </SelectItem>
+                            <SelectItem value="divers (Damenteam)">divers (Damenteam)</SelectItem>
+                            <SelectItem value="divers (Herrenteam)">divers (Herrenteam)</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={profileForm.control}
                     name="birthday"
@@ -651,23 +625,17 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormItem>
                     <FormLabel>E-Mail</FormLabel>
                     <FormControl>
-                      <Input
-                        readOnly
-                        value={userProfile?.email || ''}
-                        className="bg-muted/50"
-                      />
+                      <Input readOnly value={userProfile?.email || ''} className="bg-muted/50" />
                     </FormControl>
                   </FormItem>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={profileForm.formState.isSubmitting}
-                  >
+                  <Button type="submit" disabled={profileForm.formState.isSubmitting}>
                     {profileForm.formState.isSubmitting && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
@@ -678,13 +646,13 @@ export default function ProfileEditPage() {
             </Form>
           </div>
 
+          {/* PASSWORD */}
           <Collapsible open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
             <CollapsibleContent>
               <Card className="mt-8">
                 <CardContent className="pt-6">
-                  <h2 className="text-xl font-semibold mb-4">
-                    Neues Passwort festlegen
-                  </h2>
+                  <h2 className="text-xl font-semibold mb-4">Neues Passwort festlegen</h2>
+
                   <Form {...passwordForm}>
                     <form
                       onSubmit={passwordForm.handleSubmit(onPasswordChange)}
@@ -703,6 +671,7 @@ export default function ProfileEditPage() {
                           </FormItem>
                         )}
                       />
+
                       <FormField
                         control={passwordForm.control}
                         name="newPassword"
@@ -716,12 +685,13 @@ export default function ProfileEditPage() {
                           </FormItem>
                         )}
                       />
+
                       <FormField
                         control={passwordForm.control}
                         name="confirmPassword"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Neues Passwort bestätigen</FormLabel>
+                            <FormLabel>Passwort bestätigen</FormLabel>
                             <FormControl>
                               <Input type="password" {...field} />
                             </FormControl>
@@ -729,22 +699,16 @@ export default function ProfileEditPage() {
                           </FormItem>
                         )}
                       />
+
                       <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setIsPasswordOpen(false)}
-                        >
+                        <Button type="button" variant="secondary" onClick={() => setIsPasswordOpen(false)}>
                           Abbrechen
                         </Button>
-                        <Button
-                          type="submit"
-                          disabled={passwordForm.formState.isSubmitting}
-                        >
+                        <Button type="submit" disabled={passwordForm.formState.isSubmitting}>
                           {passwordForm.formState.isSubmitting && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
-                          Passwort Speichern
+                          Passwort speichern
                         </Button>
                       </div>
                     </form>
@@ -754,13 +718,13 @@ export default function ProfileEditPage() {
             </CollapsibleContent>
           </Collapsible>
 
+          {/* EMAIL CHANGE */}
           <Collapsible open={isEmailOpen} onOpenChange={setIsEmailOpen}>
             <CollapsibleContent>
               <Card className="mt-8">
                 <CardContent className="pt-6">
-                  <h2 className="text-xl font-semibold mb-4">
-                    E-Mail-Adresse ändern
-                  </h2>
+                  <h2 className="text-xl font-semibold mb-4">E-Mail-Adresse ändern</h2>
+
                   <Form {...emailForm}>
                     <form
                       onSubmit={emailForm.handleSubmit(onEmailChange)}
@@ -779,6 +743,7 @@ export default function ProfileEditPage() {
                           </FormItem>
                         )}
                       />
+
                       <FormField
                         control={emailForm.control}
                         name="newEmail"
@@ -786,28 +751,18 @@ export default function ProfileEditPage() {
                           <FormItem>
                             <FormLabel>Neue E-Mail-Adresse</FormLabel>
                             <FormControl>
-                              <Input
-                                type="email"
-                                placeholder="neue.email@beispiel.de"
-                                {...field}
-                              />
+                              <Input type="email" placeholder="neue.email@beispiel.de" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
+
                       <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setIsEmailOpen(false)}
-                        >
+                        <Button type="button" variant="secondary" onClick={() => setIsEmailOpen(false)}>
                           Abbrechen
                         </Button>
-                        <Button
-                          type="submit"
-                          disabled={emailForm.formState.isSubmitting}
-                        >
+                        <Button type="submit" disabled={emailForm.formState.isSubmitting}>
                           {emailForm.formState.isSubmitting && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
