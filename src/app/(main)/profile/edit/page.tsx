@@ -224,7 +224,7 @@ export default function ProfileEditPage() {
   };
 
   const reauthenticate = async (password: string) => {
-    if (!authUser || !authUser.email) {
+    if (!auth || !authUser || !authUser.email) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
     const credential = EmailAuthProvider.credential(authUser.email, password);
@@ -295,7 +295,7 @@ export default function ProfileEditPage() {
   };
   
     const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
-    if (!firestore || !authUser || !authUser.email) {
+    if (!firestore || !auth || !authUser || !authUser.email) {
       toast({ variant: "destructive", title: "Fehler", description: "Benutzer nicht korrekt angemeldet." });
       return;
     }
@@ -330,7 +330,7 @@ export default function ProfileEditPage() {
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
         description:
-          error.code === 'auth/wrong-password'
+          error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential'
             ? 'Das eingegebene Passwort ist falsch.'
             : 'Ein Fehler ist aufgetreten. Das Konto konnte nicht gelöscht werden.',
       });
@@ -799,6 +799,8 @@ export default function ProfileEditPage() {
   );
 }
 
+
+    
 
     
 
