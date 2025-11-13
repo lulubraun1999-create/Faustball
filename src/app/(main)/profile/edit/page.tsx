@@ -561,36 +561,19 @@ export default function ProfileEditPage() {
                     )}
                   />
 
-                  <FormItem>
-                    <FormLabel>Position</FormLabel>
-                    <div className="flex items-center space-x-4 pt-2">
-                      {positionOptions.map((position) => (
-                        <FormField
-                          key={position}
-                          control={profileForm.control}
-                          name="position"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(position)}
-                                  onCheckedChange={(checked) => {
-                                    checked
-                                      ? field.onChange([...(field.value || []), position])
-                                      : field.onChange(
-                                          field.value?.filter((p: any) => p !== position)
-                                        );
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal">{position}</FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                  <FormField
+                    control={profileForm.control}
+                    name="birthday"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Geburtstag</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={profileForm.control}
@@ -615,20 +598,40 @@ export default function ProfileEditPage() {
                       </FormItem>
                     )}
                   />
+                  
+                  <div className="md:col-span-2">
+                    <FormItem>
+                      <FormLabel>Position</FormLabel>
+                      <div className="flex items-center space-x-4 pt-2">
+                        {positionOptions.map((position) => (
+                          <FormField
+                            key={position}
+                            control={profileForm.control}
+                            name="position"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(position)}
+                                    onCheckedChange={(checked) => {
+                                      checked
+                                        ? field.onChange([...(field.value || []), position])
+                                        : field.onChange(
+                                            field.value?.filter((p: any) => p !== position)
+                                          );
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">{position}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  </div>
 
-                  <FormField
-                    control={profileForm.control}
-                    name="birthday"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Geburtstag</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
                   <FormItem>
                     <FormLabel>E-Mail</FormLabel>
@@ -784,5 +787,3 @@ export default function ProfileEditPage() {
     </div>
   );
 }
-
-    
