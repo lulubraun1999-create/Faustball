@@ -22,6 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   useFirestore,
@@ -33,13 +42,14 @@ import {
   FirestorePermissionError,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
   signOut,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  deleteUser,
 } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { MemberProfile } from '@/lib/types';
@@ -79,9 +89,14 @@ const emailFormSchema = z.object({
   currentPassword: z.string().min(1, 'Aktuelles Passwort ist erforderlich.'),
 });
 
+const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Passwort ist zur Bestätigung erforderlich.'),
+});
+
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 type PasswordFormValues = z.infer<typeof passwordFormSchema>;
 type EmailFormValues = z.infer<typeof emailFormSchema>;
+type DeleteAccountFormValues = z.infer<typeof deleteAccountSchema>;
 
 export default function ProfileEditPage() {
   const router = useRouter();
@@ -93,6 +108,7 @@ export default function ProfileEditPage() {
   const [isMakingAdmin, setIsMakingAdmin] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [isEmailOpen, setIsEmailOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [noAdminExists, setNoAdminExists] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
 
@@ -155,6 +171,13 @@ export default function ProfileEditPage() {
     defaultValues: {
       newEmail: '',
       currentPassword: '',
+    },
+  });
+
+   const deleteAccountForm = useForm<DeleteAccountFormValues>({
+    resolver: zodResolver(deleteAccountSchema),
+    defaultValues: {
+      password: '',
     },
   });
 
@@ -270,6 +293,42 @@ export default function ProfileEditPage() {
       emailForm.reset();
     }
   };
+  
+    const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
+    if (!firestore || !authUser) return;
+    try {
+      await reauthenticate(data.password);
+      
+      const batch = writeBatch(firestore);
+      const userDocRef = doc(firestore, 'users', authUser.uid);
+      const memberDocRef = doc(firestore, 'members', authUser.uid);
+      
+      batch.delete(userDocRef);
+      batch.delete(memberDocRef);
+      
+      await batch.commit();
+      await deleteUser(authUser);
+
+      toast({
+        title: 'Konto erfolgreich gelöscht',
+        description: 'Ihr Konto wurde dauerhaft entfernt.',
+      });
+      router.push('/login');
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Löschen des Kontos',
+        description:
+          error.code === 'auth/wrong-password'
+            ? 'Das eingegebene Passwort ist falsch.'
+            : 'Ein Fehler ist aufgetreten. Das Konto konnte nicht gelöscht werden.',
+      });
+    } finally {
+      setIsDeleteOpen(false);
+      deleteAccountForm.reset();
+    }
+  };
+
 
   const handleLogout = async () => {
     if (auth) {
@@ -362,6 +421,60 @@ export default function ProfileEditPage() {
               </Button>
             </div>
           )}
+
+           <div className="mt-8">
+              <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="w-full justify-start text-left">
+                    Konto dauerhaft löschen
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Konto dauerhaft löschen?</DialogTitle>
+                    <DialogDescription>
+                      Diese Aktion kann nicht rückgängig gemacht werden. Geben Sie zur Bestätigung Ihr Passwort ein.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <Form {...deleteAccountForm}>
+                    <form
+                      onSubmit={deleteAccountForm.handleSubmit(handleDeleteAccount)}
+                      className="space-y-4 pt-4"
+                    >
+                      <FormField
+                        control={deleteAccountForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Passwort</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <DialogFooter>
+                        <Button type="button" variant="secondary" onClick={() => setIsDeleteOpen(false)}>
+                          Abbrechen
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="destructive"
+                          disabled={deleteAccountForm.formState.isSubmitting}
+                        >
+                          {deleteAccountForm.formState.isSubmitting && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Konto endgültig löschen
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
         </aside>
 
         <main className="md:col-span-3 space-y-8">
@@ -674,3 +787,6 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+
+    
