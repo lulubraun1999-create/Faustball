@@ -33,7 +33,7 @@ import {
   FirestorePermissionError,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
@@ -70,6 +70,7 @@ import {
 } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 
 const profileFormSchema = z.object({
   firstName: z.string(),
@@ -117,6 +118,11 @@ export default function ProfileEditPage() {
   const [isEmailOpen, setIsEmailOpen] = useState(false);
   const [noAdminExists, setNoAdminExists] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
+
+  // States for account deletion
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [passwordForDelete, setPasswordForDelete] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
 
   const memberDocRef = useMemoFirebase(() => {
@@ -330,42 +336,53 @@ export default function ProfileEditPage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!authUser || !firestore) return;
-    const userDocRef = doc(firestore, 'users', authUser.uid);
+    if (!authUser || !firestore || !passwordForDelete) {
+        toast({
+            variant: 'destructive',
+            title: 'Fehler',
+            description: 'Passwort ist erforderlich.'
+        });
+        return;
+    }
+    
+    setIsDeleting(true);
+    
     try {
-      if (memberDocRef) {
-        deleteDoc(memberDocRef).catch(() => {
-          const permissionError = new FirestorePermissionError({
-            path: memberDocRef.path,
-            operation: 'delete',
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
-      }
-      if (userDocRef) {
-        deleteDoc(userDocRef).catch(() => {
-          const permissionError = new FirestorePermissionError({
-            path: userDocRef.path,
-            operation: 'delete',
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
-      }
+        await reauthenticate(passwordForDelete);
 
-      await deleteUser(authUser);
+        const batch = writeBatch(firestore);
+        const userDocRef = doc(firestore, 'users', authUser.uid);
+        const memberDocRef = doc(firestore, 'members', authUser.uid);
+        
+        batch.delete(userDocRef);
+        batch.delete(memberDocRef);
 
-      toast({
-        title: 'Konto gelöscht',
-        description: 'Ihr Konto wurde dauerhaft gelöscht.',
-      });
-      router.push('/login');
+        await batch.commit();
+        await deleteUser(authUser);
+
+        toast({
+            title: 'Konto gelöscht',
+            description: 'Ihr Konto wurde dauerhaft gelöscht.',
+        });
+        
+        setIsDeleteConfirmOpen(false);
+        setPasswordForDelete('');
+        router.push('/login');
+
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler beim Löschen des Kontos',
-        description:
-          'Aus Sicherheitsgründen erfordert diese Aktion eine kürzliche Anmeldung. Bitte melden Sie sich erneut an und versuchen Sie es noch einmal.',
-      });
+        let description = 'Ein Fehler ist aufgetreten.';
+        if (error.code === 'auth/wrong-password') {
+            description = 'Das eingegebene Passwort ist falsch.';
+        } else if (error.code === 'auth/requires-recent-login') {
+            description = 'Diese Aktion erfordert eine kürzliche Anmeldung. Bitte loggen Sie sich erneut ein und versuchen Sie es noch einmal.';
+        }
+        toast({
+            variant: 'destructive',
+            title: 'Fehler beim Löschen des Kontos',
+            description: description,
+        });
+    } finally {
+        setIsDeleting(false);
     }
   };
 
@@ -379,7 +396,7 @@ export default function ProfileEditPage() {
     );
   }
 
-  const positionOptions: ('Abwehr' | 'Zuspiel' | 'Angriff')[] = ['Abwehr', 'Zuspiel', 'Angriff'];
+  const positionOptions = ['Abwehr', 'Zuspiel', 'Angriff'] as const;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -432,7 +449,7 @@ export default function ProfileEditPage() {
               Achtung: Diese Aktion ist dauerhaft und kann nicht rückgängig
               gemacht werden.
             </p>
-            <AlertDialog>
+            <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" className="mt-4 w-full">
                   Konto dauerhaft löschen
@@ -442,15 +459,24 @@ export default function ProfileEditPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch
-                    werden Ihr Konto und alle zugehörigen Daten dauerhaft von
-                    unseren Servern gelöscht.
+                    Diese Aktion kann nicht rückgängig gemacht werden. Um fortzufahren, geben Sie bitte Ihr Passwort ein.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+                <div className="space-y-2">
+                    <Label htmlFor="password-for-delete">Passwort</Label>
+                    <Input 
+                        id="password-for-delete"
+                        type="password"
+                        value={passwordForDelete}
+                        onChange={(e) => setPasswordForDelete(e.target.value)}
+                        placeholder="••••••••"
+                    />
+                </div>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteAccount}>
-                    Fortfahren
+                  <AlertDialogCancel onClick={() => setPasswordForDelete('')}>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteAccount} disabled={isDeleting || !passwordForDelete}>
+                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Konto endgültig löschen
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -768,3 +794,4 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+

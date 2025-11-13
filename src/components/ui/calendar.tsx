@@ -1,66 +1,99 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker, type DayPickerProps } from "react-day-picker"
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
+export type CalendarProps = {
+  /** Ausgewähltes Datum (optional) */
+  selected?: Date;
+  /** Callback, wenn ein Datum gewählt wird */
+  onSelect?: (date: Date | undefined) => void;
+  /** Optional: Überschrift über dem Kalender */
+  title?: string;
+  /** Optional: zusätzliche CSS-Klassen */
+  className?: string;
+  /** Alles andere einfach durchreichen (damit TypeScript nicht meckert) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+};
 
-export type CalendarProps = DayPickerProps
+/**
+ * Sehr einfacher Kalender-Stub, der nur ein Datum wählt.
+ * Er ersetzt den ursprünglichen react-day-picker-basierten Kalender,
+ * damit der Build ohne das Paket `react-day-picker` durchläuft.
+ */
+export function Calendar(props: CalendarProps) {
+  const { selected, onSelect, title, className, ...rest } = props;
 
-function Calendar({
-  className,
-  classNames,
-  showOutsideDays = true,
-  ...props
-}: CalendarProps) {
+  const [internalDate, setInternalDate] = React.useState<Date | undefined>(
+    selected
+  );
+
+  React.useEffect(() => {
+    setInternalDate(selected);
+  }, [selected]);
+
+  const handleChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const value = e.target.value;
+    if (!value) {
+      setInternalDate(undefined);
+      onSelect?.(undefined);
+      return;
+    }
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      setInternalDate(d);
+      onSelect?.(d);
+    }
+  };
+
+  // Für das native <input type="date" /> im Format YYYY-MM-DD
+  const toInputValue = (date?: Date) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
-      classNames={{
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-        month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
-        nav: "space-x-1 flex items-center",
-        nav_button: cn(
-          buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
-        ),
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-y-1",
-        head_row: "flex",
-        head_cell:
-          "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-        row: "flex w-full mt-2",
-        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-        day: cn(
-          buttonVariants({ variant: "ghost" }),
-          "h-9 w-9 p-0 font-normal aria-selected:opacity-100"
-        ),
-        day_range_end: "day-range-end",
-        day_selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        day_today: "bg-accent text-accent-foreground",
-        day_outside:
-          "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
-        day_disabled: "text-muted-foreground opacity-50",
-        day_range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
-        day_hidden: "invisible",
-        ...classNames,
-      }}
-      components={{
-        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" {...props} />,
-        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" {...props} />,
-      }}
-      {...props}
-    />
-  )
+    <div
+      className={cn(
+        "flex flex-col gap-2 rounded-md border border-border p-3",
+        className
+      )}
+      {...rest}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">
+          {title ?? "Datum auswählen"}
+        </span>
+        <div className="flex gap-1">
+          {/* Platzhalter-Buttons nur optisch – ohne Logik */}
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: "ghost", size: "icon" }))}
+            aria-label="Vorheriger Tag"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: "ghost", size: "icon" }))}
+            aria-label="Nächster Tag"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <input
+        type="date"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        value={toInputValue(internalDate)}
+        onChange={handleChange}
+      />
+    </div>
+  );
 }
-Calendar.displayName = "Calendar"
-
-export { Calendar }
