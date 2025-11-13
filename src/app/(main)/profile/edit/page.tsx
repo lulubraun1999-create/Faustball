@@ -563,14 +563,14 @@ export default function ProfileEditPage() {
 
                   <FormItem>
                     <FormLabel>Position</FormLabel>
-                    <div className="flex space-x-4 pt-2">
+                    <div className="flex items-center space-x-4 pt-2">
                       {positionOptions.map((position) => (
                         <FormField
                           key={position}
                           control={profileForm.control}
                           name="position"
                           render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                            <FormItem className="flex items-center space-x-2 space-y-0">
                               <FormControl>
                                 <Checkbox
                                   checked={field.value?.includes(position)}
