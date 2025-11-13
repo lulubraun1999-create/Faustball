@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -256,7 +257,7 @@ export default function AdminMitgliederPage() {
     const handleDeleteMember = async (member: CombinedMemberProfile) => {
         if(!firestore || !member.id) return;
         const userId = member.id;
-        const { firstName, lastName } = member;
+        const { firstName, lastName, teams: memberTeams } = member;
         setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: true }));
         try {
             const batch = writeBatch(firestore);
@@ -264,13 +265,15 @@ export default function AdminMitgliederPage() {
             const userDocRef = doc(firestore, 'users', userId);
             batch.delete(memberDocRef);
             batch.delete(userDocRef);
-            const currentMemberData = members?.find(m => m.userId === userId);
-            if (currentMemberData?.teams) {
-                currentMemberData.teams.forEach(teamId => {
+
+            // KORREKTUR: Verwende die bereits vorhandenen Team-Informationen aus dem 'member'-Objekt
+            if (memberTeams && memberTeams.length > 0) {
+                memberTeams.forEach(teamId => {
                     const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
                     batch.delete(groupMemberDocRef);
                 });
             }
+            
             await batch.commit();
             toast({
                 title: 'Mitglied-Dokumente gelöscht',
