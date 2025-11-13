@@ -269,8 +269,8 @@ export default function KalenderSeite() {
         end: endArray,
         description: event.resource.description,
         location: location?.name,
-      };
-    }).filter((e): e is ics.EventAttributes => e !== null);
+      } as ics.EventAttributes;
+    }).filter(e => e !== null);
   
     if (icsEvents.length === 0) {
       console.error("No valid events to create ICS file.");
