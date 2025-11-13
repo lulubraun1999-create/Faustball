@@ -311,14 +311,17 @@ export default function TermineUebersichtPage() {
                                           const originalAppointment = appointments?.find(a => a.id === app.originalId);
                                           const typeName = appointmentTypesMap.get(app.appointmentTypeId);
                                           let rsvpDate: Date | null = null;
-                                          // Note: The logic for rsvpDeadline is complex and might need server-side logic in a real app
-                                          // This is a simplified client-side interpretation
+                                          
                                           if (originalAppointment?.rsvpDeadline && typeof originalAppointment.rsvpDeadline === 'string') {
                                               try {
-                                                  const [days, time] = originalAppointment.rsvpDeadline.split(':');
-                                                  const [hours, minutes] = time.split(';').map(Number);
-                                                  const deadlineBaseDate = subDays(app.instanceDate, Number(days));
-                                                  rsvpDate = setMilliseconds(setSeconds(setMinutes(setHours(deadlineBaseDate, hours), minutes), 0), 0);
+                                                  const parts = originalAppointment.rsvpDeadline.split(':');
+                                                  if (parts.length === 2) {
+                                                      const days = parts[0];
+                                                      const time = parts[1];
+                                                      const [hours, minutes] = time.split(';').map(Number);
+                                                      const deadlineBaseDate = subDays(app.instanceDate, Number(days));
+                                                      rsvpDate = setMilliseconds(setSeconds(setMinutes(setHours(deadlineBaseDate, hours), minutes), 0), 0);
+                                                  }
                                               } catch (e) {
                                                   console.error("Error parsing rsvpDeadline", e);
                                                   rsvpDate = null;

@@ -97,7 +97,7 @@ export interface Appointment {
   };
   recurrence?: 'none' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'; // Recurrence rule
   recurrenceEndDate?: Timestamp; // End date for the recurrence
-  rsvpDeadline?: Timestamp; // Optional deadline for responses
+  rsvpDeadline?: string | null | undefined; // Format: "days:hours;minutes" e.g. "1:18;00" for 1 day before at 18:00
   meetingPoint?: string; // Optional meeting point description
   meetingTime?: string; // Optional meeting time description (e.g., "1h vor Beginn")
   createdAt?: Timestamp; // Optional: Server timestamp when created
@@ -151,7 +151,7 @@ export interface Poll {
   id: string;
   title: string; 
   options: { id: string; text: string }[]; 
-  allowCustomAnswers: boolean;
+  allowMultipleAnswers: boolean;
   endDate: any; // Firestore Timestamp
   createdAt: any; // Firestore Timestamp
   visibility: { 
@@ -161,7 +161,6 @@ export interface Poll {
   votes: {
         userId: string;
         optionId: string;
-        customAnswer?: string;
     }[];
 }
 
