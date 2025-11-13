@@ -48,7 +48,8 @@ service cloud.firestore {
         allow get: if isSignedIn() && (isOwner(memberId) || isAdmin());
         allow list: if isSignedIn() && isAdmin();
         allow create: if isSignedIn() && isCreatingOwnProfile(memberId);
-        allow update, delete: if isSignedIn() && (isExistingOwner() || isAdmin());
+        allow update: if isSignedIn() && (isExistingOwner() || isAdmin());
+        allow delete: if isSignedIn() && (isOwner(memberId) || isAdmin());
     }
 
     // --- /groups/{groupId} ---
@@ -59,8 +60,12 @@ service cloud.firestore {
 
     // --- /groups/{groupId}/members/{memberId} ---
     match /groups/{groupId}/members/{memberId} {
+        // Jeder kann die Mitgliederliste lesen
         allow get, list: if true;
-        allow write: if isSignedIn() && isAdmin();
+        
+        // Nur der Benutzer selbst oder ein Admin kann den eigenen Eintrag löschen.
+        // Ein Admin kann jeden Eintrag erstellen/aktualisieren.
+        allow write: if isSignedIn() && (isAdmin() || request.auth.uid == memberId);
     }
 
     // --- /appointmentTypes/{typeId} ---

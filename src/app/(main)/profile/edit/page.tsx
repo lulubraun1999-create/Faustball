@@ -298,19 +298,15 @@ export default function ProfileEditPage() {
     }
     const currentUser = auth.currentUser;
     try {
-      // 1. Re-authenticate user
       await reauthenticate(data.password);
-
-      // 2. Get team memberships before deleting data
+      
       const memberDocSnap = await getDoc(doc(firestore, 'members', currentUser.uid));
       const memberTeams = (memberDocSnap.data() as MemberProfile)?.teams || [];
 
-      // 3. Delete all user-related Firestore data in a batch
       const batch = writeBatch(firestore);
       batch.delete(doc(firestore, 'users', currentUser.uid));
       batch.delete(doc(firestore, 'members', currentUser.uid));
       
-      // Also delete from all denormalized group member lists
       if (memberTeams.length > 0) {
         memberTeams.forEach(teamId => {
           batch.delete(doc(firestore, 'groups', teamId, 'members', currentUser.uid));
@@ -319,7 +315,6 @@ export default function ProfileEditPage() {
 
       await batch.commit();
 
-      // 4. Delete Auth user
       await deleteUser(currentUser);
 
       toast({
