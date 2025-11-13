@@ -262,13 +262,25 @@ export default function KalenderSeite() {
       const startArray: ics.DateArray = [event.start.getFullYear(), event.start.getMonth() + 1, event.start.getDate(), event.start.getHours(), event.start.getMinutes()];
       const endArray: ics.DateArray = [event.end.getFullYear(), event.end.getMonth() + 1, event.end.getDate(), event.end.getHours(), event.end.getMinutes()];
       const location = event.resource.locationId ? locationsMap.get(event.resource.locationId) : null;
+      
+      let description = '';
+      if (event.resource.meetingPoint) {
+        description += `Treffpunkt: ${event.resource.meetingPoint}\\n`;
+      }
+      if (event.resource.meetingTime) {
+        description += `Treffzeit: ${event.resource.meetingTime}\\n`;
+      }
+      if (description) {
+        description += '\\n'; // Add a separator line
+      }
+      description += event.resource.description ?? '';
   
       return {
         title: typeof event.title === 'string' ? event.title : 'Termin',
         start: startArray,
         end: endArray,
-        description: event.resource.description ?? '',
-        location: location?.name,
+        description: description,
+        location: location?.address || location?.name || '',
       } as ics.EventAttributes;
     }).filter(e => e !== null);
   
