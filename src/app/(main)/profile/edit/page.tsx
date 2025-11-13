@@ -33,11 +33,10 @@ import {
   FirestorePermissionError,
   initializeFirebase,
 } from '@/firebase';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import {
   updatePassword,
   verifyBeforeUpdateEmail,
-  deleteUser,
   signOut,
   reauthenticateWithCredential,
   EmailAuthProvider,
@@ -47,30 +46,8 @@ import type { MemberProfile } from '@/lib/types';
 import { Loader2, ShieldQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Card, CardContent } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 
 const profileFormSchema = z.object({
   firstName: z.string(),
@@ -118,12 +95,6 @@ export default function ProfileEditPage() {
   const [isEmailOpen, setIsEmailOpen] = useState(false);
   const [noAdminExists, setNoAdminExists] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
-
-  // States for account deletion
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [passwordForDelete, setPasswordForDelete] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-
 
   const memberDocRef = useMemoFirebase(() => {
     if (!firestore || !authUser) return null;
@@ -233,7 +204,7 @@ export default function ProfileEditPage() {
     if (!authUser || !authUser.email) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
-    const credential = EmailAuthProvider.credential(authUser.email!, password);
+    const credential = EmailAuthProvider.credential(authUser.email, password);
     await reauthenticateWithCredential(authUser, credential);
   };
 
@@ -335,57 +306,6 @@ export default function ProfileEditPage() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (!authUser || !firestore || !passwordForDelete) {
-        toast({
-            variant: 'destructive',
-            title: 'Fehler',
-            description: 'Passwort ist erforderlich.'
-        });
-        return;
-    }
-    
-    setIsDeleting(true);
-    
-    try {
-        await reauthenticate(passwordForDelete);
-
-        const batch = writeBatch(firestore);
-        const userDocRef = doc(firestore, 'users', authUser.uid);
-        const memberDocRef = doc(firestore, 'members', authUser.uid);
-        
-        batch.delete(userDocRef);
-        batch.delete(memberDocRef);
-
-        await batch.commit();
-        await deleteUser(authUser);
-
-        toast({
-            title: 'Konto gelöscht',
-            description: 'Ihr Konto wurde dauerhaft gelöscht.',
-        });
-        
-        setIsDeleteConfirmOpen(false);
-        setPasswordForDelete('');
-        router.push('/login');
-
-    } catch (error: any) {
-        let description = 'Ein Fehler ist aufgetreten.';
-        if (error.code === 'auth/wrong-password') {
-            description = 'Das eingegebene Passwort ist falsch.';
-        } else if (error.code === 'auth/requires-recent-login') {
-            description = 'Diese Aktion erfordert eine kürzliche Anmeldung. Bitte loggen Sie sich erneut ein und versuchen Sie es noch einmal.';
-        }
-        toast({
-            variant: 'destructive',
-            title: 'Fehler beim Löschen des Kontos',
-            description: description,
-        });
-    } finally {
-        setIsDeleting(false);
-    }
-  };
-
   const isLoading = isUserLoading || isMemberDocLoading || isCheckingAdmin;
 
   if (isLoading) {
@@ -442,46 +362,6 @@ export default function ProfileEditPage() {
               </Button>
             </div>
           )}
-
-          <div className="mt-8 rounded-lg border border-destructive/50 p-4">
-            <h3 className="font-semibold">Konto löschen</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Achtung: Diese Aktion ist dauerhaft und kann nicht rückgängig
-              gemacht werden.
-            </p>
-            <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" className="mt-4 w-full">
-                  Konto dauerhaft löschen
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Um fortzufahren, geben Sie bitte Ihr Passwort ein.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="space-y-2">
-                    <Label htmlFor="password-for-delete">Passwort</Label>
-                    <Input 
-                        id="password-for-delete"
-                        type="password"
-                        value={passwordForDelete}
-                        onChange={(e) => setPasswordForDelete(e.target.value)}
-                        placeholder="••••••••"
-                    />
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setPasswordForDelete('')}>Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteAccount} disabled={isDeleting || !passwordForDelete}>
-                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Konto endgültig löschen
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
         </aside>
 
         <main className="md:col-span-3 space-y-8">
