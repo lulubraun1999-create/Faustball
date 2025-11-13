@@ -103,7 +103,7 @@ export default function ProfileEditPage() {
   const firestore = useFirestore();
   const auth = useAuth();
   const { user: authUser, userProfile, isUserLoading, forceRefresh, isAdmin } = useUser();
-  
+
   const [isMakingAdmin, setIsMakingAdmin] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [isEmailOpen, setIsEmailOpen] = useState(false);
@@ -118,7 +118,7 @@ export default function ProfileEditPage() {
 
   const { data: member, isLoading: isMemberDocLoading } =
     useDoc<MemberProfile>(memberDocRef);
-    
+
   useEffect(() => {
     if (isUserLoading) return; // Wait until user auth state is resolved
 
@@ -131,9 +131,9 @@ export default function ProfileEditPage() {
         const result = await anyAdminExistsFn();
         setNoAdminExists(!(result.data as { isAdminPresent: boolean }).isAdminPresent);
       } catch (error) {
-        console.error("Error checking for admin existence:", error);
+        console.error('Error checking for admin existence:', error);
         // Assume an admin exists to be on the safe side, hiding the button.
-        setNoAdminExists(false); 
+        setNoAdminExists(false);
       } finally {
         setIsCheckingAdmin(false);
       }
@@ -141,7 +141,6 @@ export default function ProfileEditPage() {
 
     checkAdminExistence();
   }, [isUserLoading]);
-
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -173,7 +172,7 @@ export default function ProfileEditPage() {
     },
   });
 
-   const deleteAccountForm = useForm<DeleteAccountFormValues>({
+  const deleteAccountForm = useForm<DeleteAccountFormValues>({
     resolver: zodResolver(deleteAccountSchema),
     defaultValues: {
       password: '',
@@ -204,7 +203,7 @@ export default function ProfileEditPage() {
       position: data.position,
       gender: data.gender,
     };
-    
+
     setDoc(memberDocRef, memberData, { merge: true })
       .then(() => {
         toast({
@@ -292,10 +291,14 @@ export default function ProfileEditPage() {
       emailForm.reset();
     }
   };
-  
+
   const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
-    if (!firestore || !auth || !auth.currentUser) {
-      toast({ variant: "destructive", title: "Fehler", description: "Benutzer nicht korrekt angemeldet." });
+    if (!auth || !auth.currentUser || !firestore) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Benutzer nicht korrekt angemeldet oder Datenbank nicht verfügbar.',
+      });
       return;
     }
     
@@ -305,24 +308,25 @@ export default function ProfileEditPage() {
       const credential = EmailAuthProvider.credential(currentUser.email!, data.password);
       await reauthenticateWithCredential(currentUser, credential);
 
-      const batch = writeBatch(firestore);
+      // Firestore data deletion
       const userDocRef = doc(firestore, 'users', currentUser.uid);
       const memberDocRef = doc(firestore, 'members', currentUser.uid);
-      
+      const batch = writeBatch(firestore);
       batch.delete(userDocRef);
       batch.delete(memberDocRef);
-      
       await batch.commit();
-      await deleteUser(currentUser);
 
+      // Auth user deletion
+      await deleteUser(currentUser);
+      
       toast({
         title: 'Konto erfolgreich gelöscht',
         description: 'Ihr Konto wurde dauerhaft entfernt.',
       });
-      router.push('/login');
 
+      router.push('/login');
     } catch (error: any) {
-      console.error("Error deleting account:", error);
+      console.error('Error deleting account:', error);
       toast({
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
@@ -337,14 +341,13 @@ export default function ProfileEditPage() {
     }
   };
 
-
   const handleLogout = async () => {
     if (auth) {
       await signOut(auth);
       router.push('/login');
     }
   };
-  
+
   const handleMakeAdmin = async () => {
     if (!authUser) return;
     setIsMakingAdmin(true);
@@ -353,15 +356,13 @@ export default function ProfileEditPage() {
       const functions = getFunctions(firebaseApp);
       const setAdminRole = httpsCallable(functions, 'setAdminRole');
 
-      // For becoming the first admin, we don't need to pass a UID.
-      // The function will use the caller's UID.
       await setAdminRole();
-      
+
       toast({
         title: 'Admin-Status erteilt',
-        description: 'Sie sind jetzt ein Administrator. Die neuen Rechte sind in Kürze aktiv.',
+        description:
+          'Sie sind jetzt ein Administrator. Die neuen Rechte sind in Kürze aktiv.',
       });
-
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -394,10 +395,18 @@ export default function ProfileEditPage() {
             <Button variant="ghost" className="justify-start text-left">
               Daten ändern
             </Button>
-            <Button variant="ghost" className="justify-start text-left" onClick={() => setIsPasswordOpen(!isPasswordOpen)}>
+            <Button
+              variant="ghost"
+              className="justify-start text-left"
+              onClick={() => setIsPasswordOpen(!isPasswordOpen)}
+            >
               Passwort ändern
             </Button>
-            <Button variant="ghost" className="justify-start text-left" onClick={() => setIsEmailOpen(!isEmailOpen)}>
+            <Button
+              variant="ghost"
+              className="justify-start text-left"
+              onClick={() => setIsEmailOpen(!isEmailOpen)}
+            >
               E-Mail ändern
             </Button>
 
@@ -408,58 +417,68 @@ export default function ProfileEditPage() {
             >
               Logout
             </Button>
-             <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="destructive" className="w-full justify-start text-left">
-                    Konto dauerhaft löschen
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Konto dauerhaft löschen?</DialogTitle>
-                    <DialogDescription>
-                      Diese Aktion kann nicht rückgängig gemacht werden. Geben Sie zur Bestätigung Ihr Passwort ein.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <Form {...deleteAccountForm}>
-                    <form
-                      onSubmit={deleteAccountForm.handleSubmit(handleDeleteAccount)}
-                      className="space-y-4 pt-4"
-                    >
-                      <FormField
-                        control={deleteAccountForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Passwort</FormLabel>
-                            <FormControl>
-                              <Input type="password" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
+
+            <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="w-full justify-start text-left"
+                >
+                  Konto dauerhaft löschen
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Konto dauerhaft löschen?</DialogTitle>
+                  <DialogDescription>
+                    Diese Aktion kann nicht rückgängig gemacht werden. Geben Sie
+                    zur Bestätigung Ihr Passwort ein.
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...deleteAccountForm}>
+                  <form
+                    onSubmit={deleteAccountForm.handleSubmit(handleDeleteAccount)}
+                    className="space-y-4 pt-4"
+                  >
+                    <FormField
+                      control={deleteAccountForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Passwort</FormLabel>
+                          <FormControl>
+                            <Input type="password" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setIsDeleteOpen(false)}
+                      >
+                        Abbrechen
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="destructive"
+                        disabled={deleteAccountForm.formState.isSubmitting}
+                      >
+                        {deleteAccountForm.formState.isSubmitting && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         )}
-                      />
-                      <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => setIsDeleteOpen(false)}>
-                          Abbrechen
-                        </Button>
-                        <Button
-                          type="submit"
-                          variant="destructive"
-                          disabled={deleteAccountForm.formState.isSubmitting}
-                        >
-                          {deleteAccountForm.formState.isSubmitting && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          )}
-                          Konto endgültig löschen
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </Form>
-                </DialogContent>
-              </Dialog>
+                        Konto endgültig löschen
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+
           </nav>
-            
+
           {!isAdmin && noAdminExists && (
             <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
               <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
@@ -467,21 +486,21 @@ export default function ProfileEditPage() {
                 Admin-Status
               </h3>
               <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
-                Es existiert noch kein Administrator. Werden Sie der erste, um alle Funktionen freizuschalten.
+                Es existiert noch kein Administrator. Werden Sie der erste, um
+                alle Funktionen freizuschalten.
               </p>
               <Button
                 onClick={handleMakeAdmin}
                 disabled={isMakingAdmin}
                 className="mt-4 w-full"
               >
-                {isMakingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isMakingAdmin && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Erster Admin werden
               </Button>
             </div>
           )}
-          
-          
-
         </aside>
 
         <main className="md:col-span-3 space-y-8">
@@ -662,7 +681,9 @@ export default function ProfileEditPage() {
             <CollapsibleContent>
               <Card className="mt-8">
                 <CardContent className="pt-6">
-                  <h2 className="text-xl font-semibold mb-4">Neues Passwort festlegen</h2>
+                  <h2 className="text-xl font-semibold mb-4">
+                    Neues Passwort festlegen
+                  </h2>
                   <Form {...passwordForm}>
                     <form
                       onSubmit={passwordForm.handleSubmit(onPasswordChange)}
@@ -708,7 +729,11 @@ export default function ProfileEditPage() {
                         )}
                       />
                       <div className="flex justify-end gap-2">
-                        <Button type="button" variant="secondary" onClick={() => setIsPasswordOpen(false)}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setIsPasswordOpen(false)}
+                        >
                           Abbrechen
                         </Button>
                         <Button
@@ -727,12 +752,14 @@ export default function ProfileEditPage() {
               </Card>
             </CollapsibleContent>
           </Collapsible>
-          
+
           <Collapsible open={isEmailOpen} onOpenChange={setIsEmailOpen}>
             <CollapsibleContent>
               <Card className="mt-8">
                 <CardContent className="pt-6">
-                  <h2 className="text-xl font-semibold mb-4">E-Mail-Adresse ändern</h2>
+                  <h2 className="text-xl font-semibold mb-4">
+                    E-Mail-Adresse ändern
+                  </h2>
                   <Form {...emailForm}>
                     <form
                       onSubmit={emailForm.handleSubmit(onEmailChange)}
@@ -769,7 +796,11 @@ export default function ProfileEditPage() {
                         )}
                       />
                       <div className="flex justify-end gap-2">
-                        <Button type="button" variant="secondary" onClick={() => setIsEmailOpen(false)}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setIsEmailOpen(false)}
+                        >
                           Abbrechen
                         </Button>
                         <Button
@@ -788,11 +819,8 @@ export default function ProfileEditPage() {
               </Card>
             </CollapsibleContent>
           </Collapsible>
-
         </main>
       </div>
     </div>
   );
 }
-
-    
