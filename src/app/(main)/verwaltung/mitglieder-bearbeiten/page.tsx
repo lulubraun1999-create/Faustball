@@ -10,11 +10,10 @@ import {
   initializeFirebase, // Beibehalten für Cloud Functions
   useCollection,
   useMemoFirebase,
-  useDoc
 } from '@/firebase';
-import { doc, writeBatch, collection, query } from 'firebase/firestore'; // query hinzugefügt
+import { doc, writeBatch, collection, getDocs, query, where } from 'firebase/firestore'; // query und where hinzugefügt
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import type { MemberProfile, Group, UserProfile } from '@/lib/types';
+import type { MemberProfile, Group } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -59,7 +58,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Edit, Users, Shield, Trash2, Users2, Filter, Search } from 'lucide-react';
+import { Loader2, Edit, Users, Shield, Trash2, Users2, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -69,50 +68,28 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-// Typ für kombinierte Daten
-type CombinedMemberProfile = UserProfile & Partial<Omit<MemberProfile, 'userId' | 'firstName' | 'lastName' | 'email'>>;
-
 export default function AdminMitgliederPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user, forceRefresh, isAdmin, isUserLoading } = useUser();
+  const { user, isAdmin, isUserLoading } = useUser();
 
   // Filter States
-  const [selectedTeamFilterOption, setSelectedTeamFilterOption] = useState<string>('all'); // 'all', 'myTeams', 'noTeam' or a teamId
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all'); // 'all', 'admin', 'user'
+  const [selectedTeamFilterOption, setSelectedTeamFilterOption] = useState<string>('all');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Eigenes Member-Profil holen
-  const currentUserMemberRef = useMemoFirebase(
-      () => (firestore && user ? doc(firestore, 'members', user.uid) : null),
-      [firestore, user]
-  );
-  const { data: currentUserMemberProfile, isLoading: isLoadingCurrentUserMember } = useDoc<MemberProfile>(currentUserMemberRef);
-
-
-  // Daten holen - NUR wenn Admin!
-  const usersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'users') : null), [firestore, isAdmin]);
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersRef);
+  // DATEN-REWORK: Nur noch 'members' und 'groups' abfragen. 'users' wird nicht mehr benötigt.
   const membersRef = useMemoFirebase(() => (firestore && isAdmin ? collection(firestore, 'members') : null), [firestore, isAdmin]);
   const { data: members, isLoading: isLoadingMembers } = useCollection<MemberProfile>(membersRef);
+
   const groupsRef = useMemoFirebase(() => (firestore ? collection(firestore, 'groups') : null), [firestore]);
   const { data: groups, isLoading: isLoadingGroups } = useCollection<Group>(groupsRef);
 
-  const isLoading = isUserLoading || (isAdmin && (isLoadingUsers || isLoadingMembers)) || isLoadingGroups || isLoadingCurrentUserMember;
+  const isLoading = isUserLoading || (isAdmin && isLoadingMembers) || isLoadingGroups;
 
   const [updatingStates, setUpdatingStates] = useState<Record<string, boolean>>({});
-  const [memberToEdit, setMemberToEdit] = useState<(CombinedMemberProfile) | null>(null);
+  const [memberToEdit, setMemberToEdit] = useState<MemberProfile | null>(null);
   const [newRole, setNewRole] = useState<'user' | 'admin' | null>(null);
-
-  // Kombinierte Daten
-  const combinedData = useMemo(() => {
-    if (!users || !members) return [];
-    const memberMap = new Map(members.map(m => [m.userId, m]));
-    return users.map(user => ({
-      ...user,
-      ...(memberMap.get(user.id) || { teams: [] }), // Default teams to empty array
-    })) as CombinedMemberProfile[];
-  }, [users, members]);
 
   // Teams Map und Filterliste
   const { teamsMap, groupedTeams, teamsForFilterDropdown } = useMemo(() => {
@@ -140,14 +117,11 @@ export default function AdminMitgliederPage() {
 
   // Gefilterte und sortierte Mitgliederliste
   const filteredAndSortedMembers = useMemo(() => {
-    if (!combinedData || !currentUserMemberProfile) return [];
+    if (!members) return [];
 
-    const currentUserTeamIds = new Set(currentUserMemberProfile?.teams || []);
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    let filtered = [...members];
 
-    let filtered = [...combinedData];
-
-    // 1. Suche
     if (lowerCaseSearchTerm) {
         filtered = filtered.filter(member =>
             (member.firstName?.toLowerCase() || '').includes(lowerCaseSearchTerm) ||
@@ -156,117 +130,113 @@ export default function AdminMitgliederPage() {
         );
     }
 
-    // 2. Rollenfilter
     if (selectedRoleFilter !== 'all') {
       filtered = filtered.filter(member => member.role === selectedRoleFilter);
     }
 
-    // 3. Teamfilter
-    if (selectedTeamFilterOption === 'myTeams') {
-      filtered = filtered.filter(member => {
-        const memberTeams = member.teams || [];
-        // Schließt das eigene Profil immer ein, auch wenn es in keinem Team ist
-        return member.id === currentUserMemberProfile.userId || memberTeams.some(teamId => currentUserTeamIds.has(teamId));
-      });
-    } else if (selectedTeamFilterOption === 'noTeam') {
+    if (selectedTeamFilterOption === 'noTeam') {
       filtered = filtered.filter(member => !member.teams || member.teams.length === 0);
     } else if (selectedTeamFilterOption !== 'all') {
-      // Filter für eine spezifische Mannschaft
       filtered = filtered.filter(member => member.teams?.includes(selectedTeamFilterOption));
     }
 
-
-    // 4. Sortieren
     return filtered.sort((a, b) => {
-      if (a.id === currentUserMemberProfile.userId) return -1;
-      if (b.id === currentUserMemberProfile.userId) return 1;
       const lastNameA = a.lastName || '';
       const lastNameB = b.lastName || '';
       if (lastNameA.localeCompare(lastNameB) !== 0) return lastNameA.localeCompare(lastNameB);
       return (a.firstName || '').localeCompare(b.firstName || '');
     });
-  }, [combinedData, selectedRoleFilter, selectedTeamFilterOption, searchTerm, currentUserMemberProfile]);
+  }, [members, selectedRoleFilter, selectedTeamFilterOption, searchTerm]);
 
 
-  // --- Event Handlers (unverändert) ---
-    const handleTeamsChange = async (member: CombinedMemberProfile, teamId: string, isChecked: boolean) => {
-        if (!firestore || !member || !member.id) return;
-        const userId = member.id;
-        const currentMemberData = members?.find(m => m.userId === userId);
+    const handleTeamsChange = async (member: MemberProfile, teamId: string, isChecked: boolean) => {
+        if (!firestore || !member || !member.userId) return;
+        const userId = member.userId;
         setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: true }));
-        const currentTeams = currentMemberData?.teams || [];
+        
+        const currentTeams = member.teams || [];
         const newTeams = isChecked ? [...currentTeams, teamId] : currentTeams.filter(id => id !== teamId);
+        
         const memberDocRef = doc(firestore, 'members', userId);
         const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
         const batch = writeBatch(firestore);
+
         batch.set(memberDocRef, { teams: newTeams }, { merge: true });
+        
         if (isChecked) {
-        const groupMemberData = {
-            userId,
-            firstName: member.firstName,
-            lastName: member.lastName,
-            position: currentMemberData?.position || [],
-            role: member.role || 'user',
-        };
-        batch.set(groupMemberDocRef, groupMemberData);
+          const groupMemberData = {
+              userId,
+              firstName: member.firstName,
+              lastName: member.lastName,
+              position: member.position || [],
+              role: member.role || 'user',
+          };
+          batch.set(groupMemberDocRef, groupMemberData);
         } else {
-        batch.delete(groupMemberDocRef);
-        }
-        try {
-        await batch.commit();
-        toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
-        } catch (error) {
-        const permissionError = new FirestorePermissionError({
-            path: memberDocRef.path, operation: 'update', requestResourceData: { teams: newTeams },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        toast({ variant: 'destructive', title: 'Fehler', description: 'Mannschaften konnten nicht aktualisiert werden.' });
-        } finally {
-        setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: false }));
-        }
-    };
-    const handleRoleChange = async () => {
-        if (!memberToEdit || !newRole || !firestore) return;
-        const userId = memberToEdit.id;
-        const currentRole = memberToEdit.role;
-        setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
-        try {
-        const { firebaseApp } = initializeFirebase();
-        const functions = getFunctions(firebaseApp);
-        if (newRole === 'admin' && currentRole !== 'admin') {
-            const setAdminRole = httpsCallable(functions, 'setAdminRole');
-            await setAdminRole({ uid: userId });
-        } else if (newRole === 'user' && currentRole === 'admin') {
-            const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
-            await revokeAdminRole({ uid: userId });
+          batch.delete(groupMemberDocRef);
         }
         
-        toast({
-            title: 'Rolle aktualisiert',
-            description: `Die Rolle von ${memberToEdit.firstName} ${memberToEdit.lastName} wurde zu ${newRole === 'admin' ? 'Trainer' : 'Spieler'} geändert.`,
-        });
-        } catch (error: any) {
-        console.error("Fehler beim Ändern der Rolle:", error);
-        toast({ variant: 'destructive', title: 'Fehler', description: error.message || 'Die Rolle konnte nicht geändert werden.' });
+        try {
+          await batch.commit();
+          toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaftszugehörigkeit wurde geändert.' });
+        } catch (error) {
+          const permissionError = new FirestorePermissionError({ path: memberDocRef.path, operation: 'update', requestResourceData: { teams: newTeams } });
+          errorEmitter.emit('permission-error', permissionError);
+          toast({ variant: 'destructive', title: 'Fehler', description: 'Mannschaften konnten nicht aktualisiert werden.' });
         } finally {
-        setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
-        setMemberToEdit(null);
-        setNewRole(null);
+          setUpdatingStates(prev => ({ ...prev, [`teams-${userId}`]: false }));
         }
     };
-    const handleDeleteMember = async (member: CombinedMemberProfile) => {
-        if(!firestore || !member.id) return;
-        const userId = member.id;
+    
+    const handleRoleChange = async () => {
+        if (!memberToEdit || !newRole || !firestore) return;
+        const userId = memberToEdit.userId;
+        const currentRole = memberToEdit.role;
+
+        if (newRole === currentRole) {
+            setMemberToEdit(null);
+            setNewRole(null);
+            return;
+        }
+
+        setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: true }));
+        try {
+          const { firebaseApp } = initializeFirebase();
+          const functions = getFunctions(firebaseApp);
+          
+          if (newRole === 'admin') {
+              const setAdminRole = httpsCallable(functions, 'setAdminRole');
+              await setAdminRole({ uid: userId });
+          } else {
+              const revokeAdminRole = httpsCallable(functions, 'revokeAdminRole');
+              await revokeAdminRole({ uid: userId });
+          }
+        
+          toast({ title: 'Rolle aktualisiert', description: `Die Rolle von ${memberToEdit.firstName} ${memberToEdit.lastName} wurde geändert.` });
+        } catch (error: any) {
+          console.error("Fehler beim Ändern der Rolle:", error);
+          toast({ variant: 'destructive', title: 'Fehler', description: error.message || 'Die Rolle konnte nicht geändert werden.' });
+        } finally {
+          setUpdatingStates(prev => ({ ...prev, [`role-${userId}`]: false }));
+          setMemberToEdit(null);
+          setNewRole(null);
+        }
+    };
+
+    const handleDeleteMember = async (member: MemberProfile) => {
+        if(!firestore || !member.userId) return;
+        const userId = member.userId;
         const { firstName, lastName, teams: memberTeams } = member;
         setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: true }));
+        
         try {
             const batch = writeBatch(firestore);
             const memberDocRef = doc(firestore, 'members', userId);
             const userDocRef = doc(firestore, 'users', userId);
+            
             batch.delete(memberDocRef);
             batch.delete(userDocRef);
 
-            // KORREKTUR: Verwende die bereits vorhandenen Team-Informationen aus dem 'member'-Objekt
             if (memberTeams && memberTeams.length > 0) {
                 memberTeams.forEach(teamId => {
                     const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
@@ -275,15 +245,14 @@ export default function AdminMitgliederPage() {
             }
             
             await batch.commit();
+
             toast({
                 title: 'Mitglied-Dokumente gelöscht',
                 description: `Die Firestore-Daten für ${firstName} ${lastName} wurden entfernt. Das Firebase Auth Benutzerkonto muss separat gelöscht werden.`,
             });
         } catch (error: any) {
             console.error("Fehler beim Löschen des Mitglieds:", error);
-            const permissionError = new FirestorePermissionError({
-            path: `members/${userId}`, operation: 'delete',
-            });
+            const permissionError = new FirestorePermissionError({ path: `members/${userId}`, operation: 'delete' });
             errorEmitter.emit('permission-error', permissionError);
             toast({ variant: 'destructive', title: 'Fehler', description: 'Das Mitglied konnte nicht gelöscht werden.' });
         } finally {
@@ -297,11 +266,10 @@ export default function AdminMitgliederPage() {
   };
 
   // --- Render Logic ---
-    if (isUserLoading) { // Nur initialen Auth-Ladevorgang abwarten
+    if (isUserLoading) {
         return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> );
     }
 
-    // Zugriffsschutz für Nicht-Admins
     if (!isAdmin) {
        return ( 
           <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -322,7 +290,6 @@ export default function AdminMitgliederPage() {
         );
     }
     
-    // Ladeanzeige, während Admin-Daten geladen werden
     if (isLoading) {
         return ( <div className="flex h-[calc(100vh-200px)] w-full items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> );
     }
@@ -345,7 +312,6 @@ export default function AdminMitgliederPage() {
                  <SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Nach Mannschaft filtern..." /></SelectTrigger>
                  <SelectContent>
                    <SelectItem value="all">Alle Mitglieder</SelectItem>
-                   <SelectItem value="myTeams">Meine Mannschaften</SelectItem>
                    <SelectItem value="noTeam">Ohne Mannschaft</SelectItem>
                    <Separator className="my-1"/>
                    {teamsForFilterDropdown.map(team => (
@@ -385,7 +351,7 @@ export default function AdminMitgliederPage() {
                     filteredAndSortedMembers.map((member) => {
                        const memberTeams = getTeamNames(member.teams);
                        return (
-                      <TableRow key={member.id}>
+                      <TableRow key={member.userId}>
                         <TableCell className="font-medium">{member.lastName || '-'}</TableCell>
                         <TableCell>{member.firstName || '-'}</TableCell>
                         <TableCell className="capitalize">{member.role === 'admin' ? 'Trainer' : 'Spieler'}</TableCell>
@@ -418,9 +384,9 @@ export default function AdminMitgliederPage() {
                         <TableCell>{member.location || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0">
-                            <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.id}`]}>{updatingStates[`teams-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Users className="h-4 w-4" />}<span className="sr-only">Mannschaften zuweisen</span></Button></PopoverTrigger><PopoverContent className="w-64 p-0"><ScrollArea className="h-72"><div className="p-4">{groupedTeams.length > 0 ? groupedTeams.map(group => (<div key={group.id} className="mb-4"><h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4><div className="flex flex-col space-y-2">{group.teams.map(team => (<div key={team.id} className="flex items-center space-x-2"><Checkbox id={`team-${member.id}-${team.id}`} checked={member.teams?.includes(team.id)} onCheckedChange={(checked) => { handleTeamsChange(member, team.id, !!checked); }} /><label htmlFor={`team-${member.id}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{team.name}</label></div>))}</div></div>)) : <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>}</div></ScrollArea></PopoverContent></Popover>
-                            <Dialog open={memberToEdit?.id === member.id} onOpenChange={(isOpen) => { if (!isOpen) { setMemberToEdit(null); setNewRole(null); }}}><DialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => { setMemberToEdit(member); setNewRole(member.role as 'user' | 'admin'); }} disabled={updatingStates[`role-${member.id}`]}>{updatingStates[`role-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Shield className="h-4 w-4" />}<span className="sr-only">Rolle ändern</span></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Rolle ändern für {member.firstName} {member.lastName}</DialogTitle><DialogDescription>Ein "Trainer" hat Administratorrechte. Ein "Spieler" ist ein normaler Benutzer.</DialogDescription></DialogHeader><div className="py-4"><RadioGroup value={newRole ?? undefined} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}><div className="flex items-center space-x-2"><RadioGroupItem value="user" id={`role-${member.id}-user`} /><Label htmlFor={`role-${member.id}-user`}>Spieler</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="admin" id={`role-${member.id}-admin`} /><Label htmlFor={`role-${member.id}-admin`}>Trainer</Label></div></RadioGroup></div><DialogFooter><DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose><Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role || updatingStates[`role-${member.id}`]}>{updatingStates[`role-${member.id}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern</Button></DialogFooter></DialogContent></Dialog>
-                            <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`delete-${member.id}`]}>{updatingStates[`delete-${member.id}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4 text-destructive" />}<span className="sr-only">Mitglied löschen</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Firebase Auth Benutzerkonto muss separat gelöscht werden, falls gewünscht.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteMember(member)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                            <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`teams-${member.userId}`]}>{updatingStates[`teams-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Users className="h-4 w-4" />}<span className="sr-only">Mannschaften zuweisen</span></Button></PopoverTrigger><PopoverContent className="w-64 p-0"><ScrollArea className="h-72"><div className="p-4">{groupedTeams.length > 0 ? groupedTeams.map(group => (<div key={group.id} className="mb-4"><h4 className="font-semibold text-sm mb-2 border-b pb-1">{group.name}</h4><div className="flex flex-col space-y-2">{group.teams.map(team => (<div key={team.id} className="flex items-center space-x-2"><Checkbox id={`team-${member.userId}-${team.id}`} checked={member.teams?.includes(team.id)} onCheckedChange={(checked) => { handleTeamsChange(member, team.id, !!checked); }} /><label htmlFor={`team-${member.userId}-${team.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{team.name}</label></div>))}</div></div>)) : <p className="p-4 text-center text-sm text-muted-foreground">Keine Mannschaften erstellt.</p>}</div></ScrollArea></PopoverContent></Popover>
+                            <Dialog open={memberToEdit?.userId === member.userId} onOpenChange={(isOpen) => { if (!isOpen) { setMemberToEdit(null); setNewRole(null); }}}><DialogTrigger asChild><Button variant="ghost" size="icon" onClick={() => { setMemberToEdit(member); setNewRole(member.role as 'user' | 'admin'); }} disabled={updatingStates[`role-${member.userId}`]}>{updatingStates[`role-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Shield className="h-4 w-4" />}<span className="sr-only">Rolle ändern</span></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Rolle ändern für {member.firstName} {member.lastName}</DialogTitle><DialogDescription>Ein "Trainer" hat Administratorrechte. Ein "Spieler" ist ein normaler Benutzer.</DialogDescription></DialogHeader><div className="py-4"><RadioGroup value={newRole ?? undefined} onValueChange={(value: 'user' | 'admin') => setNewRole(value)}><div className="flex items-center space-x-2"><RadioGroupItem value="user" id={`role-${member.userId}-user`} /><Label htmlFor={`role-${member.userId}-user`}>Spieler</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="admin" id={`role-${member.userId}-admin`} /><Label htmlFor={`role-${member.userId}-admin`}>Trainer</Label></div></RadioGroup></div><DialogFooter><DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose><Button onClick={handleRoleChange} disabled={!newRole || newRole === member.role || updatingStates[`role-${member.userId}`]}>{updatingStates[`role-${member.userId}`] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern</Button></DialogFooter></DialogContent></Dialog>
+                            <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={updatingStates[`delete-${member.userId}`]}>{updatingStates[`delete-${member.userId}`] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4 text-destructive" />}<span className="sr-only">Mitglied löschen</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle><AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden die Profildaten für {member.firstName} {member.lastName} dauerhaft gelöscht. Das Firebase Auth Benutzerkonto muss separat gelöscht werden, falls gewünscht.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Abbrechen</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteMember(member)} className="bg-destructive hover:bg-destructive/90">Löschen</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -441,3 +407,4 @@ export default function AdminMitgliederPage() {
     </div>
   );
 }
+
