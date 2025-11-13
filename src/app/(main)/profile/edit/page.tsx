@@ -295,10 +295,19 @@ export default function ProfileEditPage() {
   };
   
     const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
-    if (!firestore || !authUser) return;
+    if (!firestore || !authUser || !authUser.email) {
+      toast({ variant: "destructive", title: "Fehler", description: "Benutzer nicht korrekt angemeldet." });
+      return;
+    }
+    
     try {
-      await reauthenticate(data.password);
+      // Create credential first
+      const credential = EmailAuthProvider.credential(authUser.email, data.password);
       
+      // Reauthenticate user
+      await reauthenticateWithCredential(authUser, credential);
+
+      // Proceed with deletion after successful reauthentication
       const batch = writeBatch(firestore);
       const userDocRef = doc(firestore, 'users', authUser.uid);
       const memberDocRef = doc(firestore, 'members', authUser.uid);
@@ -314,7 +323,9 @@ export default function ProfileEditPage() {
         description: 'Ihr Konto wurde dauerhaft entfernt.',
       });
       router.push('/login');
+
     } catch (error: any) {
+      console.error("Error deleting account:", error);
       toast({
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
@@ -788,6 +799,8 @@ export default function ProfileEditPage() {
   );
 }
 
+
+    
 
     
 
