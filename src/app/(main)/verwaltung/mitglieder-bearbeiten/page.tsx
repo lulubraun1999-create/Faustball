@@ -226,18 +226,26 @@ export default function AdminMitgliederPage() {
     const handleDeleteMember = async (member: MemberProfile) => {
         if(!firestore || !member.userId) return;
         const userId = member.userId;
-        const { firstName, lastName, teams: memberTeams } = member;
+        const { firstName, lastName } = member;
+        
+        // Use the member object passed to the function, which is guaranteed to be up-to-date for that row.
+        const memberTeams = member.teams || [];
+
         setUpdatingStates(prev => ({ ...prev, [`delete-${userId}`]: true }));
         
         try {
             const batch = writeBatch(firestore);
-            const memberDocRef = doc(firestore, 'members', userId);
-            const userDocRef = doc(firestore, 'users', userId);
             
+            // 1. Delete main member document
+            const memberDocRef = doc(firestore, 'members', userId);
             batch.delete(memberDocRef);
+
+            // 2. Delete user document
+            const userDocRef = doc(firestore, 'users', userId);
             batch.delete(userDocRef);
 
-            if (memberTeams && memberTeams.length > 0) {
+            // 3. Delete denormalized member data from all associated groups
+            if (memberTeams.length > 0) {
                 memberTeams.forEach(teamId => {
                     const groupMemberDocRef = doc(firestore, 'groups', teamId, 'members', userId);
                     batch.delete(groupMemberDocRef);
@@ -282,7 +290,8 @@ export default function AdminMitgliederPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf diesen Bereich zuzugreifen.
+                  Sie verfügen nicht über die erforderlichen Berechtigungen, um auf
+                  diesen Bereich zuzugreifen.
                 </p>
               </CardContent>
             </Card>
@@ -407,4 +416,5 @@ export default function AdminMitgliederPage() {
     </div>
   );
 }
+
 
