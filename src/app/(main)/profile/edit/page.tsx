@@ -77,7 +77,7 @@ const profileFormSchema = z.object({
   phone: z.string().optional(),
   location: z.string().optional(),
   birthday: z.string().optional(),
-  position: z.array(z.string()).optional().default([]),
+  position: z.array(z.enum(['Abwehr', 'Zuspiel', 'Angriff'])).optional().default([]),
   gender: z
     .enum(['männlich', 'weiblich', 'divers (Damenteam)', 'divers (Herrenteam)'])
     .optional(),
@@ -198,7 +198,7 @@ export default function ProfileEditPage() {
   const onProfileSubmit = async (data: ProfileFormValues) => {
     if (!memberDocRef || !authUser) return;
 
-    const memberData: Omit<MemberProfile, 'userId'| 'firstName' | 'lastName' | 'email'| 'role'> = {
+    const memberData: Partial<MemberProfile> = {
       phone: data.phone,
       location: data.location,
       birthday: data.birthday,
@@ -538,7 +538,7 @@ export default function ProfileEditPage() {
                                       return checked
                                         ? field.onChange([
                                             ...(field.value || []),
-                                            position,
+                                            position as 'Abwehr' | 'Zuspiel' | 'Angriff',
                                           ])
                                         : field.onChange(
                                             field.value?.filter(

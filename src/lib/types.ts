@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 /**
@@ -24,7 +25,7 @@ export interface MemberProfile {
   email: string; // Denormalized for easier querying/display
   role: 'admin' | 'user'; // Denormalized for easier querying/display
   birthday?: string; // Date string (e.g., "YYYY-MM-DD")
-  gender?: 'Männlich' | 'Weiblich' | 'Divers';
+  gender?: 'männlich' | 'weiblich' | 'divers (Damenteam)' | 'divers (Herrenteam)';
   position?: ('Angriff' | 'Abwehr' | 'Zuspiel')[]; // Array of positions
   teams?: string[]; // Array of Group IDs (where group.type is 'team')
   phone?: string;
