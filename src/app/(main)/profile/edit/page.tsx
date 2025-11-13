@@ -224,18 +224,18 @@ export default function ProfileEditPage() {
   };
 
   const reauthenticate = async (password: string) => {
-    if (!auth || !authUser || !authUser.email) {
+    if (!auth || !auth.currentUser) {
       throw new Error('Benutzer nicht authentifiziert oder E-Mail fehlt.');
     }
-    const credential = EmailAuthProvider.credential(authUser.email, password);
-    await reauthenticateWithCredential(authUser, credential);
+    const credential = EmailAuthProvider.credential(auth.currentUser.email!, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
   };
 
   const onPasswordChange = async (data: PasswordFormValues) => {
-    if (!authUser) return;
+    if (!auth.currentUser) return;
     try {
       await reauthenticate(data.currentPassword);
-      await updatePassword(authUser, data.newPassword);
+      await updatePassword(auth.currentUser, data.newPassword);
       toast({
         title: 'Passwort erfolgreich geändert',
         description:
@@ -258,12 +258,12 @@ export default function ProfileEditPage() {
   };
 
   const onEmailChange = async (data: EmailFormValues) => {
-    const userDocRef = firestore ? doc(firestore, 'users', authUser!.uid) : null;
-    if (!authUser || !userDocRef) return;
+    const userDocRef = firestore ? doc(firestore, 'users', auth.currentUser!.uid) : null;
+    if (!auth.currentUser || !userDocRef) return;
 
     try {
       await reauthenticate(data.currentPassword);
-      await verifyBeforeUpdateEmail(authUser, data.newEmail);
+      await verifyBeforeUpdateEmail(auth.currentUser, data.newEmail);
 
       const userUpdateData = { email: data.newEmail };
       setDoc(userDocRef, userUpdateData, { merge: true }).catch(() => {
@@ -295,28 +295,30 @@ export default function ProfileEditPage() {
   };
   
     const handleDeleteAccount = async (data: DeleteAccountFormValues) => {
-    if (!firestore || !auth || !authUser || !authUser.email) {
+    if (!firestore || !auth || !auth.currentUser) {
       toast({ variant: "destructive", title: "Fehler", description: "Benutzer nicht korrekt angemeldet." });
       return;
     }
     
+    const currentUser = auth.currentUser;
+
     try {
       // Create credential first
-      const credential = EmailAuthProvider.credential(authUser.email, data.password);
+      const credential = EmailAuthProvider.credential(currentUser.email!, data.password);
       
       // Reauthenticate user
-      await reauthenticateWithCredential(authUser, credential);
+      await reauthenticateWithCredential(currentUser, credential);
 
       // Proceed with deletion after successful reauthentication
       const batch = writeBatch(firestore);
-      const userDocRef = doc(firestore, 'users', authUser.uid);
-      const memberDocRef = doc(firestore, 'members', authUser.uid);
+      const userDocRef = doc(firestore, 'users', currentUser.uid);
+      const memberDocRef = doc(firestore, 'members', currentUser.uid);
       
       batch.delete(userDocRef);
       batch.delete(memberDocRef);
       
       await batch.commit();
-      await deleteUser(authUser);
+      await deleteUser(currentUser);
 
       toast({
         title: 'Konto erfolgreich gelöscht',
@@ -798,3 +800,5 @@ export default function ProfileEditPage() {
     </div>
   );
 }
+
+    
