@@ -1,9 +1,8 @@
-
 'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -25,20 +24,46 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useFirestore } from '@/firebase';
-import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+} from 'firebase/auth';
 import { doc, writeBatch } from 'firebase/firestore';
 
+const REGISTER_CODE = 'Ellaisttoll';
+
+/**
+ * Zod-Schema nur für die RUNTIME-Validierung.
+ * Wir verlassen uns NICHT mehr auf z.infer für den TypeScript-Typ,
+ * sondern definieren den Typ unten manuell.
+ */
 const registerSchema = z.object({
   firstName: z.string().min(1, { message: 'Vorname ist erforderlich.' }),
   lastName: z.string().min(1, { message: 'Nachname ist erforderlich.' }),
   email: z.string().email({ message: 'Ungültige E-Mail-Adresse.' }),
-  password: z.string().min(6, { message: 'Das Passwort muss mindestens 6 Zeichen lang sein.' }),
-  registrationCode: z.string().refine(code => code === 'Ellaisttoll', {
-    message: 'Ungültiger Registrierungscode.',
-  }),
+  password: z
+    .string()
+    .min(6, { message: 'Das Passwort muss mindestens 6 Zeichen lang sein.' }),
+  registrationCode: z
+    .string()
+    .min(1, { message: 'Registrierungscode ist erforderlich.' })
+    .refine((code) => code === REGISTER_CODE, {
+      message: 'Ungültiger Registrierungscode.',
+    }),
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+/**
+ * WICHTIG:
+ * Den Formular-Typ definieren wir MANUELL als string-Felder,
+ * damit nirgendwo mehr '"Ellaisttoll"' als Literal-Typ auftaucht.
+ */
+type RegisterFormValues = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  registrationCode: string;
+};
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -47,7 +72,9 @@ export default function RegisterPage() {
   const firestore = useFirestore();
 
   const form = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
+    // cast auf any, damit TypeScript nicht versucht,
+    // aus dem Schema einen engeren Typ mit Literal zu machen
+    resolver: zodResolver(registerSchema) as any,
     defaultValues: {
       firstName: '',
       lastName: '',
@@ -57,7 +84,7 @@ export default function RegisterPage() {
     },
   });
 
-  const onSubmit = async (data: RegisterFormValues) => {
+  const onSubmit: SubmitHandler<RegisterFormValues> = async (data) => {
     if (!auth || !firestore) {
       toast({
         variant: 'destructive',
@@ -66,8 +93,13 @@ export default function RegisterPage() {
       });
       return;
     }
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password,
+      );
       const user = userCredential.user;
 
       await sendEmailVerification(user);
@@ -84,27 +116,26 @@ export default function RegisterPage() {
         firstLoginComplete: false,
       };
       batch.set(userDocRef, userData);
-      
+
       const memberDocRef = doc(firestore, 'members', user.uid);
       const memberData = {
-          userId: user.uid,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          role: 'user' as const,
-          teams: [],
+        userId: user.uid,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        role: 'user' as const,
+        teams: [] as string[],
       };
       batch.set(memberDocRef, memberData);
-      
-      await batch.commit();
 
+      await batch.commit();
 
       toast({
         title: 'Registrierung fast abgeschlossen',
-        description: 'Wir haben Ihnen eine Bestätigungs-E-Mail gesendet. Bitte überprüfen Sie Ihr Postfach.',
+        description:
+          'Wir haben Ihnen eine Bestätigungs-E-Mail gesendet. Bitte überprüfen Sie Ihr Postfach.',
       });
       router.push('/auth/verify-email');
-
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         toast({
@@ -141,7 +172,10 @@ export default function RegisterPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-4"
+            >
               <div className="flex space-x-4">
                 <FormField
                   control={form.control}
@@ -170,6 +204,7 @@ export default function RegisterPage() {
                   )}
                 />
               </div>
+
               <FormField
                 control={form.control}
                 name="email"
@@ -177,12 +212,16 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>E-MAIL</FormLabel>
                     <FormControl>
-                      <Input placeholder="max.mustermann@mail.de" {...field} />
+                      <Input
+                        placeholder="max.mustermann@mail.de"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="password"
@@ -196,6 +235,7 @@ export default function RegisterPage() {
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="registrationCode"
@@ -203,17 +243,28 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>REGISTRIERUNGSCODE</FormLabel>
                     <FormControl>
-                      <Input placeholder="Registrierungscode" {...field} />
+                      <Input
+                        placeholder="Registrierungscode"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Registrieren...' : 'REGISTRIEREN'}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting
+                  ? 'Registrieren...'
+                  : 'REGISTRIEREN'}
               </Button>
             </form>
           </Form>
+
           <div className="mt-4 text-center text-sm">
             Du hast bereits ein Konto?{' '}
             <Link href="/login" className="underline">
