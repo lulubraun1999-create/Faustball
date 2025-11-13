@@ -413,30 +413,7 @@ export default function ProfileEditPage() {
             >
               Logout
             </Button>
-          </nav>
-            
-          {!isAdmin && noAdminExists && (
-            <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
-              <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
-                <ShieldQuestion className="h-5 w-5" />
-                Admin-Status
-              </h3>
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
-                Es existiert noch kein Administrator. Werden Sie der erste, um alle Funktionen freizuschalten.
-              </p>
-              <Button
-                onClick={handleMakeAdmin}
-                disabled={isMakingAdmin}
-                className="mt-4 w-full"
-              >
-                {isMakingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Erster Admin werden
-              </Button>
-            </div>
-          )}
-          
-           <div className="mt-8">
-              <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+             <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
                 <DialogTrigger asChild>
                   <Button variant="destructive" className="w-full justify-start text-left">
                     Konto dauerhaft löschen
@@ -486,7 +463,29 @@ export default function ProfileEditPage() {
                   </Form>
                 </DialogContent>
               </Dialog>
+          </nav>
+            
+          {!isAdmin && noAdminExists && (
+            <div className="mt-8 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+              <h3 className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-300">
+                <ShieldQuestion className="h-5 w-5" />
+                Admin-Status
+              </h3>
+              <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                Es existiert noch kein Administrator. Werden Sie der erste, um alle Funktionen freizuschalten.
+              </p>
+              <Button
+                onClick={handleMakeAdmin}
+                disabled={isMakingAdmin}
+                className="mt-4 w-full"
+              >
+                {isMakingAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Erster Admin werden
+              </Button>
             </div>
+          )}
+          
+          
 
         </aside>
 
