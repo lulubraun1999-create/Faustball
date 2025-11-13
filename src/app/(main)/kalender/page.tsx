@@ -257,10 +257,10 @@ export default function KalenderSeite() {
   }, [unrolledAppointments, selectedTeams, selectedTypes, appointmentTypes, teamsMap]);
 
   const handleDownloadIcs = () => {
-    const icsEvents: ics.EventAttributes[] = filteredEvents.map(event => {
+    const icsEvents = filteredEvents.map(event => {
       if (!event.start || !event.end) return null;
-      const startArray = [event.start.getFullYear(), event.start.getMonth() + 1, event.start.getDate(), event.start.getHours(), event.start.getMinutes()] as ics.DateArray;
-      const endArray = [event.end.getFullYear(), event.end.getMonth() + 1, event.end.getDate(), event.end.getHours(), event.end.getMinutes()] as ics.DateArray;
+      const startArray: ics.DateArray = [event.start.getFullYear(), event.start.getMonth() + 1, event.start.getDate(), event.start.getHours(), event.start.getMinutes()];
+      const endArray: ics.DateArray = [event.end.getFullYear(), event.end.getMonth() + 1, event.end.getDate(), event.end.getHours(), event.end.getMinutes()];
       const location = event.resource.locationId ? locationsMap.get(event.resource.locationId) : null;
   
       return {
@@ -421,5 +421,4 @@ export default function KalenderSeite() {
       )}
     </div>
   );
-
-    
+}
