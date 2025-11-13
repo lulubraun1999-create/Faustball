@@ -267,7 +267,7 @@ export default function KalenderSeite() {
         title: typeof event.title === 'string' ? event.title : 'Termin',
         start: startArray,
         end: endArray,
-        description: event.resource.description,
+        description: event.resource.description ?? '',
         location: location?.name,
       } as ics.EventAttributes;
     }).filter(e => e !== null);
@@ -277,7 +277,7 @@ export default function KalenderSeite() {
       return;
     }
   
-    const { error, value } = ics.createEvents(icsEvents);
+    const { error, value } = ics.createEvents(icsEvents as ics.EventAttributes[]);
     if (error) {
       console.error(error);
       return;
